@@ -1,10 +1,6 @@
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { type Phase2Dialog, Phase2DialogContent } from "./Phase2Dialogs";
 
 import {
   type DeskPerson,
@@ -12,34 +8,20 @@ import {
   type Issue,
   cancelLatestPurchase,
   completeQuickNote,
-  createDraft,
-  createOperationalNote,
-  createQuickNote,
   distribute,
   isTextEntryTarget,
   loadDesk,
   moveIssue,
   recommendedIssue,
-  recordPurchase,
-  setOperator,
   undoDistribution,
 } from "./phase2";
-
-type Dialog =
-  | { type: "operator" }
-  | { type: "draft" }
-  | { type: "quick-note"; personId: string | null }
-  | { type: "operational-note" }
-  | { type: "purchase" }
-  | { type: "partial"; person: DeskPerson }
-  | null;
 
 export default function App() {
   const [issue, setIssue] = useState<Issue>(() => recommendedIssue());
   const [query, setQuery] = useState("");
   const [desk, setDesk] = useState<DistributionDesk | null>(null);
   const [selected, setSelected] = useState(0);
-  const [dialog, setDialog] = useState<Dialog>(null);
+  const [dialog, setDialog] = useState<Phase2Dialog>(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -440,7 +422,7 @@ export default function App() {
       )}
 
       {dialog && (
-        <DialogContent
+        <Phase2DialogContent
           dialog={dialog}
           issue={issue}
           busy={busy}
@@ -576,301 +558,6 @@ function PersonRow({
         </button>
       </div>
     </article>
-  );
-}
-
-function DialogContent({
-  dialog,
-  issue,
-  busy,
-  onClose,
-  mutate,
-}: {
-  dialog: Exclude<Dialog, null>;
-  issue: Issue;
-  busy: boolean;
-  onClose: () => void;
-  mutate: (work: () => Promise<void>, success: string) => Promise<void>;
-}) {
-  if (dialog.type === "operator") {
-    return (
-      <FormDialog title="현재 담당자 설정" onClose={onClose}>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            const data = new FormData(event.currentTarget);
-            void mutate(
-              () => setOperator(String(data.get("name") ?? "")),
-              "담당자를 설정했습니다.",
-            );
-          }}
-        >
-          <p className="dialog-description">
-            로그인은 필요 없습니다. 배부와 기록 이력에 당시 담당자 이름만
-            남습니다.
-          </p>
-          <Field label="담당자 이름">
-            <input name="name" required autoFocus placeholder="예: 김담당" />
-          </Field>
-          <SubmitButton busy={busy}>저장하고 시작</SubmitButton>
-        </form>
-      </FormDialog>
-    );
-  }
-  if (dialog.type === "draft") {
-    return (
-      <FormDialog title="현장 간이 등록" onClose={onClose}>
-        <form
-          data-testid="draft-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const data = new FormData(event.currentTarget);
-            void mutate(
-              () =>
-                createDraft(issue, {
-                  name: String(data.get("name") ?? ""),
-                  cohort: String(data.get("cohort") ?? ""),
-                  phone: String(data.get("phone") ?? ""),
-                  quantity: Number(data.get("quantity")),
-                }),
-              "현장 신청자를 추가했습니다. 목록에서 바로 배부할 수 있습니다.",
-            );
-          }}
-        >
-          <p className="dialog-description">
-            이름 또는 또래만 알아도 등록할 수 있습니다. 현재 호부터 연속 6개 호
-            구독으로 기록합니다.
-          </p>
-          <div className="field-grid">
-            <Field label="이름">
-              <input name="name" autoFocus placeholder="모르면 비워두세요" />
-            </Field>
-            <Field label="또래">
-              <input
-                name="cohort"
-                inputMode="numeric"
-                pattern="[0-9]{2}"
-                maxLength={2}
-                placeholder="94"
-              />
-            </Field>
-          </div>
-          <Field label="연락처">
-            <input name="phone" inputMode="tel" placeholder="선택 입력" />
-          </Field>
-          <Field label="매 호 받을 수량">
-            <input
-              name="quantity"
-              type="number"
-              min={1}
-              defaultValue={1}
-              required
-            />
-          </Field>
-          <SubmitButton busy={busy}>간이 등록</SubmitButton>
-        </form>
-      </FormDialog>
-    );
-  }
-  if (dialog.type === "quick-note") {
-    return (
-      <FormDialog title="현장 기록 추가" onClose={onClose}>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            const data = new FormData(event.currentTarget);
-            void mutate(
-              () =>
-                createQuickNote(
-                  dialog.personId,
-                  String(data.get("content") ?? ""),
-                ),
-              "현장 기록을 저장했습니다.",
-            );
-          }}
-        >
-          <p className="dialog-description">
-            신청 누락 확인처럼 곧 처리할 일을 적습니다. 완료하기 전까지 기본
-            화면에 남습니다.
-          </p>
-          <Field label="기록 내용">
-            <textarea name="content" required autoFocus rows={5} />
-          </Field>
-          <SubmitButton busy={busy}>현장 기록 저장</SubmitButton>
-        </form>
-      </FormDialog>
-    );
-  }
-  if (dialog.type === "operational-note") {
-    return (
-      <FormDialog title="장기 운영 메모" onClose={onClose}>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            const data = new FormData(event.currentTarget);
-            void mutate(
-              () =>
-                createOperationalNote({
-                  title: String(data.get("title") ?? ""),
-                  content: String(data.get("content") ?? ""),
-                  activeUntil: String(data.get("activeUntil") ?? ""),
-                  isPinned: data.get("isPinned") === "on",
-                }),
-              "운영 메모를 저장했습니다.",
-            );
-          }}
-        >
-          <p className="dialog-description">
-            책 보관 위치처럼 여러 주 또는 몇 달 동안 확인할 안내를 적습니다.
-          </p>
-          <Field label="제목">
-            <input name="title" required autoFocus />
-          </Field>
-          <Field label="내용">
-            <textarea name="content" required rows={4} />
-          </Field>
-          <Field label="표시 종료일">
-            <input name="activeUntil" type="date" />
-          </Field>
-          <label className="check-field">
-            <input name="isPinned" type="checkbox" defaultChecked /> 기본 화면에
-            고정
-          </label>
-          <SubmitButton busy={busy}>운영 메모 저장</SubmitButton>
-        </form>
-      </FormDialog>
-    );
-  }
-  if (dialog.type === "purchase") {
-    return (
-      <FormDialog title="현장 개별 구매" onClose={onClose}>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            const data = new FormData(event.currentTarget);
-            void mutate(
-              () =>
-                recordPurchase(issue, {
-                  buyerName: String(data.get("buyerName") ?? ""),
-                  quantity: Number(data.get("quantity")),
-                  note: String(data.get("note") ?? ""),
-                }),
-              "개별 구매와 전달을 기록했습니다.",
-            );
-          }}
-        >
-          <p className="dialog-description">
-            연간 구독과 별개로 이번 호를 현장에서 구매해 바로 전달한 경우에만
-            사용합니다.
-          </p>
-          <Field label="구매자 이름">
-            <input name="buyerName" autoFocus placeholder="모르면 비워두세요" />
-          </Field>
-          <Field label="수량">
-            <input
-              name="quantity"
-              type="number"
-              min={1}
-              defaultValue={1}
-              required
-            />
-          </Field>
-          <Field label="선택 메모">
-            <input name="note" />
-          </Field>
-          <SubmitButton busy={busy}>구매·전달 기록</SubmitButton>
-        </form>
-      </FormDialog>
-    );
-  }
-  return (
-    <FormDialog title="일부 수량만 배부" onClose={onClose}>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          const data = new FormData(event.currentTarget);
-          void mutate(
-            () =>
-              distribute(
-                issue,
-                dialog.person.subscriptionId!,
-                Number(data.get("quantity")),
-              ),
-            `${dialog.person.name} · 일부 배부를 기록했습니다.`,
-          );
-        }}
-      >
-        <p className="dialog-description">
-          {dialog.person.name}님에게 남은 {dialog.person.remainingQuantity}권 중
-          실제 전달한 수량을 선택하세요.
-        </p>
-        <Field label="이번에 배부한 수량">
-          <input
-            name="quantity"
-            type="number"
-            min={1}
-            max={dialog.person.remainingQuantity - 1}
-            defaultValue={1}
-            required
-            autoFocus
-          />
-        </Field>
-        <SubmitButton busy={busy}>일부 배부 기록</SubmitButton>
-      </form>
-    </FormDialog>
-  );
-}
-
-function FormDialog({
-  title,
-  children,
-  onClose,
-}: {
-  title: string;
-  children: ReactNode;
-  onClose: () => void;
-}) {
-  return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section
-        className="dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="dialog-title"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="dialog-heading">
-          <h2 id="dialog-title">{title}</h2>
-          <button type="button" aria-label="닫기" onClick={onClose}>
-            ×
-          </button>
-        </div>
-        {children}
-      </section>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="field">
-      <span>{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function SubmitButton({
-  busy,
-  children,
-}: {
-  busy: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <button className="primary-button submit" type="submit" disabled={busy}>
-      {busy ? "저장 중…" : children}
-    </button>
   );
 }
 
