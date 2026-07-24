@@ -2602,6 +2602,8 @@ dependencies = [
  "rusqlite",
  "rust_xlsxwriter",
  "tempfile",
+ "time",
+ "uuid",
 ]
 
 [[package]]
@@ -2609,6 +2611,7 @@ name = "qt-manager"
 version = "0.1.0"
 dependencies = [
  "qt-application",
+ "qt-domain",
  "qt-infrastructure",
  "serde",
  "tauri",

@@ -9,7 +9,7 @@ use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 use crate::sqlite_migrations;
 
 pub struct SqliteCoreRepository {
-    connection: Connection,
+    pub(crate) connection: Connection,
 }
 
 impl SqliteCoreRepository {
@@ -263,7 +263,10 @@ fn upsert_distribution(
     Ok(())
 }
 
-fn upsert_change(transaction: &Transaction<'_>, change: &ChangeLog) -> Result<(), PortError> {
+pub(crate) fn upsert_change(
+    transaction: &Transaction<'_>,
+    change: &ChangeLog,
+) -> Result<(), PortError> {
     transaction
         .execute(
             "
@@ -298,7 +301,7 @@ fn upsert_change(transaction: &Transaction<'_>, change: &ChangeLog) -> Result<()
     Ok(())
 }
 
-fn person_from_row(row: &Row<'_>) -> rusqlite::Result<Person> {
+pub(crate) fn person_from_row(row: &Row<'_>) -> rusqlite::Result<Person> {
     Ok(Person {
         id: row.get(0)?,
         name: row.get(1)?,
@@ -312,7 +315,7 @@ fn person_from_row(row: &Row<'_>) -> rusqlite::Result<Person> {
     })
 }
 
-fn subscription_from_row(row: &Row<'_>) -> rusqlite::Result<Subscription> {
+pub(crate) fn subscription_from_row(row: &Row<'_>) -> rusqlite::Result<Subscription> {
     let year = row.get(2)?;
     let month = row.get(3)?;
     Ok(Subscription {
@@ -331,7 +334,7 @@ fn subscription_from_row(row: &Row<'_>) -> rusqlite::Result<Subscription> {
     })
 }
 
-fn distribution_from_row(row: &Row<'_>) -> rusqlite::Result<Distribution> {
+pub(crate) fn distribution_from_row(row: &Row<'_>) -> rusqlite::Result<Distribution> {
     let year = row.get(2)?;
     let month = row.get(3)?;
     Ok(Distribution {

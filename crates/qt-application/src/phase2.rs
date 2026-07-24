@@ -1,0 +1,1175 @@
+use qt_domain::{
+    ChangeLog, Distribution, DistributionStatus, Issue, OneTimePurchase, OperationalNote,
+    OperationalNoteStatus, Person, PersonStatus, QuickNote, QuickNoteStatus, Subscription,
+    SubscriptionSource, SubscriptionStatus, assess_distribution, normalize_phone,
+    plan_distribution,
+};
+use serde::{Deserialize, Serialize};
+
+use crate::{ApplicationError, PortError};
+
+pub trait Clock {
+    fn now(&self) -> String;
+    fn today(&self) -> String;
+}
+
+pub trait IdGenerator {
+    fn next_id(&self) -> String;
+}
+
+pub struct RuntimeServices<'a, C, I> {
+    pub clock: &'a C,
+    pub ids: &'a I,
+}
+
+#[derive(Clone, Debug)]
+pub struct DeskRecord {
+    pub person: Person,
+    pub subscriptions: Vec<Subscription>,
+    pub distributions: Vec<Distribution>,
+    pub has_open_quick_note: bool,
+}
+
+pub trait DistributionDeskRepository {
+    fn migrate(&mut self) -> Result<(), PortError>;
+    fn current_operator(&self) -> Result<Option<String>, PortError>;
+    fn save_operator(&mut self, name: &str, now: &str) -> Result<(), PortError>;
+    fn list_desk_records(&self, query: &str, issue: Issue) -> Result<Vec<DeskRecord>, PortError>;
+    fn save_distribution(
+        &mut self,
+        distribution: &Distribution,
+        change: &ChangeLog,
+    ) -> Result<(), PortError>;
+    fn latest_reversible_distribution(
+        &self,
+        issue: Issue,
+    ) -> Result<Option<Distribution>, PortError>;
+    fn save_draft(
+        &mut self,
+        person: &Person,
+        subscription: &Subscription,
+        change: &ChangeLog,
+    ) -> Result<(), PortError>;
+    fn list_quick_notes(&self) -> Result<Vec<QuickNote>, PortError>;
+    fn save_quick_note(&mut self, note: &QuickNote, change: &ChangeLog) -> Result<(), PortError>;
+    fn list_operational_notes(&self) -> Result<Vec<OperationalNote>, PortError>;
+    fn save_operational_note(
+        &mut self,
+        note: &OperationalNote,
+        change: &ChangeLog,
+    ) -> Result<(), PortError>;
+    fn save_purchase(
+        &mut self,
+        purchase: &OneTimePurchase,
+        change: &ChangeLog,
+    ) -> Result<(), PortError>;
+    fn latest_reversible_purchase(
+        &self,
+        issue: Issue,
+    ) -> Result<Option<OneTimePurchase>, PortError>;
+    fn purchase_summary(&self, issue: Issue) -> Result<(u32, u32), PortError>;
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DistributionDesk {
+    pub selected_issue: IssueView,
+    pub recommended_issue: IssueView,
+    pub operator_name: Option<String>,
+    pub totals: DeskTotals,
+    pub people: Vec<DeskPerson>,
+    pub quick_notes: Vec<QuickNoteView>,
+    pub operational_notes: Vec<OperationalNoteView>,
+    pub purchase_count: u32,
+    pub purchased_quantity: u32,
+    pub can_undo_distribution: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueView {
+    pub year: i32,
+    pub start_month: u8,
+    pub label: String,
+}
+
+impl From<Issue> for IssueView {
+    fn from(issue: Issue) -> Self {
+        Self {
+            year: issue.year,
+            start_month: issue.start_month,
+            label: issue.display_name(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeskTotals {
+    pub target_people: u32,
+    pub completed_people: u32,
+    pub remaining_people: u32,
+    pub target_quantity: u32,
+    pub distributed_quantity: u32,
+    pub remaining_quantity: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeskPerson {
+    pub person_id: String,
+    pub subscription_id: Option<String>,
+    pub name: String,
+    pub cohort: Option<String>,
+    pub phone_suffix: Option<String>,
+    pub person_status: String,
+    pub subscription_status: String,
+    pub distribution_status: String,
+    pub target_quantity: u32,
+    pub distributed_quantity: u32,
+    pub remaining_quantity: u32,
+    pub last_issue: Option<String>,
+    pub end_date: Option<String>,
+    pub is_last_issue: bool,
+    pub has_open_quick_note: bool,
+    pub can_distribute: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuickNoteView {
+    pub id: String,
+    pub person_id: Option<String>,
+    pub summary: String,
+    pub operator_name: String,
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationalNoteView {
+    pub id: String,
+    pub title: String,
+    pub content: String,
+    pub is_pinned: bool,
+    pub active_until: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordDistributionRequest {
+    pub issue_year: i32,
+    pub issue_month: u8,
+    pub subscription_id: String,
+    pub quantity: Option<u32>,
+    pub note: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UndoDistributionRequest {
+    pub issue_year: i32,
+    pub issue_month: u8,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateDraftRequest {
+    pub name: String,
+    pub cohort: Option<String>,
+    pub phone: Option<String>,
+    pub issue_year: i32,
+    pub issue_month: u8,
+    pub quantity: u32,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateQuickNoteRequest {
+    pub person_id: Option<String>,
+    pub content: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateOperationalNoteRequest {
+    pub title: String,
+    pub content: String,
+    pub active_until: Option<String>,
+    pub is_pinned: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordPurchaseRequest {
+    pub person_id: Option<String>,
+    pub buyer_name: Option<String>,
+    pub issue_year: i32,
+    pub issue_month: u8,
+    pub quantity: u32,
+    pub note: Option<String>,
+}
+
+pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
+    repository: &mut R,
+    clock: &C,
+    selected_issue: Issue,
+    query: &str,
+) -> Result<DistributionDesk, ApplicationError> {
+    repository.migrate()?;
+    let records = repository.list_desk_records(query, selected_issue)?;
+    let mut people = records
+        .into_iter()
+        .map(|record| desk_person(record, selected_issue))
+        .collect::<Result<Vec<_>, _>>()?;
+    people.sort_by(|left, right| {
+        (!left.can_distribute)
+            .cmp(&(!right.can_distribute))
+            .then((left.remaining_quantity == 0).cmp(&(right.remaining_quantity == 0)))
+            .then(left.name.cmp(&right.name))
+    });
+
+    let mut totals = DeskTotals::default();
+    for person in &people {
+        if person.subscription_status == "유효" {
+            totals.target_people += 1;
+            totals.target_quantity += person.target_quantity;
+            totals.distributed_quantity += person.distributed_quantity.min(person.target_quantity);
+            totals.remaining_quantity += person.remaining_quantity;
+            if person.remaining_quantity == 0 {
+                totals.completed_people += 1;
+            } else {
+                totals.remaining_people += 1;
+            }
+        }
+    }
+    if query.trim().is_empty() {
+        people.retain(|person| person.can_distribute && person.remaining_quantity > 0);
+    }
+
+    let quick_notes = repository
+        .list_quick_notes()?
+        .into_iter()
+        .filter(|note| note.status == QuickNoteStatus::Open)
+        .map(|note| QuickNoteView {
+            id: note.id,
+            person_id: note.person_id,
+            summary: summarize(&note.content, 48),
+            operator_name: note.operator_name,
+            updated_at: note.updated_at,
+        })
+        .collect();
+    let operational_notes = repository
+        .list_operational_notes()?
+        .into_iter()
+        .filter(|note| note.is_active_on(&clock.today()))
+        .map(|note| OperationalNoteView {
+            id: note.id,
+            title: note.title,
+            content: note.content,
+            is_pinned: note.is_pinned,
+            active_until: note.active_until,
+        })
+        .collect();
+    let (purchase_count, purchased_quantity) = repository.purchase_summary(selected_issue)?;
+    let can_undo_distribution = repository
+        .latest_reversible_distribution(selected_issue)?
+        .is_some();
+
+    Ok(DistributionDesk {
+        selected_issue: selected_issue.into(),
+        recommended_issue: recommended_issue(&clock.today())?.into(),
+        operator_name: repository.current_operator()?,
+        totals,
+        people,
+        quick_notes,
+        operational_notes,
+        purchase_count,
+        purchased_quantity,
+        can_undo_distribution,
+    })
+}
+
+fn desk_person(record: DeskRecord, issue: Issue) -> Result<DeskPerson, ApplicationError> {
+    let active = record
+        .subscriptions
+        .iter()
+        .filter(|subscription| subscription.includes(issue).unwrap_or(false))
+        .collect::<Vec<_>>();
+    let selected = active.first().copied().or_else(|| {
+        record
+            .subscriptions
+            .iter()
+            .filter(|subscription| subscription.start_issue <= issue)
+            .max_by_key(|subscription| subscription.start_issue)
+            .or_else(|| {
+                record
+                    .subscriptions
+                    .iter()
+                    .min_by_key(|subscription| subscription.start_issue)
+            })
+    });
+    let mut view = DeskPerson {
+        person_id: record.person.id,
+        subscription_id: None,
+        name: record.person.name,
+        cohort: record.person.cohort,
+        phone_suffix: record
+            .person
+            .normalized_phone
+            .as_deref()
+            .and_then(phone_suffix),
+        person_status: match record.person.status {
+            PersonStatus::Active => "정식 등록",
+            PersonStatus::Draft => "정보 보완 필요",
+            PersonStatus::Archived => "보관",
+        }
+        .into(),
+        subscription_status: "대상 아님".into(),
+        distribution_status: "대상 아님".into(),
+        target_quantity: 0,
+        distributed_quantity: 0,
+        remaining_quantity: 0,
+        last_issue: None,
+        end_date: None,
+        is_last_issue: false,
+        has_open_quick_note: record.has_open_quick_note,
+        can_distribute: false,
+    };
+    let Some(subscription) = selected else {
+        return Ok(view);
+    };
+    let conflict = active.len() > 1;
+    let subscription_assessment = subscription.assess(issue, conflict)?;
+    let distribution_assessment =
+        assess_distribution(subscription, issue, conflict, &record.distributions)?;
+    view.subscription_id = Some(subscription.id.clone());
+    view.subscription_status = subscription_status(subscription_assessment.status).into();
+    view.distribution_status = distribution_status(distribution_assessment.status).into();
+    view.target_quantity = distribution_assessment.target_quantity;
+    view.distributed_quantity = distribution_assessment.distributed_quantity;
+    view.remaining_quantity = distribution_assessment.remaining_quantity;
+    view.last_issue = Some(subscription_assessment.last_issue.display_name());
+    view.end_date = Some(subscription_assessment.last_issue.end_date());
+    view.is_last_issue = subscription_assessment.is_last_issue;
+    view.can_distribute = subscription_assessment.status == SubscriptionStatus::Active
+        && matches!(
+            distribution_assessment.status,
+            DistributionStatus::Undistributed | DistributionStatus::Partial
+        );
+    Ok(view)
+}
+
+pub fn record_distribution<R, C, I>(
+    repository: &mut R,
+    services: &RuntimeServices<'_, C, I>,
+    request: RecordDistributionRequest,
+) -> Result<(), ApplicationError>
+where
+    R: DistributionDeskRepository,
+    C: Clock,
+    I: IdGenerator,
+{
+    let issue = Issue::new(request.issue_year, request.issue_month)?;
+    let records = repository.list_desk_records("", issue)?;
+    let (subscription, distributions, conflict) =
+        find_subscription(&records, &request.subscription_id, issue)?;
+    let planned = plan_distribution(
+        subscription,
+        issue,
+        conflict,
+        distributions,
+        request.quantity,
+    )?;
+    let now = services.clock.now();
+    let distribution = Distribution {
+        id: services.ids.next_id(),
+        subscription_id: subscription.id.clone(),
+        issue,
+        quantity: planned.quantity,
+        distributed_at: now.clone(),
+        note: clean_optional(request.note),
+        reversal_of: None,
+        created_at: now.clone(),
+        updated_at: now.clone(),
+    };
+    let change = change_log(
+        services.ids.next_id(),
+        &now,
+        &required_operator(repository)?,
+        "distribution_recorded",
+        "distribution",
+        &distribution.id,
+        &format!("{}권 배부", distribution.quantity),
+    );
+    repository.save_distribution(&distribution, &change)?;
+    Ok(())
+}
+
+pub fn undo_last_distribution<R, C, I>(
+    repository: &mut R,
+    services: &RuntimeServices<'_, C, I>,
+    request: UndoDistributionRequest,
+) -> Result<(), ApplicationError>
+where
+    R: DistributionDeskRepository,
+    C: Clock,
+    I: IdGenerator,
+{
+    let issue = Issue::new(request.issue_year, request.issue_month)?;
+    let original = repository
+        .latest_reversible_distribution(issue)?
+        .ok_or(ApplicationError::NothingToUndo)?;
+    let now = services.clock.now();
+    let reversal = Distribution {
+        id: services.ids.next_id(),
+        subscription_id: original.subscription_id,
+        issue: original.issue,
+        quantity: original.quantity,
+        distributed_at: now.clone(),
+        note: Some("사용자 되돌리기".into()),
+        reversal_of: Some(original.id.clone()),
+        created_at: now.clone(),
+        updated_at: now.clone(),
+    };
+    let change = change_log(
+        services.ids.next_id(),
+        &now,
+        &required_operator(repository)?,
+        "distribution_reversed",
+        "distribution",
+        &reversal.id,
+        &format!("{}권 배부 되돌리기", reversal.quantity),
+    );
+    repository.save_distribution(&reversal, &change)?;
+    Ok(())
+}
+
+pub fn save_operator<R: DistributionDeskRepository, C: Clock>(
+    repository: &mut R,
+    clock: &C,
+    name: &str,
+) -> Result<(), ApplicationError> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(ApplicationError::MissingOperator);
+    }
+    repository.save_operator(name, &clock.now())?;
+    Ok(())
+}
+
+pub fn create_draft<R, C, I>(
+    repository: &mut R,
+    services: &RuntimeServices<'_, C, I>,
+    request: CreateDraftRequest,
+) -> Result<(), ApplicationError>
+where
+    R: DistributionDeskRepository,
+    C: Clock,
+    I: IdGenerator,
+{
+    let name = request.name.trim();
+    let cohort = clean_optional(request.cohort);
+    if name.is_empty() && cohort.is_none() {
+        return Err(qt_domain::DomainError::DraftIdentityRequired.into());
+    }
+    let now = services.clock.now();
+    let person = Person {
+        id: services.ids.next_id(),
+        // SQLite v2는 이름을 필수로 두므로, 이름을 모르는 간이 등록은 명시적인 표시값을 쓴다.
+        name: if name.is_empty() {
+            "이름 미상".into()
+        } else {
+            name.into()
+        },
+        cohort,
+        normalized_phone: request.phone.as_deref().map(normalize_phone),
+        phone: clean_optional(request.phone),
+        status: PersonStatus::Draft,
+        special_note: None,
+        created_at: now.clone(),
+        updated_at: now.clone(),
+    };
+    person.validate_draft()?;
+    let subscription = Subscription {
+        id: services.ids.next_id(),
+        person_id: person.id.clone(),
+        start_issue: Issue::new(request.issue_year, request.issue_month)?,
+        issue_count: 6,
+        quantity: request.quantity,
+        applied_at: Some(now.clone()),
+        source: SubscriptionSource::OnSite,
+        source_reference: None,
+        memo: Some("현장 간이 등록".into()),
+        created_at: now.clone(),
+        updated_at: now.clone(),
+        archived_at: None,
+    };
+    subscription.validate()?;
+    let change = change_log(
+        services.ids.next_id(),
+        &now,
+        &required_operator(repository)?,
+        "draft_person_created",
+        "person",
+        &person.id,
+        "현장 간이 등록",
+    );
+    repository.save_draft(&person, &subscription, &change)?;
+    Ok(())
+}
+
+pub fn create_quick_note<R, C, I>(
+    repository: &mut R,
+    services: &RuntimeServices<'_, C, I>,
+    request: CreateQuickNoteRequest,
+) -> Result<(), ApplicationError>
+where
+    R: DistributionDeskRepository,
+    C: Clock,
+    I: IdGenerator,
+{
+    let now = services.clock.now();
+    let note = QuickNote {
+        id: services.ids.next_id(),
+        person_id: request.person_id,
+        content: request.content.trim().into(),
+        status: QuickNoteStatus::Open,
+        operator_name: required_operator(repository)?,
+        created_at: now.clone(),
+        updated_at: now.clone(),
+        completed_at: None,
+    };
+    note.validate()?;
+    let change = change_log(
+        services.ids.next_id(),
+        &now,
+        &note.operator_name,
+        "quick_note_created",
+        "quick_note",
+        &note.id,
+        "현장 기록 추가",
+    );
+    repository.save_quick_note(&note, &change)?;
+    Ok(())
+}
+
+pub fn complete_quick_note<R, C, I>(
+    repository: &mut R,
+    services: &RuntimeServices<'_, C, I>,
+    id: &str,
+) -> Result<(), ApplicationError>
+where
+    R: DistributionDeskRepository,
+    C: Clock,
+    I: IdGenerator,
+{
+    let mut note = repository
+        .list_quick_notes()?
+        .into_iter()
+        .find(|note| note.id == id)
+        .ok_or(ApplicationError::MissingDeskRecord)?;
+    let now = services.clock.now();
+    note.status = QuickNoteStatus::Completed;
+    note.completed_at = Some(now.clone());
+    note.updated_at = now.clone();
+    let change = change_log(
+        services.ids.next_id(),
+        &now,
+        &required_operator(repository)?,
+        "quick_note_completed",
+        "quick_note",
+        &note.id,
+        "현장 기록 완료",
+    );
+    repository.save_quick_note(&note, &change)?;
+    Ok(())
+}
+
+pub fn create_operational_note<R, C, I>(
+    repository: &mut R,
+    services: &RuntimeServices<'_, C, I>,
+    request: CreateOperationalNoteRequest,
+) -> Result<(), ApplicationError>
+where
+    R: DistributionDeskRepository,
+    C: Clock,
+    I: IdGenerator,
+{
+    let now = services.clock.now();
+    let note = OperationalNote {
+        id: services.ids.next_id(),
+        title: request.title.trim().into(),
+        content: request.content.trim().into(),
+        active_from: services.clock.today(),
+        active_until: clean_optional(request.active_until),
+        is_pinned: request.is_pinned,
+        status: OperationalNoteStatus::Active,
+        operator_name: required_operator(repository)?,
+        created_at: now.clone(),
+        updated_at: now.clone(),
+        archived_at: None,
+    };
+    note.validate()?;
+    let change = change_log(
+        services.ids.next_id(),
+        &now,
+        &note.operator_name,
+        "operational_note_created",
+        "operational_note",
+        &note.id,
+        "운영 메모 추가",
+    );
+    repository.save_operational_note(&note, &change)?;
+    Ok(())
+}
+
+pub fn record_purchase<R, C, I>(
+    repository: &mut R,
+    services: &RuntimeServices<'_, C, I>,
+    request: RecordPurchaseRequest,
+) -> Result<(), ApplicationError>
+where
+    R: DistributionDeskRepository,
+    C: Clock,
+    I: IdGenerator,
+{
+    let now = services.clock.now();
+    let purchase = OneTimePurchase {
+        id: services.ids.next_id(),
+        person_id: request.person_id,
+        buyer_name: clean_optional(request.buyer_name),
+        issue: Issue::new(request.issue_year, request.issue_month)?,
+        quantity: request.quantity,
+        purchased_at: now.clone(),
+        note: clean_optional(request.note),
+        reversal_of: None,
+        created_at: now.clone(),
+        updated_at: now.clone(),
+    };
+    purchase.validate()?;
+    let change = change_log(
+        services.ids.next_id(),
+        &now,
+        &required_operator(repository)?,
+        "one_time_purchase_recorded",
+        "one_time_purchase",
+        &purchase.id,
+        &format!("현장 개별 구매 {}권", purchase.quantity),
+    );
+    repository.save_purchase(&purchase, &change)?;
+    Ok(())
+}
+
+pub fn cancel_latest_purchase<R, C, I>(
+    repository: &mut R,
+    services: &RuntimeServices<'_, C, I>,
+    issue: Issue,
+) -> Result<(), ApplicationError>
+where
+    R: DistributionDeskRepository,
+    C: Clock,
+    I: IdGenerator,
+{
+    let original = repository
+        .latest_reversible_purchase(issue)?
+        .ok_or(ApplicationError::NoPurchaseToCancel)?;
+    let now = services.clock.now();
+    let reversal = OneTimePurchase {
+        id: services.ids.next_id(),
+        person_id: original.person_id,
+        buyer_name: original.buyer_name,
+        issue: original.issue,
+        quantity: original.quantity,
+        purchased_at: now.clone(),
+        note: Some("사용자 구매 취소".into()),
+        reversal_of: Some(original.id),
+        created_at: now.clone(),
+        updated_at: now.clone(),
+    };
+    let change = change_log(
+        services.ids.next_id(),
+        &now,
+        &required_operator(repository)?,
+        "one_time_purchase_reversed",
+        "one_time_purchase",
+        &reversal.id,
+        &format!("현장 개별 구매 {}권 취소", reversal.quantity),
+    );
+    repository.save_purchase(&reversal, &change)?;
+    Ok(())
+}
+
+fn find_subscription<'a>(
+    records: &'a [DeskRecord],
+    subscription_id: &str,
+    issue: Issue,
+) -> Result<(&'a Subscription, &'a [Distribution], bool), ApplicationError> {
+    for record in records {
+        if let Some(subscription) = record
+            .subscriptions
+            .iter()
+            .find(|subscription| subscription.id == subscription_id)
+        {
+            let conflict = record
+                .subscriptions
+                .iter()
+                .filter(|candidate| candidate.includes(issue).unwrap_or(false))
+                .count()
+                > 1;
+            return Ok((subscription, &record.distributions, conflict));
+        }
+    }
+    Err(ApplicationError::MissingDeskRecord)
+}
+
+fn required_operator<R: DistributionDeskRepository>(
+    repository: &R,
+) -> Result<String, ApplicationError> {
+    repository
+        .current_operator()?
+        .filter(|name| !name.trim().is_empty())
+        .ok_or(ApplicationError::MissingOperator)
+}
+
+fn recommended_issue(today: &str) -> Result<Issue, ApplicationError> {
+    let year = today
+        .get(0..4)
+        .and_then(|value| value.parse::<i32>().ok())
+        .unwrap_or(2026);
+    let month = today
+        .get(5..7)
+        .and_then(|value| value.parse::<u8>().ok())
+        .unwrap_or(1);
+    let start_month = match month {
+        1 => 1,
+        2 => 3,
+        value if value % 2 == 0 => value + 1,
+        value => value,
+    };
+    let (year, start_month) = if start_month > 11 {
+        (year + 1, 1)
+    } else {
+        (year, start_month)
+    };
+    Ok(Issue::new(year, start_month)?)
+}
+
+fn phone_suffix(phone: &str) -> Option<String> {
+    (phone.len() >= 4).then(|| phone[phone.len() - 4..].to_owned())
+}
+
+fn clean_optional(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
+fn summarize(value: &str, max_chars: usize) -> String {
+    let mut chars = value.chars();
+    let summary = chars.by_ref().take(max_chars).collect::<String>();
+    if chars.next().is_some() {
+        format!("{summary}…")
+    } else {
+        summary
+    }
+}
+
+fn subscription_status(status: SubscriptionStatus) -> &'static str {
+    match status {
+        SubscriptionStatus::Scheduled => "예정",
+        SubscriptionStatus::Active => "유효",
+        SubscriptionStatus::Expired => "구독 만료",
+        SubscriptionStatus::NeedsReview => "확인 필요",
+    }
+}
+
+fn distribution_status(status: DistributionStatus) -> &'static str {
+    match status {
+        DistributionStatus::NotEligible => "대상 아님",
+        DistributionStatus::Undistributed => "미배부",
+        DistributionStatus::Partial => "일부 배부",
+        DistributionStatus::Complete => "배부 완료",
+        DistributionStatus::Overdistributed => "초과 배부",
+    }
+}
+
+fn change_log(
+    id: String,
+    now: &str,
+    operator: &str,
+    action: &str,
+    entity: &str,
+    entity_id: &str,
+    summary: &str,
+) -> ChangeLog {
+    ChangeLog {
+        id,
+        occurred_at: now.into(),
+        operator_name: operator.into(),
+        action_type: action.into(),
+        entity_type: entity.into(),
+        entity_id: entity_id.into(),
+        summary: summary.into(),
+        before_json: None,
+        after_json: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+
+    use super::*;
+
+    struct FixedClock;
+    impl Clock for FixedClock {
+        fn now(&self) -> String {
+            "2026-07-24T10:00:00+09:00".into()
+        }
+        fn today(&self) -> String {
+            "2026-07-24".into()
+        }
+    }
+
+    struct SequenceIds(Cell<u32>);
+    impl IdGenerator for SequenceIds {
+        fn next_id(&self) -> String {
+            let value = self.0.get() + 1;
+            self.0.set(value);
+            format!("id-{value}")
+        }
+    }
+
+    #[derive(Default)]
+    struct MemoryRepository {
+        operator: Option<String>,
+        records: Vec<DeskRecord>,
+        quick_notes: Vec<QuickNote>,
+        operational_notes: Vec<OperationalNote>,
+        distributions: Vec<Distribution>,
+        purchases: Vec<OneTimePurchase>,
+    }
+
+    impl DistributionDeskRepository for MemoryRepository {
+        fn migrate(&mut self) -> Result<(), PortError> {
+            Ok(())
+        }
+        fn current_operator(&self) -> Result<Option<String>, PortError> {
+            Ok(self.operator.clone())
+        }
+        fn save_operator(&mut self, name: &str, _now: &str) -> Result<(), PortError> {
+            self.operator = Some(name.into());
+            Ok(())
+        }
+        fn list_desk_records(
+            &self,
+            _query: &str,
+            _issue: Issue,
+        ) -> Result<Vec<DeskRecord>, PortError> {
+            let mut records = self.records.clone();
+            for record in &mut records {
+                record.distributions.extend(self.distributions.clone());
+            }
+            Ok(records)
+        }
+        fn save_distribution(
+            &mut self,
+            distribution: &Distribution,
+            _change: &ChangeLog,
+        ) -> Result<(), PortError> {
+            self.distributions.push(distribution.clone());
+            Ok(())
+        }
+        fn latest_reversible_distribution(
+            &self,
+            issue: Issue,
+        ) -> Result<Option<Distribution>, PortError> {
+            Ok(self
+                .distributions
+                .iter()
+                .rev()
+                .find(|item| {
+                    item.issue == issue
+                        && item.reversal_of.is_none()
+                        && !self
+                            .distributions
+                            .iter()
+                            .any(|candidate| candidate.reversal_of.as_deref() == Some(&item.id))
+                })
+                .cloned())
+        }
+        fn save_draft(
+            &mut self,
+            person: &Person,
+            subscription: &Subscription,
+            _change: &ChangeLog,
+        ) -> Result<(), PortError> {
+            self.records.push(DeskRecord {
+                person: person.clone(),
+                subscriptions: vec![subscription.clone()],
+                distributions: vec![],
+                has_open_quick_note: false,
+            });
+            Ok(())
+        }
+        fn list_quick_notes(&self) -> Result<Vec<QuickNote>, PortError> {
+            Ok(self.quick_notes.clone())
+        }
+        fn save_quick_note(
+            &mut self,
+            note: &QuickNote,
+            _change: &ChangeLog,
+        ) -> Result<(), PortError> {
+            self.quick_notes.retain(|item| item.id != note.id);
+            self.quick_notes.push(note.clone());
+            Ok(())
+        }
+        fn list_operational_notes(&self) -> Result<Vec<OperationalNote>, PortError> {
+            Ok(self.operational_notes.clone())
+        }
+        fn save_operational_note(
+            &mut self,
+            note: &OperationalNote,
+            _change: &ChangeLog,
+        ) -> Result<(), PortError> {
+            self.operational_notes.push(note.clone());
+            Ok(())
+        }
+        fn save_purchase(
+            &mut self,
+            purchase: &OneTimePurchase,
+            _change: &ChangeLog,
+        ) -> Result<(), PortError> {
+            self.purchases.push(purchase.clone());
+            Ok(())
+        }
+        fn latest_reversible_purchase(
+            &self,
+            issue: Issue,
+        ) -> Result<Option<OneTimePurchase>, PortError> {
+            Ok(self
+                .purchases
+                .iter()
+                .rev()
+                .find(|item| {
+                    item.issue == issue
+                        && item.reversal_of.is_none()
+                        && !self
+                            .purchases
+                            .iter()
+                            .any(|candidate| candidate.reversal_of.as_deref() == Some(&item.id))
+                })
+                .cloned())
+        }
+        fn purchase_summary(&self, issue: Issue) -> Result<(u32, u32), PortError> {
+            let matching =
+                self.purchases
+                    .iter()
+                    .filter(|purchase| {
+                        purchase.issue == issue
+                            && purchase.reversal_of.is_none()
+                            && !self.purchases.iter().any(|candidate| {
+                                candidate.reversal_of.as_deref() == Some(&purchase.id)
+                            })
+                    })
+                    .collect::<Vec<_>>();
+            Ok((
+                matching.len() as u32,
+                matching.iter().map(|purchase| purchase.quantity).sum(),
+            ))
+        }
+    }
+
+    fn record(quantity: u32) -> DeskRecord {
+        let now = "2026-01-01T00:00:00+09:00";
+        let person = Person {
+            id: "person-1".into(),
+            name: "가상 신청자".into(),
+            cohort: Some("94".into()),
+            phone: Some("010-1234-5678".into()),
+            normalized_phone: Some("01012345678".into()),
+            status: PersonStatus::Active,
+            special_note: None,
+            created_at: now.into(),
+            updated_at: now.into(),
+        };
+        DeskRecord {
+            subscriptions: vec![Subscription {
+                id: "subscription-1".into(),
+                person_id: person.id.clone(),
+                start_issue: Issue::new(2026, 1).unwrap(),
+                issue_count: 6,
+                quantity,
+                applied_at: None,
+                source: SubscriptionSource::Manual,
+                source_reference: None,
+                memo: None,
+                created_at: now.into(),
+                updated_at: now.into(),
+                archived_at: None,
+            }],
+            person,
+            distributions: vec![],
+            has_open_quick_note: true,
+        }
+    }
+
+    #[test]
+    fn empty_search_shows_remaining_people_and_counts_people_and_books() {
+        let mut repository = MemoryRepository {
+            operator: Some("담당자".into()),
+            records: vec![record(2)],
+            ..Default::default()
+        };
+        let desk = load_distribution_desk(
+            &mut repository,
+            &FixedClock,
+            Issue::new(2026, 7).unwrap(),
+            "",
+        )
+        .unwrap();
+
+        assert_eq!(desk.people.len(), 1);
+        assert_eq!(desk.totals.target_people, 1);
+        assert_eq!(desk.totals.remaining_people, 1);
+        assert_eq!(desk.totals.target_quantity, 2);
+        assert_eq!(desk.people[0].phone_suffix.as_deref(), Some("5678"));
+    }
+
+    #[test]
+    fn partial_then_remaining_distribution_and_undo_are_persistent_records() {
+        let mut repository = MemoryRepository {
+            operator: Some("담당자".into()),
+            records: vec![record(2)],
+            ..Default::default()
+        };
+        let ids = SequenceIds(Cell::new(0));
+        let services = RuntimeServices {
+            clock: &FixedClock,
+            ids: &ids,
+        };
+        record_distribution(
+            &mut repository,
+            &services,
+            RecordDistributionRequest {
+                issue_year: 2026,
+                issue_month: 7,
+                subscription_id: "subscription-1".into(),
+                quantity: Some(1),
+                note: None,
+            },
+        )
+        .unwrap();
+        record_distribution(
+            &mut repository,
+            &services,
+            RecordDistributionRequest {
+                issue_year: 2026,
+                issue_month: 7,
+                subscription_id: "subscription-1".into(),
+                quantity: None,
+                note: None,
+            },
+        )
+        .unwrap();
+        let complete = load_distribution_desk(
+            &mut repository,
+            &FixedClock,
+            Issue::new(2026, 7).unwrap(),
+            "가상",
+        )
+        .unwrap();
+        assert_eq!(complete.people[0].distribution_status, "배부 완료");
+
+        undo_last_distribution(
+            &mut repository,
+            &services,
+            UndoDistributionRequest {
+                issue_year: 2026,
+                issue_month: 7,
+            },
+        )
+        .unwrap();
+        let partial = load_distribution_desk(
+            &mut repository,
+            &FixedClock,
+            Issue::new(2026, 7).unwrap(),
+            "가상",
+        )
+        .unwrap();
+        assert_eq!(partial.people[0].distribution_status, "일부 배부");
+        assert_eq!(partial.people[0].remaining_quantity, 1);
+    }
+
+    #[test]
+    fn quick_and_operational_notes_remain_separate() {
+        let mut repository = MemoryRepository {
+            operator: Some("담당자".into()),
+            ..Default::default()
+        };
+        let ids = SequenceIds(Cell::new(0));
+        let services = RuntimeServices {
+            clock: &FixedClock,
+            ids: &ids,
+        };
+        create_quick_note(
+            &mut repository,
+            &services,
+            CreateQuickNoteRequest {
+                person_id: None,
+                content: "신규 신청 확인".into(),
+            },
+        )
+        .unwrap();
+        create_operational_note(
+            &mut repository,
+            &services,
+            CreateOperationalNoteRequest {
+                title: "보관 위치".into(),
+                content: "예배당 뒤편".into(),
+                active_until: None,
+                is_pinned: true,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(repository.quick_notes.len(), 1);
+        assert_eq!(repository.operational_notes.len(), 1);
+    }
+
+    #[test]
+    fn one_time_purchase_can_be_cancelled_without_touching_subscription() {
+        let mut repository = MemoryRepository {
+            operator: Some("담당자".into()),
+            records: vec![record(1)],
+            ..Default::default()
+        };
+        let ids = SequenceIds(Cell::new(0));
+        let services = RuntimeServices {
+            clock: &FixedClock,
+            ids: &ids,
+        };
+        let issue = Issue::new(2026, 7).unwrap();
+        record_purchase(
+            &mut repository,
+            &services,
+            RecordPurchaseRequest {
+                person_id: None,
+                buyer_name: Some("현장 구매자".into()),
+                issue_year: 2026,
+                issue_month: 7,
+                quantity: 2,
+                note: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(repository.purchase_summary(issue).unwrap(), (1, 2));
+
+        cancel_latest_purchase(&mut repository, &services, issue).unwrap();
+
+        assert_eq!(repository.purchase_summary(issue).unwrap(), (0, 0));
+        assert_eq!(repository.records[0].subscriptions[0].quantity, 1);
+        assert_eq!(repository.purchases.len(), 2);
+    }
+}

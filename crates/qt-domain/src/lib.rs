@@ -9,6 +9,10 @@ pub use distribution::{
 };
 pub use issue::Issue;
 pub use records::{ChangeLog, Person, PersonStatus};
+pub use records::{
+    OneTimePurchase, OperationalNote, OperationalNoteStatus, QuickNote, QuickNoteStatus,
+    normalize_phone, normalize_search_text, person_matches_search,
+};
 pub use subscription::{
     Subscription, SubscriptionAssessment, SubscriptionSource, SubscriptionStatus,
 };
@@ -78,6 +82,12 @@ pub enum DomainError {
     InvalidDistributionHistory,
     #[error("필수 시각 값은 비어 있을 수 없습니다: {0}")]
     EmptyTimestamp(&'static str),
+    #[error("내용은 비어 있을 수 없습니다.")]
+    EmptyContent,
+    #[error("제목은 비어 있을 수 없습니다.")]
+    EmptyTitle,
+    #[error("간이 등록에는 이름 또는 또래 중 하나가 필요합니다.")]
+    DraftIdentityRequired,
 }
 
 #[cfg(test)]

@@ -5,8 +5,17 @@ use serde::Serialize;
 use thiserror::Error;
 
 mod phase1;
+mod phase2;
 
 pub use phase1::{CoreRepository, MigrationReport, Phase1Report, RunPhase1Probe};
+pub use phase2::{
+    Clock, CreateDraftRequest, CreateOperationalNoteRequest, CreateQuickNoteRequest, DeskRecord,
+    DistributionDesk, DistributionDeskRepository, IdGenerator, RecordDistributionRequest,
+    RecordPurchaseRequest, RuntimeServices, UndoDistributionRequest, cancel_latest_purchase,
+    complete_quick_note, create_draft, create_operational_note, create_quick_note,
+    load_distribution_desk, record_distribution, record_purchase, save_operator,
+    undo_last_distribution,
+};
 
 pub trait ProbeRepository {
     fn migrate(&mut self) -> Result<(), PortError>;
@@ -117,6 +126,14 @@ pub enum ApplicationError {
     DistributionMismatch,
     #[error("담당자가 포함된 업무 변경 이력이 예상과 다릅니다.")]
     ChangeLogMismatch,
+    #[error("현재 담당자 이름을 먼저 설정해 주세요.")]
+    MissingOperator,
+    #[error("선택한 QT 신청자 또는 구독을 찾지 못했습니다.")]
+    MissingDeskRecord,
+    #[error("되돌릴 수 있는 최근 배부 기록이 없습니다.")]
+    NothingToUndo,
+    #[error("취소할 수 있는 최근 현장 개별 구매가 없습니다.")]
+    NoPurchaseToCancel,
 }
 
 #[derive(Debug, Error)]
