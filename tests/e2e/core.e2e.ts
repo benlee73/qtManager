@@ -46,11 +46,7 @@ describe("QT Manager Phase 2 desktop flow", () => {
       { timeoutMsg: "1권 일부 배부가 화면에 반영되지 않았습니다." },
     );
 
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLButtonElement>('[data-testid="distribute"]')
-        ?.click();
-    });
+    await dispatchShortcut("Enter");
     await browser.waitUntil(
       async () =>
         (await textOf('[data-testid="person-row"]')).includes("배부 완료") &&
@@ -58,7 +54,7 @@ describe("QT Manager Phase 2 desktop flow", () => {
       { timeoutMsg: "남은 1권 기본 배부가 완료되지 않았습니다." },
     );
 
-    await clickButtonByText("↶ 되돌리기");
+    await dispatchShortcut("z");
     await browser.waitUntil(
       async () =>
         (await textOf('[data-testid="person-row"]')).includes("일부 배부") &&
@@ -98,6 +94,17 @@ describe("QT Manager Phase 2 desktop flow", () => {
       () => document.activeElement?.getAttribute("data-testid") ?? "",
     );
     expect(focused).toBe("people-search");
+
+    await browser.execute(() => {
+      (document.activeElement as HTMLElement | null)?.blur();
+    });
+    await dispatchShortcut("n");
+    await waitForText("#dialog-title", "현장 간이 등록");
+    await clickButtonByText("", "닫기");
+
+    await dispatchShortcut("m", true);
+    await waitForText("#dialog-title", "현장 기록 추가");
+    await clickButtonByText("", "닫기");
   });
 });
 
@@ -151,6 +158,24 @@ async function clickButtonByText(text: string, ariaLabel?: string) {
     },
     text,
     ariaLabel,
+  );
+}
+
+async function dispatchShortcut(key: string, shiftKey = false) {
+  await browser.execute(
+    (shortcutKey, withShift) => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: shortcutKey,
+          metaKey: true,
+          ctrlKey: true,
+          shiftKey: withShift,
+          bubbles: true,
+        }),
+      );
+    },
+    key,
+    shiftKey,
   );
 }
 
