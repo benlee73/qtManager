@@ -4,6 +4,10 @@ use qt_domain::{ProbePerson, STATE_XLSX_FORMAT_VERSION};
 use serde::Serialize;
 use thiserror::Error;
 
+mod phase1;
+
+pub use phase1::{CoreRepository, MigrationReport, Phase1Report, RunPhase1Probe};
+
 pub trait ProbeRepository {
     fn migrate(&mut self) -> Result<(), PortError>;
     fn replace_person(&mut self, person: &ProbePerson) -> Result<(), PortError>;
@@ -105,6 +109,14 @@ pub enum ApplicationError {
     DatabaseMismatch,
     #[error("XLSX 내보내기와 다시 가져오기 데이터가 다릅니다.")]
     WorkbookMismatch,
+    #[error("SQLite 스키마 버전이 다릅니다. 예상: {expected}, 실제: {actual}")]
+    DatabaseSchemaMismatch { expected: u16, actual: u16 },
+    #[error("SQLite에 저장한 구독을 다시 찾지 못했습니다.")]
+    MissingPersistedSubscription,
+    #[error("저장 후 배부 상태가 예상과 다릅니다.")]
+    DistributionMismatch,
+    #[error("담당자가 포함된 업무 변경 이력이 예상과 다릅니다.")]
+    ChangeLogMismatch,
 }
 
 #[derive(Debug, Error)]

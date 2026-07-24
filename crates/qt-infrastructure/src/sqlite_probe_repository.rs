@@ -4,6 +4,8 @@ use qt_application::{PortError, ProbeRepository};
 use qt_domain::ProbePerson;
 use rusqlite::{Connection, OptionalExtension, params};
 
+use crate::sqlite_migrations;
+
 pub struct SqliteProbeRepository {
     connection: Connection,
 }
@@ -11,37 +13,14 @@ pub struct SqliteProbeRepository {
 impl SqliteProbeRepository {
     pub fn open(path: &Path) -> Result<Self, PortError> {
         let connection = Connection::open(path).map_err(port_error)?;
-        connection
-            .pragma_update(None, "journal_mode", "WAL")
-            .map_err(port_error)?;
-        connection
-            .pragma_update(None, "synchronous", "FULL")
-            .map_err(port_error)?;
+        sqlite_migrations::configure(&connection)?;
         Ok(Self { connection })
     }
 }
 
 impl ProbeRepository for SqliteProbeRepository {
     fn migrate(&mut self) -> Result<(), PortError> {
-        let transaction = self.connection.transaction().map_err(port_error)?;
-        transaction
-            .execute_batch(
-                "
-                CREATE TABLE IF NOT EXISTS schema_migrations (
-                    version INTEGER PRIMARY KEY,
-                    applied_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS phase0_people (
-                    id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    cohort TEXT NOT NULL CHECK(length(cohort) = 2)
-                );
-                INSERT OR IGNORE INTO schema_migrations(version, applied_at)
-                VALUES (1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
-                ",
-            )
-            .map_err(port_error)?;
-        transaction.commit().map_err(port_error)
+        sqlite_migrations::migrate(&mut self.connection).map(|_| ())
     }
 
     fn replace_person(&mut self, person: &ProbePerson) -> Result<(), PortError> {

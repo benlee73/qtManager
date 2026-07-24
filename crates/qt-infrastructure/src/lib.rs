@@ -1,6 +1,9 @@
+mod sqlite_core_repository;
+mod sqlite_migrations;
 mod sqlite_probe_repository;
 mod state_xlsx;
 
+pub use sqlite_core_repository::SqliteCoreRepository;
 pub use sqlite_probe_repository::SqliteProbeRepository;
 pub use state_xlsx::XlsxStateWorkbook;
 
