@@ -83,6 +83,10 @@ h1 {
   box-shadow: 0 1rem 2.5rem rgb(23 35 29 / 8%);
 }
 
+.probe + .probe {
+  margin-top: 1.25rem;
+}
+
 .probe h2 {
   margin-bottom: 0.4rem;
 }
