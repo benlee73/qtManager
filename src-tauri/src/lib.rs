@@ -54,6 +54,13 @@ fn run_phase1_probe(app: tauri::AppHandle) -> Result<Phase1Report, String> {
 }
 
 fn open_operational_repository(app: &tauri::AppHandle) -> Result<SqliteCoreRepository, String> {
+    #[cfg(feature = "e2e")]
+    let directory = app
+        .path()
+        .app_cache_dir()
+        .map_err(|error| format!("테스트 데이터 경로를 찾지 못했습니다: {error}"))?
+        .join("phase2-e2e");
+    #[cfg(not(feature = "e2e"))]
     let directory = app
         .path()
         .app_data_dir()
