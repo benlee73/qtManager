@@ -12,6 +12,8 @@ target/
 coverage/
 test-results/
 playwright-report/
+.pnpm-store/
+src-tauri/gen/
 
 *.db
 *.db-*
@@ -26,4 +28,3 @@ exports/
 # 운영 XLSX에는 개인정보가 들어가므로 기본적으로 추적하지 않는다.
 *.xlsx
 !tests/fixtures/**/*.xlsx
-

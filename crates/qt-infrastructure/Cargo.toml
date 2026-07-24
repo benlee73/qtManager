@@ -1,0 +1,16 @@
+[package]
+name = "qt-infrastructure"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+calamine.workspace = true
+qt-application.workspace = true
+qt-domain.workspace = true
+rusqlite.workspace = true
+rust_xlsxwriter.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

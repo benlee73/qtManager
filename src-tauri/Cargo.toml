@@ -1,0 +1,28 @@
+[package]
+name = "qt-manager"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[features]
+e2e = []
+
+[lib]
+name = "qt_manager_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "qt-manager"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.5.6", features = [] }
+
+[dependencies]
+qt-application.workspace = true
+qt-infrastructure.workspace = true
+serde.workspace = true
+tauri.workspace = true
+tauri-plugin-wdio = "1.2.0"
+tauri-plugin-wdio-webdriver = "1.2.0"

@@ -1,22 +1,34 @@
 set shell := ["zsh", "-cu"]
+set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 
-# 코드가 생기면 각 언어의 formatter를 이 recipe에 연결한다.
+# Homebrew의 keg-only Node/Rust도 자동으로 찾되 CI와 다른 환경에서는 기존 PATH를 쓴다.
+tool_path := if os() == "macos" { "/opt/homebrew/opt/node@24/bin:/opt/homebrew/opt/rustup/bin:" + env_var("PATH") } else { env_var("PATH") }
+export PATH := tool_path
+
 format:
-    @echo "No source formatter configured yet."
+    pnpm exec prettier --write .
+    cargo fmt --all
 
-# 현재는 문서와 비밀정보 유입을 검사한다. 구현 시 Rust/TypeScript lint를 추가한다.
 lint:
-    @test -s AGENTS.md
-    @test -s PROJECT_SPEC.md
-    @rg -q 'PROJECT_SPEC\.md' AGENTS.md
-    @if rg -q --hidden --glob '!.git/**' --glob '!.idea/**' 'ghp_[A-Za-z0-9]+' .; then echo "Potential GitHub token found in tracked workspace files."; exit 1; fi
+    pnpm exec prettier --check .
+    pnpm lint
+    cargo fmt --all --check
+    cargo clippy --workspace --all-targets --all-features -- -D warnings
+    python scripts/check_project.py
 
-# 현재 프로젝트 산출물인 기준 문서의 계약을 검증한다.
 test:
-    @python3 -c 'import pathlib,re; s=pathlib.Path("PROJECT_SPEC.md").read_text(); ids=re.findall(r"\*\*(FR-[A-Z]+-\d+)\*\*",s); duplicates=sorted({x for x in ids if ids.count(x)>1}); assert not duplicates, f"Duplicate requirement IDs: {duplicates}"; required=["## 7. 기능 요구사항","## 12. 테스트 요구사항","## 20. 미결정 사항","## 21. 결정 기록"]; missing=[x for x in required if x not in s]; assert not missing, f"Missing sections: {missing}"; print(f"Verified {len(ids)} unique requirement IDs.")'
+    pnpm test
+    cargo test --workspace --all-features
 
-# 애플리케이션 구현 후 실제 데스크톱 E2E 명령으로 교체한다.
 e2e:
-    @echo "No application E2E suite configured yet."
+    pnpm tauri build --no-bundle --features e2e --config src-tauri/tauri.e2e.conf.json
+    pnpm e2e
+
+e2e-build:
+    pnpm build
+    cargo build --package qt-manager
+
+generate-fixture:
+    cargo run --package qt-infrastructure --example generate_legacy_fixture -- tests/fixtures/legacy-2026-anonymous.xlsx
 
 check: lint test
