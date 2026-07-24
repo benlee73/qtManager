@@ -1,7 +1,23 @@
+mod distribution;
+mod issue;
+mod records;
+mod subscription;
+
+pub use distribution::{
+    Distribution, DistributionAssessment, DistributionStatus, PlannedDistribution,
+    assess_distribution, plan_distribution,
+};
+pub use issue::Issue;
+pub use records::{ChangeLog, Person, PersonStatus};
+pub use subscription::{
+    Subscription, SubscriptionAssessment, SubscriptionSource, SubscriptionStatus,
+};
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub const STATE_XLSX_FORMAT_VERSION: u16 = 1;
+pub const DATABASE_SCHEMA_VERSION: u16 = 2;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,6 +58,26 @@ pub enum DomainError {
     EmptyName,
     #[error("또래는 선행 0을 보존하는 두 자리 문자열이어야 합니다: {0}")]
     InvalidCohort(String),
+    #[error("QT 호 시작 월은 1, 3, 5, 7, 9, 11 중 하나여야 합니다: {0}")]
+    InvalidIssueMonth(u8),
+    #[error("QT 호 연도는 1 이상이어야 합니다: {0}")]
+    InvalidIssueYear(i32),
+    #[error("필수 식별자는 비어 있을 수 없습니다: {0}")]
+    EmptyRequiredId(&'static str),
+    #[error("구독 호 수는 1 이상이어야 합니다.")]
+    InvalidIssueCount,
+    #[error("수량은 1 이상이어야 합니다.")]
+    InvalidQuantity,
+    #[error("선택한 QT 호는 이 구독의 배부 대상이 아닙니다.")]
+    DistributionNotEligible,
+    #[error("해당 QT 호의 배부가 이미 완료됐습니다.")]
+    DistributionAlreadyComplete,
+    #[error("남은 수량 {remaining}권보다 많은 {requested}권을 배부할 수 없습니다.")]
+    DistributionExceedsRemaining { requested: u32, remaining: u32 },
+    #[error("취소 이력 때문에 계산된 배부 수량이 0보다 작습니다.")]
+    InvalidDistributionHistory,
+    #[error("필수 시각 값은 비어 있을 수 없습니다: {0}")]
+    EmptyTimestamp(&'static str),
 }
 
 #[cfg(test)]
