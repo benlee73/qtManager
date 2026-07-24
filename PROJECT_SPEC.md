@@ -1027,9 +1027,9 @@ UI / Desktop / XLSX / SQLite / OS
 - 완료: 개인정보가 없는 2026년 월별 시트 형태의 기존 XLSX fixture 작성과 구조 회귀 테스트
 - 완료: 익명 Person 한 행을 SQLite 트랜잭션으로 저장하고 XLSX 형식 버전 1의 `안내`/`QT신청자` 시트로 내보낸 뒤 다시 읽어 동일성을 확인하는 수직 기술 검증
 - 완료: macOS Apple Silicon에서 실제 Tauri 창을 통한 WebdriverIO E2E로 SQLite·XLSX 수직 흐름 검증
-- 완료: macOS/Windows 동일 `just check`, `just e2e` 명령을 실행하는 GitHub Actions 구성
+- 완료: macOS/Windows 동일 `just check`, `just e2e` 명령을 실행하는 GitHub Actions 구성 및 두 OS 최초 성공 확인
 - 확정: XLSX `format_version = 1`, 필수 시트, 공통 값 표현 및 핵심 엔터티 관계
-- 남음: Windows GitHub Actions 최초 성공 확인
+- 완료: Phase 0 요구사항 확정과 수직 기술 검증
 - 남음: 버전 1 전체 시트 writer/reader와 전체 SQLite 물리 스키마 구현은 각각 Phase 4와 Phase 1에서 계약 테스트와 함께 진행
 
 ### Phase 1: 핵심 도메인과 로컬 저장
@@ -1277,6 +1277,7 @@ UI / Desktop / XLSX / SQLite / OS
 
 ## 22. 변경 이력
 
+- 2026-07-24: macOS와 Windows에서 `just check` 및 실제 Tauri 데스크톱 E2E의 최초 성공을 확인하고 Phase 0를 완료함. Windows 체크아웃에서도 동일한 포맷 검사를 보장하도록 저장소 줄바꿈을 LF로 고정함.
 - 2026-07-24: Phase 0를 시작함. 도구 버전 고정, 헥사고날 Rust 워크스페이스와 Tauri/React 셸, 익명 기존 XLSX fixture, SQLite·XLSX 형식 v1 수직 검증, macOS 데스크톱 E2E 및 macOS/Windows CI를 구성하고 XLSX 형식 버전 1 계약을 확정함.
 - 2026-07-24: 암호화하지 않는 XLSX와 개인정보 주의 안내, QT 호 기준 자격 판정, 로그인 없는 담당자 이름, 기본 기술 스택, macOS 12+ Intel/Apple Silicon 및 Windows 10/11 64비트 지원, 미서명 내부 배포 방식을 확정함. Google Forms 예시는 붙여넣기 기능 구현 전 받기로 함.
 - 2026-07-24: 업무 단축키를 `Alt/Option` 공통 방식에서 macOS `Command(⌘)` / Windows `Ctrl` 관례형 방식으로 변경함.
