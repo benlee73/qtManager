@@ -114,12 +114,16 @@ where
         let existing = self
             .repository
             .list_distributions(&fixture.subscription.id, selected_issue)?;
-        let planned =
-            plan_distribution(&stored_subscription, selected_issue, false, &existing, None)?;
-        let distribution = fixture.distribution(planned.quantity);
-        let distribution_change = fixture.distribution_change(&distribution);
-        self.repository
-            .record_distribution(&distribution, &distribution_change)?;
+        let existing_assessment =
+            assess_distribution(&stored_subscription, selected_issue, false, &existing)?;
+        if existing_assessment.status != DistributionStatus::Complete {
+            let planned =
+                plan_distribution(&stored_subscription, selected_issue, false, &existing, None)?;
+            let distribution = fixture.distribution(planned.quantity);
+            let distribution_change = fixture.distribution_change(&distribution);
+            self.repository
+                .record_distribution(&distribution, &distribution_change)?;
+        }
 
         let stored_distributions = self
             .repository
@@ -266,7 +270,7 @@ mod tests {
         ) -> Result<(), PortError> {
             self.person = Some(person.clone());
             self.subscription = Some(subscription.clone());
-            self.changes.push(change.clone());
+            upsert_by_id(&mut self.changes, change.clone(), |item| &item.id);
             Ok(())
         }
 
@@ -275,8 +279,10 @@ mod tests {
             distribution: &Distribution,
             change: &ChangeLog,
         ) -> Result<(), PortError> {
-            self.distributions.push(distribution.clone());
-            self.changes.push(change.clone());
+            upsert_by_id(&mut self.distributions, distribution.clone(), |item| {
+                &item.id
+            });
+            upsert_by_id(&mut self.changes, change.clone(), |item| &item.id);
             Ok(())
         }
 
@@ -342,5 +348,36 @@ mod tests {
             logger.0.into_inner(),
             vec!["phase1_core_started", "phase1_core_completed"]
         );
+    }
+
+    #[test]
+    fn repeated_probe_does_not_duplicate_completed_distribution() {
+        let mut repository = MemoryCoreRepository::default();
+        let logger = RecordingLogger::default();
+
+        RunPhase1Probe::new(&mut repository, &logger)
+            .execute()
+            .unwrap();
+        let report = RunPhase1Probe::new(&mut repository, &logger)
+            .execute()
+            .unwrap();
+
+        assert_eq!(report.distributed_quantity, 2);
+        assert_eq!(repository.distributions.len(), 1);
+        assert_eq!(repository.changes.len(), 2);
+    }
+
+    fn upsert_by_id<T, F>(items: &mut Vec<T>, new_item: T, id: F)
+    where
+        F: Fn(&T) -> &str,
+    {
+        if let Some(index) = items
+            .iter()
+            .position(|existing_item| id(existing_item) == id(&new_item))
+        {
+            items[index] = new_item;
+        } else {
+            items.push(new_item);
+        }
     }
 }
