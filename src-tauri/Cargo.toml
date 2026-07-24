@@ -21,6 +21,7 @@ tauri-build = { version = "2.5.6", features = [] }
 
 [dependencies]
 qt-application.workspace = true
+qt-domain.workspace = true
 qt-infrastructure.workspace = true
 serde.workspace = true
 tauri.workspace = true
