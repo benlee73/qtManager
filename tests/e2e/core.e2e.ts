@@ -1,4 +1,4 @@
-describe("QT Manager Phase 2 desktop flow", () => {
+describe("QT Manager desktop flow", () => {
   it("registers an on-site applicant, partially distributes, completes and undoes", async () => {
     await browser.waitUntil(
       async () =>
@@ -106,6 +106,87 @@ describe("QT Manager Phase 2 desktop flow", () => {
     await waitForText("#dialog-title", "현장 기록 추가");
     await clickButtonByText("", "닫기");
   });
+
+  it("registers, edits, renews and archives a person from management", async () => {
+    const applicant = `가상관리${Date.now()}`;
+    const edited = `${applicant}수정`;
+
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
+        ?.click();
+    });
+    await waitForText("h1", "QT 신청자 관리");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="open-register-person"]',
+        )
+        ?.click();
+    });
+    await setInput("input[name='name']", applicant);
+    await setInput("input[name='cohort']", "00");
+    await setInput("input[name='phone']", "010-0000-2468");
+    await setInput("textarea[name='specialNote']", "가상 장기 특이사항");
+    await setInput("input[name='quantity']", "2");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLFormElement>('[data-testid="register-person-form"]')
+        ?.requestSubmit();
+    });
+    await waitForText(".toast", "연간 구독을 등록했습니다");
+
+    await setInput('[data-testid="management-search"]', applicant);
+    await waitForText('[data-testid="management-person"]', applicant);
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="management-person"]')
+        ?.click();
+    });
+    await waitForText('[data-testid="person-detail"]', "가상 장기 특이사항");
+    await waitForText('[data-testid="person-detail"]', "연속 6개 호");
+
+    await clickButtonByText("정보 수정");
+    await setInput("input[name='name']", edited);
+    await setInput("input[name='phone']", "010-0000-8642");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLFormElement>('[data-testid="edit-person-form"]')
+        ?.requestSubmit();
+    });
+    await waitForText(".toast", "신청자 정보를 수정했습니다");
+    await waitForText('[data-testid="person-detail"]', edited);
+
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="open-renew"]')
+        ?.click();
+    });
+    await setInput("input[name='issueYear']", "2027");
+    await setSelect("select[name='issueMonth']", "7");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLFormElement>('[data-testid="renew-form"]')
+        ?.requestSubmit();
+    });
+    await waitForText(".toast", "새 연간 구독을 추가했습니다");
+    await waitForText('[data-testid="person-detail"]', "구독 이력 2건");
+
+    await clickButtonByText("이 신청자 보관");
+    await waitForText(".toast", "신청자를 보관했습니다");
+
+    await browser.execute(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }));
+    });
+    await waitForText("#help-title", "QT Manager 도움말");
+    await waitForText(
+      '[data-testid="help-people"]',
+      "과거 구독을 수정하지 않고",
+    );
+    await clickButtonByText("", "도움말 닫기");
+    await clickButtonByText("배부 화면으로");
+    await waitForText("h1", "QT 배부");
+  });
 });
 
 async function configureOperatorIfNeeded() {
@@ -134,6 +215,24 @@ async function setInput(selector: string, value: string) {
       )?.set;
       setter?.call(element, nextValue);
       element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+    },
+    selector,
+    value,
+  );
+}
+
+async function setSelect(selector: string, value: string) {
+  await browser.execute(
+    (targetSelector, nextValue) => {
+      const element = document.querySelector<HTMLSelectElement>(targetSelector);
+      if (!element)
+        throw new Error(`선택 요소를 찾지 못했습니다: ${targetSelector}`);
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLSelectElement.prototype,
+        "value",
+      )?.set;
+      setter?.call(element, nextValue);
       element.dispatchEvent(new Event("change", { bubbles: true }));
     },
     selector,

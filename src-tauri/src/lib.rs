@@ -316,7 +316,8 @@ fn update_person_command(
 ) -> Result<(), String> {
     let mut repository = open_operational_repository(&app)?;
     let runtime = SystemRuntime;
-    update_person(
+    StderrEventLogger.info("person_update_started");
+    let result = update_person(
         &mut repository,
         &RuntimeServices {
             clock: &runtime,
@@ -324,7 +325,13 @@ fn update_person_command(
         },
         request,
     )
-    .map_err(|error| error.to_string())
+    .map_err(|error| error.to_string());
+    if result.is_ok() {
+        StderrEventLogger.info("person_update_completed");
+    } else {
+        StderrEventLogger.error("person_update_failed");
+    }
+    result
 }
 
 #[tauri::command]
@@ -335,7 +342,8 @@ fn set_person_archived_command(
 ) -> Result<(), String> {
     let mut repository = open_operational_repository(&app)?;
     let runtime = SystemRuntime;
-    set_person_archived(
+    StderrEventLogger.info("person_archive_state_started");
+    let result = set_person_archived(
         &mut repository,
         &RuntimeServices {
             clock: &runtime,
@@ -344,7 +352,13 @@ fn set_person_archived_command(
         &person_id,
         archived,
     )
-    .map_err(|error| error.to_string())
+    .map_err(|error| error.to_string());
+    if result.is_ok() {
+        StderrEventLogger.info("person_archive_state_completed");
+    } else {
+        StderrEventLogger.error("person_archive_state_failed");
+    }
+    result
 }
 
 #[tauri::command]

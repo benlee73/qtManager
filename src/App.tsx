@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type Phase2Dialog, Phase2DialogContent } from "./Phase2Dialogs";
+import { HelpPanel } from "./HelpPanel";
+import { ManagementScreen } from "./ManagementScreen";
 
 import {
   type DeskPerson,
@@ -17,6 +19,10 @@ import {
 } from "./phase2";
 
 export default function App() {
+  const [screen, setScreen] = useState<"distribution" | "management">(
+    "distribution",
+  );
+  const [helpOpen, setHelpOpen] = useState(false);
   const [issue, setIssue] = useState<Issue>(() => recommendedIssue());
   const [query, setQuery] = useState("");
   const [desk, setDesk] = useState<DistributionDesk | null>(null);
@@ -80,6 +86,9 @@ export default function App() {
       if (event.key === "/" && !isTextEntryTarget(event.target)) {
         event.preventDefault();
         searchRef.current?.focus();
+      } else if (event.key === "?" && !isTextEntryTarget(event.target)) {
+        event.preventDefault();
+        setHelpOpen(true);
       } else if (modified && event.key === "Enter") {
         event.preventDefault();
         const person = desk?.people[selected];
@@ -118,6 +127,21 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeydown);
   }, [defaultDistribution, desk, issue, mutate, selected]);
 
+  if (screen === "management") {
+    return (
+      <>
+        <ManagementScreen
+          issue={issue}
+          onBack={() => setScreen("distribution")}
+          onHelp={() => setHelpOpen(true)}
+        />
+        {helpOpen && (
+          <HelpPanel topic="people" onClose={() => setHelpOpen(false)} />
+        )}
+      </>
+    );
+  }
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -134,6 +158,14 @@ export default function App() {
           <button
             className="quiet-button"
             type="button"
+            data-testid="open-management"
+            onClick={() => setScreen("management")}
+          >
+            신청자 관리
+          </button>
+          <button
+            className="quiet-button"
+            type="button"
             onClick={() => setDialog({ type: "purchase" })}
           >
             더보기 · 개별 구매
@@ -144,6 +176,14 @@ export default function App() {
             onClick={() => setDialog({ type: "operator" })}
           >
             담당자 {desk?.operatorName ?? "설정"}
+          </button>
+          <button
+            className="quiet-button"
+            type="button"
+            aria-label="도움말"
+            onClick={() => setHelpOpen(true)}
+          >
+            ?
           </button>
         </div>
       </header>
@@ -430,6 +470,7 @@ export default function App() {
           mutate={mutate}
         />
       )}
+      {helpOpen && <HelpPanel onClose={() => setHelpOpen(false)} />}
     </main>
   );
 }

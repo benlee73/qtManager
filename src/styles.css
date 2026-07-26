@@ -30,7 +30,8 @@ body {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
@@ -47,6 +48,7 @@ button:disabled {
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
+select:focus-visible,
 .person-row:focus-visible {
   outline: 3px solid #e5a334;
   outline-offset: 2px;

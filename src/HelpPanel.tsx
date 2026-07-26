@@ -1,0 +1,161 @@
+type HelpTopic =
+  | "quick-start"
+  | "distribution"
+  | "people"
+  | "purchase"
+  | "handover"
+  | "shortcuts"
+  | "install";
+
+const topics: { id: HelpTopic; label: string }[] = [
+  { id: "quick-start", label: "빠른 시작" },
+  { id: "distribution", label: "검색과 배부" },
+  { id: "people", label: "신규 신청과 갱신" },
+  { id: "purchase", label: "개별 구매" },
+  { id: "handover", label: "데이터 인수인계" },
+  { id: "shortcuts", label: "단축키" },
+  { id: "install", label: "설치 문제" },
+];
+
+export function HelpPanel({
+  topic = "quick-start",
+  onClose,
+}: {
+  topic?: HelpTopic;
+  onClose: () => void;
+}) {
+  return (
+    <div className="modal-backdrop help-backdrop" role="presentation">
+      <section
+        className="help-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="help-title"
+      >
+        <header className="help-heading">
+          <div>
+            <p className="section-label">인터넷 없이 보는 사용법</p>
+            <h2 id="help-title">QT Manager 도움말</h2>
+          </div>
+          <button type="button" aria-label="도움말 닫기" onClick={onClose}>
+            ×
+          </button>
+        </header>
+        <div className="help-layout">
+          <nav aria-label="도움말 목차">
+            {topics.map((item) => (
+              <a
+                key={item.id}
+                className={item.id === topic ? "active" : ""}
+                href={`#help-${item.id}`}
+              >
+                {item.label}
+              </a>
+            ))}
+          </nav>
+          <div className="help-content">
+            <HelpSection id="quick-start" title="처음 맡은 담당자의 빠른 시작">
+              <ol>
+                <li>처음 실행할 때 현재 담당자 이름을 입력합니다.</li>
+                <li>배부할 QT 호가 맞는지 상단에서 확인합니다.</li>
+                <li>
+                  검색창이 비어 있으면 아직 배부하지 않은 신청자가 보입니다.
+                </li>
+                <li>책을 건넨 뒤 각 행의 ‘N권 배부’를 누릅니다.</li>
+                <li>실수했다면 즉시 ‘되돌리기’를 누릅니다.</li>
+              </ol>
+            </HelpSection>
+            <HelpSection id="distribution" title="검색과 배부">
+              <p>
+                이름 일부, 두 자리 또래, ‘94 홍’ 같은 조합, 전화번호 숫자로
+                검색할 수 있습니다. 2권 신청자는 기본 버튼으로 남은 2권을 모두
+                처리하고, 1권만 건넸다면 ‘일부만’을 사용합니다. 구독 만료 또는
+                대상 아님 상태에서는 일반 배부가 막힙니다.
+              </p>
+            </HelpSection>
+            <HelpSection id="people" title="신규 신청, 정보 보완과 갱신">
+              <p>
+                ‘신청자 관리’에서 모든 정보를 입력해 정식 등록합니다. 현장 간이
+                등록자는 상세 화면의 ‘정보 수정’으로 연락처와 특이사항을 보완할
+                수 있습니다. 갱신은 과거 구독을 수정하지 않고 새 6개 호 구독을
+                추가합니다. 겹치는 기간은 확인 경고가 표시됩니다.
+              </p>
+              <p className="help-note">
+                Google 응답 행 붙여넣기는 실제 응답 헤더 예시를 반영한 뒤 제공될
+                예정입니다.
+              </p>
+            </HelpSection>
+            <HelpSection id="purchase" title="현장 개별 구매">
+              <p>
+                연간 구독이 아니라 한 호만 현장에서 구매한 경우 배부 화면의
+                ‘더보기 · 개별 구매’를 사용합니다. 이 기록은 구독 수량이나 배부
+                완료 상태를 바꾸지 않습니다.
+              </p>
+            </HelpSection>
+            <HelpSection id="handover" title="데이터 인수인계와 복구">
+              <p>
+                전체 상태 XLSX 내보내기·교체·병합·가져오기 되돌리기는 Phase
+                4에서 제공됩니다. XLSX에는 이름과 연락처가 포함되므로 안전하게
+                전달하고, 인수인계 후 불필요한 사본은 삭제해야 합니다.
+              </p>
+            </HelpSection>
+            <HelpSection id="shortcuts" title="단축키">
+              <dl className="shortcut-list">
+                <div>
+                  <dt>/</dt>
+                  <dd>검색창으로 이동</dd>
+                </div>
+                <div>
+                  <dt>⌘/Ctrl + Enter</dt>
+                  <dd>선택한 사람 기본 배부</dd>
+                </div>
+                <div>
+                  <dt>⌘/Ctrl + N</dt>
+                  <dd>현장 간이 등록</dd>
+                </div>
+                <div>
+                  <dt>⌘/Ctrl + Shift + M</dt>
+                  <dd>현장 기록 추가</dd>
+                </div>
+                <div>
+                  <dt>⌘/Ctrl + Z</dt>
+                  <dd>최근 배부 되돌리기</dd>
+                </div>
+                <div>
+                  <dt>?</dt>
+                  <dd>도움말 열기</dd>
+                </div>
+              </dl>
+            </HelpSection>
+            <HelpSection id="install" title="macOS와 Windows 최초 실행">
+              <p>
+                내부 배포용 미서명 앱은 경고가 나타날 수 있습니다. macOS에서는
+                앱을 한 번 연 뒤 ‘시스템 설정 → 개인정보 보호 및 보안 → 그래도
+                열기’를 사용합니다. Windows에서는 전달받은 원본이 맞는지 확인한
+                뒤 SmartScreen의 ‘추가 정보 → 실행’을 선택합니다.
+              </p>
+            </HelpSection>
+            <footer>앱 0.1.0 · 도움말 2026-07-26</footer>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function HelpSection({
+  id,
+  title,
+  children,
+}: {
+  id: HelpTopic;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section id={`help-${id}`} data-testid={`help-${id}`}>
+      <h3>{title}</h3>
+      {children}
+    </section>
+  );
+}
