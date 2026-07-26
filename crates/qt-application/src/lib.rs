@@ -4,10 +4,19 @@ use qt_domain::{ProbePerson, STATE_XLSX_FORMAT_VERSION};
 use serde::Serialize;
 use thiserror::Error;
 
+mod application_import;
 mod phase1;
 mod phase2;
 mod phase3;
 
+pub use application_import::{
+    ApplicationClipboardParser, ApplicationImportBatch, ApplicationImportRecord,
+    ApplicationImportRepository, ApplicationPersonCandidate, ApplicationPreviewRow,
+    ApplicationsPreview, ClipboardColumnMapping, ClipboardColumnMappingView, ClipboardParseResult,
+    ImportApplicationRowRequest, ImportApplicationsRequest, ImportApplicationsResult,
+    ParsedApplicationRow, PreviewApplicationsRequest, import_applications, preview_applications,
+    stable_fingerprint,
+};
 pub use phase1::{CoreRepository, MigrationReport, Phase1Report, RunPhase1Probe};
 pub use phase2::{
     Clock, CreateDraftRequest, CreateOperationalNoteRequest, CreateQuickNoteRequest, DeskRecord,
@@ -146,6 +155,14 @@ pub enum ApplicationError {
     DuplicatePersonConfirmationRequired,
     #[error("기존 구독과 기간이 겹칩니다. 두 구독을 모두 유지할지 확인해 주세요.")]
     OverlappingSubscriptionConfirmationRequired,
+    #[error("추가할 Google 응답 행을 한 개 이상 선택해 주세요.")]
+    NoApplicationRowsSelected,
+    #[error("{0}행은 이미 추가한 Google 응답입니다.")]
+    ApplicationAlreadyImported(usize),
+    #[error("{0}행의 기존 신청자 연결 또는 새 신청자 추가 방법을 선택해 주세요.")]
+    ApplicationCandidateChoiceRequired(usize),
+    #[error("{0}행의 값이 올바르지 않습니다. 미리보기에서 수정해 주세요.")]
+    InvalidApplicationRow(usize),
 }
 
 #[derive(Debug, Error)]

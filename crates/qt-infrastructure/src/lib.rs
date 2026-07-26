@@ -1,3 +1,5 @@
+mod clipboard_tsv;
+mod sqlite_application_import;
 mod sqlite_core_repository;
 mod sqlite_distribution_desk;
 mod sqlite_migrations;
@@ -25,3 +27,4 @@ impl AppLogger for StderrEventLogger {
         eprintln!("ERROR event={event}");
     }
 }
+pub use clipboard_tsv::TsvApplicationClipboardParser;
