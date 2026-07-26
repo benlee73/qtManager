@@ -2,11 +2,14 @@ use std::fs;
 
 use qt_application::{
     AppLogger, CreateDraftRequest, CreateOperationalNoteRequest, CreateQuickNoteRequest,
-    DistributionDesk, Phase0Report, Phase1Report, RecordDistributionRequest, RecordPurchaseRequest,
-    RunPhase0Probe, RunPhase1Probe, RuntimeServices, UndoDistributionRequest,
-    cancel_latest_purchase, complete_quick_note, create_draft, create_operational_note,
-    create_quick_note, load_distribution_desk, record_distribution, record_purchase, save_operator,
-    undo_last_distribution,
+    DistributionDesk, DuplicateCandidate, PeopleManagement, PersonDetail, Phase0Report,
+    Phase1Report, RecordDistributionRequest, RecordPurchaseRequest, RegisterPersonRequest,
+    RenewSubscriptionRequest, RunPhase0Probe, RunPhase1Probe, RuntimeServices,
+    UndoDistributionRequest, UpdatePersonRequest, cancel_latest_purchase, complete_quick_note,
+    create_draft, create_operational_note, create_quick_note, load_distribution_desk,
+    load_people_management, load_person_detail, preview_duplicates, record_distribution,
+    record_purchase, register_person, renew_subscription, save_operator, set_person_archived,
+    undo_last_distribution, update_person,
 };
 use qt_domain::Issue;
 use qt_infrastructure::{
@@ -242,6 +245,133 @@ fn cancel_latest_purchase_command(
     .map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn load_people_management_command(
+    app: tauri::AppHandle,
+    query: String,
+    include_archived: bool,
+) -> Result<PeopleManagement, String> {
+    let mut repository = open_operational_repository(&app)?;
+    load_people_management(&mut repository, &query, include_archived)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn load_person_detail_command(
+    app: tauri::AppHandle,
+    person_id: String,
+) -> Result<PersonDetail, String> {
+    let mut repository = open_operational_repository(&app)?;
+    load_person_detail(&mut repository, &person_id).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn preview_duplicates_command(
+    app: tauri::AppHandle,
+    name: String,
+    cohort: Option<String>,
+    phone: Option<String>,
+    excluding_id: Option<String>,
+) -> Result<Vec<DuplicateCandidate>, String> {
+    let mut repository = open_operational_repository(&app)?;
+    preview_duplicates(
+        &mut repository,
+        &name,
+        cohort.as_deref(),
+        phone.as_deref(),
+        excluding_id.as_deref(),
+    )
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn register_person_command(
+    app: tauri::AppHandle,
+    request: RegisterPersonRequest,
+) -> Result<String, String> {
+    let mut repository = open_operational_repository(&app)?;
+    let runtime = SystemRuntime;
+    StderrEventLogger.info("person_register_started");
+    let result = register_person(
+        &mut repository,
+        &RuntimeServices {
+            clock: &runtime,
+            ids: &runtime,
+        },
+        request,
+    )
+    .map_err(|error| error.to_string());
+    if result.is_ok() {
+        StderrEventLogger.info("person_register_completed");
+    } else {
+        StderrEventLogger.error("person_register_failed");
+    }
+    result
+}
+
+#[tauri::command]
+fn update_person_command(
+    app: tauri::AppHandle,
+    request: UpdatePersonRequest,
+) -> Result<(), String> {
+    let mut repository = open_operational_repository(&app)?;
+    let runtime = SystemRuntime;
+    update_person(
+        &mut repository,
+        &RuntimeServices {
+            clock: &runtime,
+            ids: &runtime,
+        },
+        request,
+    )
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn set_person_archived_command(
+    app: tauri::AppHandle,
+    person_id: String,
+    archived: bool,
+) -> Result<(), String> {
+    let mut repository = open_operational_repository(&app)?;
+    let runtime = SystemRuntime;
+    set_person_archived(
+        &mut repository,
+        &RuntimeServices {
+            clock: &runtime,
+            ids: &runtime,
+        },
+        &person_id,
+        archived,
+    )
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn renew_subscription_command(
+    app: tauri::AppHandle,
+    request: RenewSubscriptionRequest,
+) -> Result<(), String> {
+    let mut repository = open_operational_repository(&app)?;
+    let runtime = SystemRuntime;
+    StderrEventLogger.info("subscription_renew_started");
+    let result = renew_subscription(
+        &mut repository,
+        &RuntimeServices {
+            clock: &runtime,
+            ids: &runtime,
+        },
+        request,
+    )
+    .map_err(|error| error.to_string());
+    if result.is_ok() {
+        StderrEventLogger.info("subscription_renew_completed");
+    } else {
+        StderrEventLogger.error("subscription_renew_failed");
+    }
+    result
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default();
@@ -264,7 +394,14 @@ pub fn run() {
             complete_quick_note_command,
             create_operational_note_command,
             record_purchase_command,
-            cancel_latest_purchase_command
+            cancel_latest_purchase_command,
+            load_people_management_command,
+            load_person_detail_command,
+            preview_duplicates_command,
+            register_person_command,
+            update_person_command,
+            set_person_archived_command,
+            renew_subscription_command
         ])
         .run(tauri::generate_context!())
         .expect("QT Manager 실행에 실패했습니다.");

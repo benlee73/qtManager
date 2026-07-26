@@ -145,7 +145,10 @@ impl CoreRepository for SqliteCoreRepository {
     }
 }
 
-fn upsert_person(transaction: &Transaction<'_>, person: &Person) -> Result<(), PortError> {
+pub(crate) fn upsert_person(
+    transaction: &Transaction<'_>,
+    person: &Person,
+) -> Result<(), PortError> {
     transaction
         .execute(
             "
@@ -179,7 +182,7 @@ fn upsert_person(transaction: &Transaction<'_>, person: &Person) -> Result<(), P
     Ok(())
 }
 
-fn upsert_subscription(
+pub(crate) fn upsert_subscription(
     transaction: &Transaction<'_>,
     subscription: &Subscription,
 ) -> Result<(), PortError> {

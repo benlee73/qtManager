@@ -1,6 +1,7 @@
 mod sqlite_core_repository;
 mod sqlite_distribution_desk;
 mod sqlite_migrations;
+mod sqlite_people_management;
 mod sqlite_probe_repository;
 mod state_xlsx;
 mod system_runtime;

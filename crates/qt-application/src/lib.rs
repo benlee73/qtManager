@@ -6,6 +6,7 @@ use thiserror::Error;
 
 mod phase1;
 mod phase2;
+mod phase3;
 
 pub use phase1::{CoreRepository, MigrationReport, Phase1Report, RunPhase1Probe};
 pub use phase2::{
@@ -15,6 +16,13 @@ pub use phase2::{
     complete_quick_note, create_draft, create_operational_note, create_quick_note,
     load_distribution_desk, record_distribution, record_purchase, save_operator,
     undo_last_distribution,
+};
+pub use phase3::{
+    DistributionView, DuplicateCandidate, ManagedPersonRecord, PeopleManagement,
+    PeopleManagementRepository, PersonDetail, PersonSummary, RegisterPersonRequest,
+    RenewSubscriptionRequest, SubscriptionView, UpdatePersonRequest, load_people_management,
+    load_person_detail, preview_duplicates, register_person, renew_subscription,
+    set_person_archived, update_person,
 };
 
 pub trait ProbeRepository {
@@ -134,6 +142,10 @@ pub enum ApplicationError {
     NothingToUndo,
     #[error("취소할 수 있는 최근 현장 개별 구매가 없습니다.")]
     NoPurchaseToCancel,
+    #[error("같은 사람일 수 있는 QT 신청자가 있습니다. 후보를 확인한 뒤 계속할지 선택해 주세요.")]
+    DuplicatePersonConfirmationRequired,
+    #[error("기존 구독과 기간이 겹칩니다. 두 구독을 모두 유지할지 확인해 주세요.")]
+    OverlappingSubscriptionConfirmationRequired,
 }
 
 #[derive(Debug, Error)]
