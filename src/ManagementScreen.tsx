@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { EditDialog, RegisterDialog, RenewDialog } from "./Phase3Dialogs";
+import { ApplicationImportDialog } from "./ApplicationImportDialog";
 import type { Issue } from "./phase2";
 import {
   type PeopleManagement,
@@ -12,6 +13,7 @@ import {
 
 type ManagementDialog =
   | { type: "register" }
+  | { type: "applications" }
   | { type: "edit"; person: PersonDetail }
   | { type: "renew"; person: PersonDetail }
   | null;
@@ -113,14 +115,24 @@ export function ManagementScreen({
           <h2>신청자 정보와 전체 이력</h2>
           <p>과거 구독과 배부 기록을 보존하면서 정보를 보완하고 갱신합니다.</p>
         </div>
-        <button
-          className="primary-button"
-          data-testid="open-register-person"
-          type="button"
-          onClick={() => setDialog({ type: "register" })}
-        >
-          + QT 신청자 정식 등록
-        </button>
+        <div className="heading-actions">
+          <button
+            className="secondary-button"
+            data-testid="open-application-import"
+            type="button"
+            onClick={() => setDialog({ type: "applications" })}
+          >
+            Google 응답 붙여넣기
+          </button>
+          <button
+            className="primary-button"
+            data-testid="open-register-person"
+            type="button"
+            onClick={() => setDialog({ type: "register" })}
+          >
+            + QT 신청자 정식 등록
+          </button>
+        </div>
       </section>
 
       <section className="management-grid">
@@ -323,6 +335,17 @@ export function ManagementScreen({
           onSaved={(work) =>
             mutate(work, "QT 신청자와 연간 구독을 등록했습니다.")
           }
+        />
+      )}
+      {dialog?.type === "applications" && (
+        <ApplicationImportDialog
+          issueYear={issue.year}
+          onClose={() => setDialog(null)}
+          onDirectRegister={() => setDialog({ type: "register" })}
+          onImported={async (message) => {
+            setNotice(message);
+            await refresh();
+          }}
         />
       )}
       {dialog?.type === "edit" && (

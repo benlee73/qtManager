@@ -1,20 +1,22 @@
 use std::fs;
 
 use qt_application::{
-    AppLogger, CreateDraftRequest, CreateOperationalNoteRequest, CreateQuickNoteRequest,
-    DistributionDesk, DuplicateCandidate, PeopleManagement, PersonDetail, Phase0Report,
-    Phase1Report, RecordDistributionRequest, RecordPurchaseRequest, RegisterPersonRequest,
-    RenewSubscriptionRequest, RunPhase0Probe, RunPhase1Probe, RuntimeServices,
-    UndoDistributionRequest, UpdatePersonRequest, cancel_latest_purchase, complete_quick_note,
-    create_draft, create_operational_note, create_quick_note, load_distribution_desk,
-    load_people_management, load_person_detail, preview_duplicates, record_distribution,
-    record_purchase, register_person, renew_subscription, save_operator, set_person_archived,
+    AppLogger, ApplicationsPreview, CreateDraftRequest, CreateOperationalNoteRequest,
+    CreateQuickNoteRequest, DistributionDesk, DuplicateCandidate, ImportApplicationsRequest,
+    ImportApplicationsResult, PeopleManagement, PersonDetail, Phase0Report, Phase1Report,
+    PreviewApplicationsRequest, RecordDistributionRequest, RecordPurchaseRequest,
+    RegisterPersonRequest, RenewSubscriptionRequest, RunPhase0Probe, RunPhase1Probe,
+    RuntimeServices, UndoDistributionRequest, UpdatePersonRequest, cancel_latest_purchase,
+    complete_quick_note, create_draft, create_operational_note, create_quick_note,
+    import_applications, load_distribution_desk, load_people_management, load_person_detail,
+    preview_applications, preview_duplicates, record_distribution, record_purchase,
+    register_person, renew_subscription, save_operator, set_person_archived,
     undo_last_distribution, update_person,
 };
 use qt_domain::Issue;
 use qt_infrastructure::{
     SqliteCoreRepository, SqliteProbeRepository, StderrEventLogger, SystemRuntime,
-    XlsxStateWorkbook,
+    TsvApplicationClipboardParser, XlsxStateWorkbook,
 };
 use tauri::Manager;
 
@@ -386,6 +388,41 @@ fn renew_subscription_command(
     result
 }
 
+#[tauri::command]
+fn preview_applications_command(
+    app: tauri::AppHandle,
+    request: PreviewApplicationsRequest,
+) -> Result<ApplicationsPreview, String> {
+    let mut repository = open_operational_repository(&app)?;
+    preview_applications(&TsvApplicationClipboardParser, &mut repository, request)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn import_applications_command(
+    app: tauri::AppHandle,
+    request: ImportApplicationsRequest,
+) -> Result<ImportApplicationsResult, String> {
+    let mut repository = open_operational_repository(&app)?;
+    let runtime = SystemRuntime;
+    StderrEventLogger.info("google_form_application_import_started");
+    let result = import_applications(
+        &mut repository,
+        &RuntimeServices {
+            clock: &runtime,
+            ids: &runtime,
+        },
+        request,
+    )
+    .map_err(|error| error.to_string());
+    if result.is_ok() {
+        StderrEventLogger.info("google_form_application_import_completed");
+    } else {
+        StderrEventLogger.error("google_form_application_import_failed");
+    }
+    result
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default();
@@ -415,7 +452,9 @@ pub fn run() {
             register_person_command,
             update_person_command,
             set_person_archived_command,
-            renew_subscription_command
+            renew_subscription_command,
+            preview_applications_command,
+            import_applications_command
         ])
         .run(tauri::generate_context!())
         .expect("QT Manager 실행에 실패했습니다.");

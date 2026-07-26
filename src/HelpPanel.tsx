@@ -81,8 +81,11 @@ export function HelpPanel({
                 추가합니다. 겹치는 기간은 확인 경고가 표시됩니다.
               </p>
               <p className="help-note">
-                Google 응답 행 붙여넣기는 실제 응답 헤더 예시를 반영한 뒤 제공될
-                예정입니다.
+                Google 응답 시트에서 한 행 또는 여러 행을 복사한 뒤 ‘Google 응답
+                붙여넣기’에 넣으세요. 미리보기에서 오류 행은 제외되고, 같은 사람
+                후보는 기존 신청자 연결 또는 새 신청자 추가를 선택합니다. 이미
+                가져온 같은 응답은 다시 추가되지 않습니다. 입금 여부는 앱에서
+                관리하지 않습니다.
               </p>
             </HelpSection>
             <HelpSection id="purchase" title="현장 개별 구매">

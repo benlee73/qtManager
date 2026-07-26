@@ -187,6 +187,69 @@ describe("QT Manager desktop flow", () => {
     await clickButtonByText("배부 화면으로");
     await waitForText("h1", "QT 배부");
   });
+
+  it("previews pasted Google responses, links a duplicate candidate and blocks a repeat", async () => {
+    const applicant = `가상붙여넣기${Date.now()}`;
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
+        ?.click();
+    });
+    await waitForText("h1", "QT 신청자 관리");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="open-application-import"]',
+        )
+        ?.click();
+    });
+    const firstResponse = [
+      `2026. 2. 1 오후 7:48:08\t${applicant}\t00\t010-0000-3579\t1-2월호\t2\t네 입금했습니다.`,
+      "가상오류\t0\t전화번호\t2월호\t0",
+    ].join("\n");
+    await setInput('[data-testid="application-paste-input"]', firstResponse);
+    await waitForText('[data-testid="application-preview"]', applicant);
+    await waitForText('[data-testid="application-preview"]', "또래는");
+    await clickButtonByText("선택한 1건 추가");
+    await waitForText(".toast", "1건을 추가했습니다");
+
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="open-application-import"]',
+        )
+        ?.click();
+    });
+    const secondResponse = `2027. 7. 1 오전 9:00:00\t${applicant}\t00\t01000003579\t7-8월호\t1`;
+    await setInput('[data-testid="application-paste-input"]', secondResponse);
+    await waitForText(
+      '[data-testid="application-preview"]',
+      "기존 신청자 후보",
+    );
+    await setSelect(
+      '[data-testid="candidate-decision-1"]',
+      await firstOptionValue('[data-testid="candidate-decision-1"]'),
+    );
+    await clickButtonByText("선택한 1건 추가");
+    await waitForText(".toast", "기존 연결 1명");
+
+    await setInput('[data-testid="management-search"]', applicant);
+    await waitForText('[data-testid="person-detail"]', "구독 이력 2건");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="open-application-import"]',
+        )
+        ?.click();
+    });
+    await setInput('[data-testid="application-paste-input"]', secondResponse);
+    await waitForText(
+      '[data-testid="application-preview"]',
+      "이미 추가한 응답",
+    );
+    await clickButtonByText("", "닫기");
+    await clickButtonByText("배부 화면으로");
+  });
 });
 
 async function configureOperatorIfNeeded() {
@@ -238,6 +301,17 @@ async function setSelect(selector: string, value: string) {
     selector,
     value,
   );
+}
+
+async function firstOptionValue(selector: string) {
+  return browser.execute((targetSelector) => {
+    const select = document.querySelector<HTMLSelectElement>(targetSelector);
+    const option = [...(select?.options ?? [])].find(
+      (candidate) => candidate.value && candidate.value !== "__new__",
+    );
+    if (!option) throw new Error("기존 신청자 선택지를 찾지 못했습니다.");
+    return option.value;
+  }, selector);
 }
 
 async function clickButtonByText(text: string, ariaLabel?: string) {
