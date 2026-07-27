@@ -1,9 +1,9 @@
 name: check
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  # 무료 Actions 분량을 소진한 기간에는 의도치 않은 과금을 막기 위해
+  # 로컬 `just check && just e2e`를 기본으로 하고 필요할 때만 수동 실행한다.
+  workflow_dispatch:
 
 jobs:
   check:
