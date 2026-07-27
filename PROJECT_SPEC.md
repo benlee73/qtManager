@@ -1213,7 +1213,10 @@ Phase 3 완료 상태와 기능을 보존한 채 Phase 4 전에 수행한다.
   검색을 포함한 실제 Tauri E2E 8개 흐름
 - 완료: Apple Silicon 앱/DMG와 Intel·Apple Silicon Universal 앱/DMG 생성,
   DMG 무결성·마운트·복사·실행 및 Universal 양 아키텍처 확인
-- 진행 중: Windows NSIS와 양 OS 릴리스 후보 CI, Intel·Windows 실장비 설치 확인
+- 완료: macOS Universal DMG와 Windows x64 NSIS 산출물 생성, 양 OS 전체
+  검사·E2E 및 Windows NSIS 무인 설치 후 설치 앱 실행 스모크를 수행하는 CI
+- 진행 중: Intel Mac, Windows 10/11 사용자 장치에서 미서명 경고를 포함한
+  사람의 실제 설치 경험 확인
 
 ## 19. 유사 제품 및 기술 레퍼런스 조사
 
@@ -1507,6 +1510,9 @@ Phase 3 완료 상태와 기능을 보존한 채 Phase 4 전에 수행한다.
   호 안내 및 또래·전화번호 검색을 추가함. Apple Silicon 패키지의 DMG
   마운트·복사·실행과 Universal DMG의 x86_64/arm64 아키텍처·무결성을 확인하고
   0.1.0 크기·유휴 메모리 기준값을 기록함.
+- 2026-07-27: macOS Universal DMG와 Windows x64 NSIS를 GitHub Actions
+  산출물로 생성하고, Windows 설치 프로그램의 사용자별 무인 설치와 설치된
+  실행 파일의 기동 스모크 검증을 릴리스 후보 워크플로에 추가함.
 - 2026-07-27: Phase 5 배포 준비를 시작함. 개인정보가 포함되지 않는 고정 이벤트
   회전 로그, 앱 시작·종료·버전·스키마·마이그레이션 기록과 도움말의 앱
   버전·데이터·로그 경로 및 로그 폴더 열기를 추가함.

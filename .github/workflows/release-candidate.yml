@@ -62,6 +62,29 @@ jobs:
           if ($null -eq $installer -or $installer.Length -le 0) {
             throw "Windows NSIS installer was not created."
           }
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList "/S" -PassThru -Wait
+          if ($install.ExitCode -ne 0) {
+            throw "Windows NSIS silent installation failed with exit code $($install.ExitCode)."
+          }
+          $entry = Get-ChildItem "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall" |
+            Get-ItemProperty |
+            Where-Object { $_.DisplayName -eq "QT Manager" } |
+            Select-Object -First 1
+          if ($null -eq $entry -or -not (Test-Path $entry.InstallLocation)) {
+            throw "Installed QT Manager location was not registered."
+          }
+          $application = Get-ChildItem $entry.InstallLocation -Filter *.exe |
+            Where-Object { $_.Name -notlike "uninstall*" } |
+            Select-Object -First 1
+          if ($null -eq $application) {
+            throw "Installed QT Manager executable was not found."
+          }
+          $process = Start-Process -FilePath $application.FullName -PassThru
+          Start-Sleep -Seconds 5
+          if ($process.HasExited) {
+            throw "Installed QT Manager exited during the launch smoke test."
+          }
+          Stop-Process -Id $process.Id
       - uses: actions/upload-artifact@v4
         if: runner.os == 'macOS'
         with:
