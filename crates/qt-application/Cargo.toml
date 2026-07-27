@@ -9,3 +9,4 @@ version.workspace = true
 qt-domain.workspace = true
 serde.workspace = true
 thiserror.workspace = true
+time.workspace = true

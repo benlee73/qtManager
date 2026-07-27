@@ -11,6 +11,7 @@ qt-application.workspace = true
 qt-domain.workspace = true
 rusqlite.workspace = true
 rust_xlsxwriter.workspace = true
+serde.workspace = true
 time.workspace = true
 uuid.workspace = true
 

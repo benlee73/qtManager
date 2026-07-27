@@ -8,6 +8,7 @@ mod application_import;
 mod phase1;
 mod phase2;
 mod phase3;
+mod phase4;
 
 pub use application_import::{
     ApplicationClipboardParser, ApplicationImportBatch, ApplicationImportRecord,
@@ -33,6 +34,12 @@ pub use phase3::{
     RenewSubscriptionRequest, SubscriptionView, UpdatePersonRequest, load_people_management,
     load_person_detail, preview_duplicates, register_person, renew_subscription,
     set_person_archived, update_person,
+};
+pub use phase4::{
+    ApplyStateImportRequest, ImportMode, ImportPreview, MergePersonConflict, MergePersonResolution,
+    RestorePointView, StateCounts, StatePinnedNote, StateSetting, StateSnapshot,
+    StateTransferRepository, StateWorkbookMetadata, StateWorkbookV1, apply_state_import,
+    export_state, merge_snapshots, preview_state_import, undo_state_import,
 };
 
 pub trait ProbeRepository {
@@ -164,6 +171,12 @@ pub enum ApplicationError {
     ApplicationCandidateChoiceRequired(usize),
     #[error("{0}행의 값이 올바르지 않습니다. 미리보기에서 수정해 주세요.")]
     InvalidApplicationRow(usize),
+    #[error("지원하지 않는 XLSX 형식 버전입니다: {0}")]
+    UnsupportedStateFormat(u16),
+    #[error("가져오기 파일에 해결하지 않은 동일인 후보가 있습니다.")]
+    UnresolvedPersonConflicts,
+    #[error("가져오기를 되돌릴 복원 지점이 없습니다.")]
+    NoStateImportToUndo,
 }
 
 #[derive(Debug, Error)]

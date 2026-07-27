@@ -5,11 +5,13 @@ mod sqlite_distribution_desk;
 mod sqlite_migrations;
 mod sqlite_people_management;
 mod sqlite_probe_repository;
+mod sqlite_state_transfer;
 mod state_xlsx;
 mod system_runtime;
 
 pub use sqlite_core_repository::SqliteCoreRepository;
 pub use sqlite_probe_repository::SqliteProbeRepository;
+pub use sqlite_state_transfer::SqliteStateTransfer;
 pub use state_xlsx::XlsxStateWorkbook;
 pub use system_runtime::SystemRuntime;
 

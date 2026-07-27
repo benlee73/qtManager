@@ -227,7 +227,7 @@ pub(crate) fn upsert_subscription(
     Ok(())
 }
 
-fn upsert_distribution(
+pub(crate) fn upsert_distribution(
     transaction: &Transaction<'_>,
     distribution: &Distribution,
 ) -> Result<(), PortError> {
@@ -353,7 +353,7 @@ pub(crate) fn distribution_from_row(row: &Row<'_>) -> rusqlite::Result<Distribut
     })
 }
 
-fn change_from_row(row: &Row<'_>) -> rusqlite::Result<ChangeLog> {
+pub(crate) fn change_from_row(row: &Row<'_>) -> rusqlite::Result<ChangeLog> {
     Ok(ChangeLog {
         id: row.get(0)?,
         occurred_at: row.get(1)?,
@@ -367,7 +367,7 @@ fn change_from_row(row: &Row<'_>) -> rusqlite::Result<ChangeLog> {
     })
 }
 
-fn person_status(status: PersonStatus) -> &'static str {
+pub(crate) fn person_status(status: PersonStatus) -> &'static str {
     match status {
         PersonStatus::Active => "active",
         PersonStatus::Draft => "draft",
@@ -384,7 +384,7 @@ fn parse_person_status(status: &str) -> rusqlite::Result<PersonStatus> {
     }
 }
 
-fn subscription_source(source: SubscriptionSource) -> &'static str {
+pub(crate) fn subscription_source(source: SubscriptionSource) -> &'static str {
     match source {
         SubscriptionSource::GoogleForm => "google_form",
         SubscriptionSource::OnSite => "on_site",

@@ -1,22 +1,25 @@
 use std::fs;
 
 use qt_application::{
-    AppLogger, ApplicationsPreview, CreateCheckItemRequest, CreateDraftRequest,
-    CreatePinnedNoteRequest, DistributionDesk, DuplicateCandidate, ImportApplicationsRequest,
-    ImportApplicationsResult, PeopleManagement, PersonDetail, Phase0Report, Phase1Report,
+    AppLogger, ApplicationsPreview, ApplyStateImportRequest, Clock, CreateCheckItemRequest,
+    CreateDraftRequest, CreatePinnedNoteRequest, DistributionDesk, DuplicateCandidate, IdGenerator,
+    ImportApplicationsRequest, ImportApplicationsResult, ImportMode, ImportPreview,
+    MergePersonResolution, PeopleManagement, PersonDetail, Phase0Report, Phase1Report,
     PreviewApplicationsRequest, RecordDistributionRequest, RecordPurchaseRequest,
-    RegisterPersonRequest, RenewSubscriptionRequest, RunPhase0Probe, RunPhase1Probe,
-    RuntimeServices, UndoDistributionRequest, UpdateCheckItemStatusRequest, UpdatePersonRequest,
-    UpdatePinnedNoteRequest, cancel_latest_purchase, create_check_item, create_draft,
-    create_pinned_note, import_applications, load_distribution_desk, load_people_management,
-    load_person_detail, preview_applications, preview_duplicates, record_distribution,
+    RegisterPersonRequest, RenewSubscriptionRequest, RestorePointView, RunPhase0Probe,
+    RunPhase1Probe, RuntimeServices, StateCounts, UndoDistributionRequest,
+    UpdateCheckItemStatusRequest, UpdatePersonRequest, UpdatePinnedNoteRequest, apply_state_import,
+    cancel_latest_purchase, create_check_item, create_draft, create_pinned_note, export_state,
+    import_applications, load_distribution_desk, load_people_management, load_person_detail,
+    preview_applications, preview_duplicates, preview_state_import, record_distribution,
     record_purchase, register_person, renew_subscription, save_operator, set_person_archived,
-    undo_last_distribution, update_check_item_status, update_person, update_pinned_note,
+    undo_last_distribution, undo_state_import, update_check_item_status, update_person,
+    update_pinned_note,
 };
 use qt_domain::Issue;
 use qt_infrastructure::{
-    SqliteCoreRepository, SqliteProbeRepository, StderrEventLogger, SystemRuntime,
-    TsvApplicationClipboardParser, XlsxStateWorkbook,
+    SqliteCoreRepository, SqliteProbeRepository, SqliteStateTransfer, StderrEventLogger,
+    SystemRuntime, TsvApplicationClipboardParser, XlsxStateWorkbook,
 };
 use serde::Serialize;
 use tauri::Manager;
@@ -27,6 +30,13 @@ struct WindowContract {
     width: u32,
     height: u32,
     resizable: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StateTransferE2ePaths {
+    export_path: String,
+    corrupt_path: String,
 }
 
 #[tauri::command]
@@ -46,6 +56,29 @@ fn main_window_contract_command(app: tauri::AppHandle) -> Result<WindowContract,
         resizable: window
             .is_resizable()
             .map_err(|error| format!("메인 창 설정을 읽지 못했습니다: {error}"))?,
+    })
+}
+
+#[tauri::command]
+fn state_transfer_e2e_paths_command(
+    app: tauri::AppHandle,
+) -> Result<StateTransferE2ePaths, String> {
+    let directory = app
+        .path()
+        .app_cache_dir()
+        .map_err(|error| format!("테스트 경로를 찾지 못했습니다: {error}"))?
+        .join("phase4-e2e");
+    fs::create_dir_all(&directory)
+        .map_err(|error| format!("테스트 폴더를 만들지 못했습니다: {error}"))?;
+    let corrupt_path = directory.join("corrupt.xlsx");
+    fs::write(&corrupt_path, b"not an xlsx workbook")
+        .map_err(|error| format!("손상 XLSX fixture를 만들지 못했습니다: {error}"))?;
+    Ok(StateTransferE2ePaths {
+        export_path: directory
+            .join("handover.xlsx")
+            .to_string_lossy()
+            .into_owned(),
+        corrupt_path: corrupt_path.to_string_lossy().into_owned(),
     })
 }
 
@@ -501,9 +534,110 @@ fn import_applications_command(
     result
 }
 
+#[tauri::command]
+fn export_state_command(app: tauri::AppHandle, path: String) -> Result<StateCounts, String> {
+    let mut repository = open_operational_repository(&app)?;
+    let mut transfer = SqliteStateTransfer::new(&mut repository);
+    let runtime = SystemRuntime;
+    export_state(
+        &mut transfer,
+        &XlsxStateWorkbook,
+        &StderrEventLogger,
+        std::path::Path::new(&path),
+        env!("CARGO_PKG_VERSION"),
+        &runtime.now(),
+    )
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn preview_state_import_command(
+    app: tauri::AppHandle,
+    path: String,
+) -> Result<ImportPreview, String> {
+    StderrEventLogger.info("state_import_preview_started");
+    let mut repository = open_operational_repository(&app)?;
+    let mut transfer = SqliteStateTransfer::new(&mut repository);
+    let runtime = SystemRuntime;
+    let result = preview_state_import(
+        &mut transfer,
+        &XlsxStateWorkbook,
+        std::path::Path::new(&path),
+        &runtime.now(),
+    )
+    .map_err(|error| error.to_string());
+    if result.is_ok() {
+        StderrEventLogger.info("state_import_preview_completed");
+    } else {
+        StderrEventLogger.error("state_import_preview_failed");
+    }
+    result
+}
+
+#[tauri::command]
+fn apply_state_import_command(
+    app: tauri::AppHandle,
+    source_path: String,
+    source_file_name: String,
+    mode: ImportMode,
+    person_resolutions: Vec<MergePersonResolution>,
+) -> Result<StateCounts, String> {
+    let backups = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("앱 데이터 경로를 찾지 못했습니다: {error}"))?
+        .join("restore-points");
+    fs::create_dir_all(&backups)
+        .map_err(|error| format!("자동 백업 폴더를 만들지 못했습니다: {error}"))?;
+    let runtime = SystemRuntime;
+    let restore_id = runtime.next_id();
+    let backup_path = backups.join(format!("{restore_id}.xlsx"));
+    let request = ApplyStateImportRequest {
+        source_path,
+        source_file_name,
+        backup_path: backup_path.to_string_lossy().into_owned(),
+        mode,
+        person_resolutions,
+    };
+    let mut repository = open_operational_repository(&app)?;
+    let mut transfer = SqliteStateTransfer::new(&mut repository);
+    apply_state_import(
+        &mut transfer,
+        &XlsxStateWorkbook,
+        &StderrEventLogger,
+        &request,
+        restore_id,
+        runtime.now(),
+    )
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn latest_restore_point_command(app: tauri::AppHandle) -> Result<Option<RestorePointView>, String> {
+    let mut repository = open_operational_repository(&app)?;
+    let mut transfer = SqliteStateTransfer::new(&mut repository);
+    qt_application::StateTransferRepository::latest_restore_point(&mut transfer)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn undo_state_import_command(app: tauri::AppHandle) -> Result<RestorePointView, String> {
+    let mut repository = open_operational_repository(&app)?;
+    let mut transfer = SqliteStateTransfer::new(&mut repository);
+    let runtime = SystemRuntime;
+    undo_state_import(
+        &mut transfer,
+        &XlsxStateWorkbook,
+        &StderrEventLogger,
+        &runtime.now(),
+    )
+    .map_err(|error| error.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default();
+    let builder = builder.plugin(tauri_plugin_dialog::init());
 
     #[cfg(any(debug_assertions, feature = "e2e"))]
     let builder = builder
@@ -515,6 +649,7 @@ pub fn run() {
             run_phase0_probe,
             run_phase1_probe,
             main_window_contract_command,
+            state_transfer_e2e_paths_command,
             load_distribution_desk_command,
             save_operator_command,
             record_distribution_command,
@@ -534,7 +669,12 @@ pub fn run() {
             set_person_archived_command,
             renew_subscription_command,
             preview_applications_command,
-            import_applications_command
+            import_applications_command,
+            export_state_command,
+            preview_state_import_command,
+            apply_state_import_command,
+            latest_restore_point_command,
+            undo_state_import_command
         ])
         .run(tauri::generate_context!())
         .expect("QT Manager 실행에 실패했습니다.");

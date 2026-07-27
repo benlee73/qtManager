@@ -25,5 +25,6 @@ qt-domain.workspace = true
 qt-infrastructure.workspace = true
 serde.workspace = true
 tauri.workspace = true
+tauri-plugin-dialog = "2.6.0"
 tauri-plugin-wdio = "1.2.0"
 tauri-plugin-wdio-webdriver = "1.2.0"
