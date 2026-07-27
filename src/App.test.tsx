@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { persistTheme, readStoredTheme } from "./appearance";
 import type { Phase0Report } from "./phase0";
 import type { Phase1Report } from "./phase1";
 import { moveIssue, recommendedIssue } from "./phase2";
@@ -25,7 +26,7 @@ describe("Phase0Report contract", () => {
 describe("Phase1Report contract", () => {
   it("exposes the persisted subscription and distribution result", () => {
     const report: Phase1Report = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       subscriptionStatus: "유효",
       distributionStatus: "배부 완료",
       targetQuantity: 2,
@@ -60,5 +61,21 @@ describe("Phase 2 issue navigation", () => {
       year: 2027,
       startMonth: 1,
     });
+  });
+});
+
+describe("appearance preference", () => {
+  it("defaults to dark and restores a saved light theme", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        values.set(key, value);
+      },
+    };
+
+    expect(readStoredTheme(storage)).toBe("dark");
+    persistTheme("light", storage);
+    expect(readStoredTheme(storage)).toBe("light");
   });
 });

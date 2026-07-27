@@ -5,3 +5,4 @@ pnpm-lock.yaml
 src-tauri/gen
 tests/fixtures/**/*.xlsx
 PROJECT_SPEC.md
+design-previews/

@@ -76,9 +76,9 @@ export function HelpPanel({
             <HelpSection id="people" title="신규 신청, 정보 보완과 갱신">
               <p>
                 ‘신청자 관리’에서 모든 정보를 입력해 정식 등록합니다. 현장 간이
-                등록자는 상세 화면의 ‘정보 수정’으로 연락처와 특이사항을 보완할
-                수 있습니다. 갱신은 과거 구독을 수정하지 않고 새 6개 호 구독을
-                추가합니다. 겹치는 기간은 확인 경고가 표시됩니다.
+                등록자는 상세 화면의 ‘정보 수정’으로 연락처와 신청자 메모를
+                보완할 수 있습니다. 갱신은 과거 구독을 수정하지 않고 새 6개 호
+                구독을 추가합니다. 겹치는 기간은 확인 경고가 표시됩니다.
               </p>
               <p className="help-note">
                 Google 응답 시트에서 한 행 또는 여러 행을 복사한 뒤 ‘Google 응답
@@ -118,7 +118,7 @@ export function HelpPanel({
                 </div>
                 <div>
                   <dt>⌘/Ctrl + Shift + M</dt>
-                  <dd>현장 기록 추가</dd>
+                  <dd>빠른 확인할 일 입력으로 이동</dd>
                 </div>
                 <div>
                   <dt>⌘/Ctrl + Z</dt>

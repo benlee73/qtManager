@@ -12,9 +12,9 @@ export type PersonSummary = {
   id: string;
   name: string;
   cohort: string | null;
-  phoneSuffix: string | null;
+  phone: string | null;
   status: string;
-  specialNote: string | null;
+  personNote: string | null;
   subscriptionCount: number;
   latestLastIssue: string | null;
 };
@@ -25,7 +25,7 @@ export type PersonDetail = {
   cohort: string | null;
   phone: string | null;
   status: string;
-  specialNote: string | null;
+  personNote: string | null;
   subscriptions: {
     id: string;
     startIssue: string;
@@ -48,7 +48,7 @@ export type DuplicateCandidate = {
   id: string;
   name: string;
   cohort: string | null;
-  phoneSuffix: string | null;
+  phone: string | null;
   status: string;
 };
 
@@ -56,7 +56,7 @@ export type PersonInput = {
   name: string;
   cohort: string;
   phone: string;
-  specialNote: string;
+  personNote: string;
 };
 
 export function loadManagement(query: string, includeArchived: boolean) {
@@ -93,7 +93,7 @@ export function registerPerson(
       name: input.name,
       cohort: input.cohort || null,
       phone: input.phone || null,
-      specialNote: input.specialNote || null,
+      personNote: input.personNote || null,
       issueYear: issue.year,
       issueMonth: issue.startMonth,
       quantity: input.quantity,
@@ -114,7 +114,7 @@ export function updatePerson(
       name: input.name,
       cohort: input.cohort || null,
       phone: input.phone || null,
-      specialNote: input.specialNote || null,
+      personNote: input.personNote || null,
       confirmDuplicate: input.confirmDuplicate,
     },
   });

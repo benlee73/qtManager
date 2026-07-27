@@ -256,7 +256,7 @@ function PreviewRow({
             {row.candidates.map((candidate) => (
               <option key={candidate.personId} value={candidate.personId}>
                 기존 {candidate.cohort ?? "--"} {candidate.name} · 끝번호{" "}
-                {candidate.phoneSuffix ?? "없음"}
+                {candidate.phone ?? "없음"}
               </option>
             ))}
             <option value="__new__">동명이인으로 새 신청자 추가</option>

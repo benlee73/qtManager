@@ -26,7 +26,7 @@ export type ApplicationPreviewRow = {
     personId: string;
     name: string;
     cohort: string | null;
-    phoneSuffix: string | null;
+    phone: string | null;
   }[];
 };
 

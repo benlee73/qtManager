@@ -229,12 +229,12 @@ function PersonFields({ person }: { person?: PersonDetail }) {
           defaultValue={person?.phone ?? ""}
         />
       </Field>
-      <Field label="개인별 특이사항">
+      <Field label="신청자 메모">
         <textarea
-          name="specialNote"
+          name="personNote"
           rows={3}
           placeholder="이 사람에게 계속 적용되는 참고사항"
-          defaultValue={person?.specialNote ?? ""}
+          defaultValue={person?.personNote ?? ""}
         />
       </Field>
     </>
@@ -315,8 +315,8 @@ function DuplicateWarning({
       <strong>같은 사람일 수 있는 신청자가 있습니다.</strong>
       {candidates.map((item) => (
         <span key={item.id}>
-          {item.cohort ?? "--"} {item.name} · 전화번호 끝{" "}
-          {item.phoneSuffix ?? "없음"} · {item.status}
+          {item.cohort ?? "--"} {item.name} · 전화번호 끝 {item.phone ?? "없음"}{" "}
+          · {item.status}
         </span>
       ))}
       <label>
@@ -395,6 +395,6 @@ function personInput(data: FormData): PersonInput {
     name: String(data.get("name") ?? ""),
     cohort: String(data.get("cohort") ?? ""),
     phone: String(data.get("phone") ?? ""),
-    specialNote: String(data.get("specialNote") ?? ""),
+    personNote: String(data.get("personNote") ?? ""),
   };
 }

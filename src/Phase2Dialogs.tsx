@@ -3,9 +3,9 @@ import type { ReactNode } from "react";
 import {
   type DeskPerson,
   type Issue,
+  createCheckItem,
   createDraft,
-  createOperationalNote,
-  createQuickNote,
+  createPinnedNote,
   distribute,
   recordPurchase,
   setOperator,
@@ -14,8 +14,8 @@ import {
 export type Phase2Dialog =
   | { type: "operator" }
   | { type: "draft" }
-  | { type: "quick-note"; personId: string | null }
-  | { type: "operational-note" }
+  | { type: "check-item"; personId: string | null }
+  | { type: "pinned-note" }
   | { type: "purchase" }
   | { type: "partial"; person: DeskPerson }
   | null;
@@ -113,20 +113,20 @@ export function Phase2DialogContent({
       </FormDialog>
     );
   }
-  if (dialog.type === "quick-note") {
+  if (dialog.type === "check-item") {
     return (
-      <FormDialog title="현장 기록 추가" onClose={onClose}>
+      <FormDialog title="확인할 일 추가" onClose={onClose}>
         <form
           onSubmit={(event) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
             void mutate(
               () =>
-                createQuickNote(
+                createCheckItem(
                   dialog.personId,
                   String(data.get("content") ?? ""),
                 ),
-              "현장 기록을 저장했습니다.",
+              "확인할 일을 저장했습니다.",
             );
           }}
         >
@@ -134,30 +134,29 @@ export function Phase2DialogContent({
             신청 누락 확인처럼 곧 처리할 일을 적습니다. 완료하기 전까지 기본
             화면에 남습니다.
           </p>
-          <Field label="기록 내용">
+          <Field label="확인할 내용">
             <textarea name="content" required autoFocus rows={5} />
           </Field>
-          <SubmitButton busy={busy}>현장 기록 저장</SubmitButton>
+          <SubmitButton busy={busy}>확인할 일 저장</SubmitButton>
         </form>
       </FormDialog>
     );
   }
-  if (dialog.type === "operational-note") {
+  if (dialog.type === "pinned-note") {
     return (
-      <FormDialog title="장기 운영 메모" onClose={onClose}>
+      <FormDialog title="고정 메모" onClose={onClose}>
         <form
           onSubmit={(event) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
             void mutate(
               () =>
-                createOperationalNote({
+                createPinnedNote({
                   title: String(data.get("title") ?? ""),
                   content: String(data.get("content") ?? ""),
-                  activeUntil: String(data.get("activeUntil") ?? ""),
                   isPinned: data.get("isPinned") === "on",
                 }),
-              "운영 메모를 저장했습니다.",
+              "고정 메모를 저장했습니다.",
             );
           }}
         >
@@ -170,14 +169,11 @@ export function Phase2DialogContent({
           <Field label="내용">
             <textarea name="content" required rows={4} />
           </Field>
-          <Field label="표시 종료일">
-            <input name="activeUntil" type="date" />
-          </Field>
           <label className="check-field">
             <input name="isPinned" type="checkbox" defaultChecked /> 기본 화면에
             고정
           </label>
-          <SubmitButton busy={busy}>운영 메모 저장</SubmitButton>
+          <SubmitButton busy={busy}>고정 메모 저장</SubmitButton>
         </form>
       </FormDialog>
     );

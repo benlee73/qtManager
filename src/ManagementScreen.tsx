@@ -18,15 +18,7 @@ type ManagementDialog =
   | { type: "renew"; person: PersonDetail }
   | null;
 
-export function ManagementScreen({
-  issue,
-  onBack,
-  onHelp,
-}: {
-  issue: Issue;
-  onBack: () => void;
-  onHelp: () => void;
-}) {
+export function ManagementScreen({ issue }: { issue: Issue }) {
   const [query, setQuery] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
   const [management, setManagement] = useState<PeopleManagement | null>(null);
@@ -85,30 +77,6 @@ export function ManagementScreen({
 
   return (
     <main className="app-shell management-shell">
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            Q
-          </span>
-          <div>
-            <p>맑은샘광천교회 청년부</p>
-            <h1>QT 신청자 관리</h1>
-          </div>
-        </div>
-        <div className="topbar-actions">
-          <button className="quiet-button" type="button" onClick={onHelp}>
-            ? 도움말
-          </button>
-          <button
-            className="primary-button compact"
-            type="button"
-            onClick={onBack}
-          >
-            배부 화면으로
-          </button>
-        </div>
-      </header>
-
       <section className="management-heading">
         <div>
           <p className="section-label">신청과 구독</p>
@@ -172,7 +140,8 @@ export function ManagementScreen({
                 <span>
                   <strong>{person.name}</strong>
                   <small>
-                    {person.status} · 구독 {person.subscriptionCount}건
+                    {person.phone ?? "연락처 없음"} · {person.status} · 구독{" "}
+                    {person.subscriptionCount}건
                   </small>
                 </span>
                 {person.latestLastIssue && (
@@ -224,10 +193,10 @@ export function ManagementScreen({
                 </div>
               </div>
 
-              {detail.specialNote && (
-                <div className="special-note">
-                  <strong>개인별 특이사항</strong>
-                  <p>{detail.specialNote}</p>
+              {detail.personNote && (
+                <div className="person-note">
+                  <strong>신청자 메모</strong>
+                  <p>{detail.personNote}</p>
                 </div>
               )}
 

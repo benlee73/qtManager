@@ -1,27 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { type Phase2Dialog, Phase2DialogContent } from "./Phase2Dialogs";
 import { HelpPanel } from "./HelpPanel";
 import { ManagementScreen } from "./ManagementScreen";
-
+import { type Phase2Dialog, Phase2DialogContent } from "./Phase2Dialogs";
+import { persistTheme, readStoredTheme, type Theme } from "./appearance";
 import {
   type DeskPerson,
   type DistributionDesk,
   type Issue,
   cancelLatestPurchase,
-  completeQuickNote,
+  createCheckItem,
   distribute,
   isTextEntryTarget,
   loadDesk,
   moveIssue,
   recommendedIssue,
   undoDistribution,
+  updateCheckItemStatus,
+  updatePinnedNote,
 } from "./phase2";
 
 export default function App() {
   const [screen, setScreen] = useState<"distribution" | "management">(
     "distribution",
   );
+  const [theme, setTheme] = useState<Theme>(() => readStoredTheme());
   const [helpOpen, setHelpOpen] = useState(false);
   const [issue, setIssue] = useState<Issue>(() => recommendedIssue());
   const [query, setQuery] = useState("");
@@ -31,7 +34,14 @@ export default function App() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [quickItem, setQuickItem] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
+  const quickItemRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    persistTheme(theme);
+  }, [theme]);
 
   const refresh = useCallback(async () => {
     try {
@@ -102,7 +112,7 @@ export default function App() {
         event.key.toLowerCase() === "m"
       ) {
         event.preventDefault();
-        setDialog({ type: "quick-note", personId: null });
+        quickItemRef.current?.focus();
       } else if (modified && event.key.toLowerCase() === "z") {
         event.preventDefault();
         if (desk?.canUndoDistribution) {
@@ -129,318 +139,369 @@ export default function App() {
 
   if (screen === "management") {
     return (
-      <>
-        <ManagementScreen
-          issue={issue}
-          onBack={() => setScreen("distribution")}
+      <div className="fixed-app">
+        <TopNavigation
+          active="management"
+          operator={desk?.operatorName}
+          theme={theme}
+          onDistribution={() => setScreen("distribution")}
+          onManagement={() => undefined}
+          onTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
           onHelp={() => setHelpOpen(true)}
+          onOperator={() => setDialog({ type: "operator" })}
         />
+        <div className="management-host">
+          <ManagementScreen issue={issue} />
+        </div>
         {helpOpen && (
           <HelpPanel topic="people" onClose={() => setHelpOpen(false)} />
         )}
-      </>
+        {dialog && (
+          <Phase2DialogContent
+            dialog={dialog}
+            issue={issue}
+            busy={busy}
+            onClose={() => desk?.operatorName && setDialog(null)}
+            mutate={mutate}
+          />
+        )}
+      </div>
     );
   }
 
+  const submitQuickItem = () => {
+    if (!quickItem.trim()) return;
+    void mutate(
+      () => createCheckItem(null, quickItem),
+      "일반 확인할 일을 추가했습니다.",
+    ).then(() => {
+      setQuickItem("");
+      quickItemRef.current?.focus();
+    });
+  };
+
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            Q
-          </span>
-          <div>
-            <p>맑은샘광천교회 청년부</p>
-            <h1>QT 배부</h1>
-          </div>
-        </div>
-        <div className="topbar-actions">
-          <button
-            className="quiet-button"
-            type="button"
-            data-testid="open-management"
-            onClick={() => setScreen("management")}
-          >
-            신청자 관리
-          </button>
-          <button
-            className="quiet-button"
-            type="button"
-            onClick={() => setDialog({ type: "purchase" })}
-          >
-            더보기 · 개별 구매
-          </button>
-          <button
-            className="quiet-button"
-            type="button"
-            onClick={() => setDialog({ type: "operator" })}
-          >
-            담당자 {desk?.operatorName ?? "설정"}
-          </button>
-          <button
-            className="quiet-button"
-            type="button"
-            aria-label="도움말"
-            onClick={() => setHelpOpen(true)}
-          >
-            ?
-          </button>
-        </div>
-      </header>
+    <div className="fixed-app">
+      <TopNavigation
+        active="distribution"
+        operator={desk?.operatorName}
+        theme={theme}
+        onDistribution={() => undefined}
+        onManagement={() => setScreen("management")}
+        onTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
+        onHelp={() => setHelpOpen(true)}
+        onOperator={() => setDialog({ type: "operator" })}
+      />
 
-      <section className="issue-toolbar" aria-label="QT 호 선택">
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="이전 호"
-          onClick={() => setIssue((current) => moveIssue(current, -1))}
-        >
-          ←
-        </button>
-        <div>
-          <p className="section-label">현재 배부 호</p>
-          <h2 data-testid="selected-issue">
-            {desk?.selectedIssue.label ??
-              `${issue.year}년 ${issue.startMonth}~${issue.startMonth + 1}월호`}
-          </h2>
-        </div>
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="다음 호"
-          onClick={() => setIssue((current) => moveIssue(current, 1))}
-        >
-          →
-        </button>
-        {desk &&
-          (desk.recommendedIssue.year !== issue.year ||
-            desk.recommendedIssue.startMonth !== issue.startMonth) && (
-            <button
-              className="recommend-button"
-              type="button"
-              onClick={() =>
-                setIssue({
-                  year: desk.recommendedIssue.year,
-                  startMonth: desk.recommendedIssue.startMonth,
-                })
-              }
+      <main className="desk">
+        <header className="desk-header">
+          <div className="issue-picker">
+            <p>현장 배부</p>
+            <div>
+              <button
+                type="button"
+                aria-label="이전 호"
+                onClick={() => setIssue((current) => moveIssue(current, -1))}
+              >
+                ‹
+              </button>
+              <h1 data-testid="selected-issue">
+                {desk?.selectedIssue.label ??
+                  `${issue.year}년 ${issue.startMonth}~${issue.startMonth + 1}월호`}
+              </h1>
+              <button
+                type="button"
+                aria-label="다음 호"
+                onClick={() => setIssue((current) => moveIssue(current, 1))}
+              >
+                ›
+              </button>
+            </div>
+          </div>
+          <section className="summary-grid" aria-label="배부 현황">
+            <Summary
+              label="대상"
+              value={`${desk?.totals.targetPeople ?? 0}명`}
+            />
+            <Summary
+              label="완료"
+              value={`${desk?.totals.completedPeople ?? 0}명`}
+            />
+            <Summary
+              label="남음"
+              value={`${desk?.totals.remainingPeople ?? 0}명`}
+              warning
+            />
+            <Summary
+              label="배부"
+              value={`${desk?.totals.distributedQuantity ?? 0}/${desk?.totals.targetQuantity ?? 0}권`}
+            />
+          </section>
+          <button
+            className="undo-icon"
+            type="button"
+            aria-label="마지막 배부 되돌리기"
+            title="마지막 배부 되돌리기"
+            disabled={!desk?.canUndoDistribution || busy}
+            onClick={() =>
+              void mutate(
+                () => undoDistribution(issue),
+                "최근 배부를 되돌렸습니다.",
+              )
+            }
+          >
+            ↶
+          </button>
+        </header>
+
+        <div className="workspace">
+          <section className="distribution-table">
+            <div className="table-toolbar">
+              <label className="search-box">
+                <span aria-hidden="true">⌕</span>
+                <input
+                  ref={searchRef}
+                  data-testid="people-search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="또래, 이름 또는 전화번호 검색"
+                  aria-label="QT 신청자 검색"
+                />
+                <kbd>/</kbd>
+              </label>
+              <button
+                className="secondary-button"
+                data-testid="open-draft"
+                type="button"
+                onClick={() => setDialog({ type: "draft" })}
+              >
+                + 현장 간이 등록
+              </button>
+              <details className="more-menu">
+                <summary aria-label="기타 기능">•••</summary>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setDialog({ type: "purchase" })}
+                  >
+                    현장 개별 구매
+                  </button>
+                  {(desk?.purchaseCount ?? 0) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void mutate(
+                          () => cancelLatestPurchase(issue),
+                          "최근 개별 구매를 취소했습니다.",
+                        )
+                      }
+                    >
+                      최근 구매 취소
+                    </button>
+                  )}
+                </div>
+              </details>
+            </div>
+            <div className="table-title">
+              <h2>
+                {query ? "검색 결과" : "남은 신청자"}{" "}
+                <b>{desk?.people.length ?? 0}</b>
+              </h2>
+              <span>미배부·일부 배부</span>
+            </div>
+            <div className="table-head" aria-hidden="true">
+              <span>또래</span>
+              <span>신청자</span>
+              <span>전화번호</span>
+              <span>구독</span>
+              <span>배부</span>
+              <span />
+            </div>
+            <div className="person-list" role="listbox" aria-label="QT 신청자">
+              {desk?.people.map((person, index) => (
+                <PersonRow
+                  key={`${person.personId}-${person.subscriptionId ?? "none"}`}
+                  person={person}
+                  selected={selected === index}
+                  busy={busy}
+                  onSelect={() => setSelected(index)}
+                  onDistribute={() => void defaultDistribution(person)}
+                  onPartial={() => setDialog({ type: "partial", person })}
+                  onCheckItem={() =>
+                    setDialog({
+                      type: "check-item",
+                      personId: person.personId,
+                    })
+                  }
+                />
+              ))}
+              {desk && desk.people.length === 0 && (
+                <div className="empty-state" data-testid="empty-list">
+                  <strong>
+                    {query
+                      ? "일치하는 신청자가 없습니다"
+                      : "이번 호의 남은 배부가 없습니다"}
+                  </strong>
+                  <span>
+                    {query
+                      ? "검색어를 확인하거나 현장 간이 등록을 이용하세요."
+                      : "검색하면 완료자와 만료자도 확인할 수 있습니다."}
+                  </span>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <aside className="notes-panel">
+            <header>
+              <div>
+                <p>현장 배부</p>
+                <h2>확인할 일</h2>
+              </div>
+              <span className="count-badge">
+                {desk?.checkItems.filter((item) => item.status === "확인 필요")
+                  .length ?? 0}
+              </span>
+            </header>
+            <form
+              className="sticky-input"
+              onSubmit={(event) => {
+                event.preventDefault();
+                submitQuickItem();
+              }}
             >
-              권장 호 {desk.recommendedIssue.label}
-            </button>
-          )}
-      </section>
-
-      <section className="stats" aria-label="배부 현황">
-        <Stat
-          label="총 대상"
-          value={desk?.totals.targetPeople ?? 0}
-          unit="명"
-        />
-        <Stat
-          label="배부 완료"
-          value={desk?.totals.completedPeople ?? 0}
-          unit="명"
-          tone="success"
-        />
-        <Stat
-          label="남은 인원"
-          value={desk?.totals.remainingPeople ?? 0}
-          unit="명"
-          tone="accent"
-        />
-        <div className="book-stat">
-          권수 {desk?.totals.distributedQuantity ?? 0}/
-          {desk?.totals.targetQuantity ?? 0} · 남은{" "}
-          {desk?.totals.remainingQuantity ?? 0}권
-        </div>
-      </section>
-
-      {desk && desk.operationalNotes.length > 0 && (
-        <section className="operation-banner" aria-label="운영 메모">
-          <span aria-hidden="true">📌</span>
-          <div>
-            <strong>{desk.operationalNotes[0].title}</strong>
-            <p>{desk.operationalNotes[0].content}</p>
-          </div>
-          <button
-            className="text-button"
-            type="button"
-            onClick={() => setDialog({ type: "operational-note" })}
-          >
-            운영 메모 추가
-          </button>
-        </section>
-      )}
-
-      <section className="work-area">
-        <div className="distribution-panel">
-          <div className="search-row">
-            <label className="search-box">
-              <span aria-hidden="true">⌕</span>
-              <input
-                ref={searchRef}
-                data-testid="people-search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="또래, 이름 또는 전화번호 검색   /"
-                aria-label="QT 신청자 검색"
+              <label htmlFor="quick-item">빠른 확인할 일</label>
+              <textarea
+                id="quick-item"
+                ref={quickItemRef}
+                autoFocus
+                value={quickItem}
+                onChange={(event) => setQuickItem(event.target.value)}
+                placeholder="신청자 연결 없이 바로 입력하세요…"
               />
-              {query && (
+              <div>
+                <small>일반 항목으로 저장</small>
+                <button
+                  type="submit"
+                  data-testid="add-general-check-item"
+                  disabled={busy || !quickItem.trim()}
+                >
+                  추가
+                </button>
+              </div>
+            </form>
+            <div className="check-item-list">
+              {desk?.checkItems.map((item) => (
+                <article className="check-item" key={item.id}>
+                  <p title={item.summary}>{item.summary}</p>
+                  <div>
+                    <small>
+                      <b>
+                        {item.personName ? `${item.personName} 연결` : "일반"}
+                      </b>
+                      {" · "}
+                      {item.status}
+                    </small>
+                    {item.status === "확인 필요" ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void mutate(
+                            () => updateCheckItemStatus(item.id, "checked"),
+                            "확인할 일을 완료했습니다.",
+                          )
+                        }
+                      >
+                        확인 완료
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void mutate(
+                            () => updateCheckItemStatus(item.id, "needs_check"),
+                            "확인 필요 상태로 되돌렸습니다.",
+                          )
+                        }
+                      >
+                        다시 확인
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      aria-label="확인할 일 보관"
+                      onClick={() =>
+                        void mutate(
+                          () => updateCheckItemStatus(item.id, "archived"),
+                          "확인할 일을 보관했습니다.",
+                        )
+                      }
+                    >
+                      보관
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+            <section className="pinned-section">
+              <div className="pinned-heading">
+                <h3>고정 메모</h3>
                 <button
                   type="button"
-                  aria-label="검색어 지우기"
-                  onClick={() => setQuery("")}
+                  aria-label="고정 메모 추가"
+                  onClick={() => setDialog({ type: "pinned-note" })}
                 >
-                  ×
+                  +
                 </button>
-              )}
-            </label>
-            <button
-              className="undo-button"
-              type="button"
-              disabled={!desk?.canUndoDistribution || busy}
-              onClick={() =>
-                void mutate(
-                  () => undoDistribution(issue),
-                  "최근 배부를 되돌렸습니다.",
-                )
-              }
-            >
-              ↶ 되돌리기
-              <kbd>⌘/Ctrl Z</kbd>
-            </button>
-          </div>
-
-          <div className="list-heading">
-            <div>
-              <h3>{query ? "검색 결과" : "아직 배부하지 않은 신청자"}</h3>
-              <p>
-                {desk?.people.length ?? 0}명 · 행을 선택하고 ⌘/Ctrl+Enter로 배부
-              </p>
-            </div>
-            <button
-              className="secondary-button"
-              data-testid="open-draft"
-              type="button"
-              onClick={() => setDialog({ type: "draft" })}
-            >
-              + 현장 간이 등록
-            </button>
-          </div>
-
-          <div className="person-list" role="listbox" aria-label="QT 신청자">
-            {desk?.people.map((person, index) => (
-              <PersonRow
-                key={`${person.personId}-${person.subscriptionId ?? "none"}`}
-                person={person}
-                selected={selected === index}
-                busy={busy}
-                onSelect={() => setSelected(index)}
-                onDistribute={() => void defaultDistribution(person)}
-                onPartial={() => setDialog({ type: "partial", person })}
-                onNote={() =>
-                  setDialog({ type: "quick-note", personId: person.personId })
-                }
-              />
-            ))}
-            {desk && desk.people.length === 0 && (
-              <div className="empty-state" data-testid="empty-list">
-                <span aria-hidden="true">{query ? "⌕" : "✓"}</span>
-                <h3>
-                  {query
-                    ? "일치하는 신청자가 없습니다"
-                    : "이번 호의 남은 배부가 없습니다"}
-                </h3>
-                <p>
-                  {query
-                    ? "이름이나 또래를 다시 확인하거나 현장에서 간이 등록하세요."
-                    : "검색하면 배부 완료자와 만료자도 확인할 수 있습니다."}
-                </p>
-                {query && (
-                  <button
-                    className="primary-button"
-                    type="button"
-                    onClick={() => setDialog({ type: "draft" })}
-                  >
-                    현장 간이 등록
-                  </button>
-                )}
               </div>
-            )}
-          </div>
+              <div className="pinned-list">
+                {desk?.pinnedNotes.map((note) => (
+                  <article className="pinned-note" key={note.id}>
+                    <div>
+                      <span>{note.isPinned ? "● 고정" : "고정 해제됨"}</span>
+                      <details className="more-menu note-menu">
+                        <summary aria-label="고정 메모 메뉴">•••</summary>
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void mutate(
+                                () =>
+                                  updatePinnedNote(note.id, {
+                                    isPinned: !note.isPinned,
+                                  }),
+                                note.isPinned
+                                  ? "상단 고정을 해제했습니다."
+                                  : "메모를 상단에 고정했습니다.",
+                              )
+                            }
+                          >
+                            {note.isPinned ? "고정 해제" : "상단 고정"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void mutate(
+                                () =>
+                                  updatePinnedNote(note.id, { archived: true }),
+                                "고정 메모를 보관했습니다.",
+                              )
+                            }
+                          >
+                            보관
+                          </button>
+                        </div>
+                      </details>
+                    </div>
+                    <p title={note.title}>{note.title}</p>
+                    <b title={note.content}>{note.content}</b>
+                  </article>
+                ))}
+              </div>
+            </section>
+          </aside>
         </div>
-
-        <aside className="notes-panel">
-          <div className="aside-heading">
-            <div>
-              <p className="section-label">바로 확인할 일</p>
-              <h3>현장 기록</h3>
-            </div>
-            <button
-              className="icon-button small"
-              type="button"
-              aria-label="현장 기록 추가"
-              onClick={() => setDialog({ type: "quick-note", personId: null })}
-            >
-              +
-            </button>
-          </div>
-          <div className="quick-notes">
-            {desk?.quickNotes.map((note) => (
-              <article key={note.id} className="quick-note">
-                <p>{note.summary}</p>
-                <div>
-                  <span>{note.operatorName}</span>
-                  <button
-                    className="text-button"
-                    type="button"
-                    onClick={() =>
-                      void mutate(
-                        () => completeQuickNote(note.id),
-                        "현장 기록을 완료했습니다.",
-                      )
-                    }
-                  >
-                    완료
-                  </button>
-                </div>
-              </article>
-            ))}
-            {desk?.quickNotes.length === 0 && (
-              <p className="aside-empty">미완료 현장 기록이 없습니다.</p>
-            )}
-          </div>
-          <button
-            className="aside-link"
-            type="button"
-            onClick={() => setDialog({ type: "operational-note" })}
-          >
-            📌 장기 운영 메모 추가
-          </button>
-          <div className="purchase-summary">
-            <div>
-              <span>개별 구매</span>
-              <strong>
-                {desk?.purchaseCount ?? 0}건 · {desk?.purchasedQuantity ?? 0}권
-              </strong>
-            </div>
-            {(desk?.purchaseCount ?? 0) > 0 && (
-              <button
-                className="text-button"
-                type="button"
-                onClick={() =>
-                  void mutate(
-                    () => cancelLatestPurchase(issue),
-                    "최근 개별 구매를 취소했습니다.",
-                  )
-                }
-              >
-                최근 건 취소
-              </button>
-            )}
-          </div>
-        </aside>
-      </section>
+      </main>
 
       {(notice || error) && (
         <div
@@ -460,7 +521,6 @@ export default function App() {
           </button>
         </div>
       )}
-
       {dialog && (
         <Phase2DialogContent
           dialog={dialog}
@@ -471,28 +531,99 @@ export default function App() {
         />
       )}
       {helpOpen && <HelpPanel onClose={() => setHelpOpen(false)} />}
-    </main>
+    </div>
   );
 }
 
-function Stat({
-  label,
-  value,
-  unit,
-  tone = "",
+function TopNavigation({
+  active,
+  operator,
+  theme,
+  onDistribution,
+  onManagement,
+  onTheme,
+  onHelp,
+  onOperator,
 }: {
-  label: string;
-  value: number;
-  unit: string;
-  tone?: string;
+  active: "distribution" | "management";
+  operator?: string | null;
+  theme: Theme;
+  onDistribution: () => void;
+  onManagement: () => void;
+  onTheme: () => void;
+  onHelp: () => void;
+  onOperator: () => void;
 }) {
   return (
-    <div className={`stat ${tone}`}>
+    <nav className="topnav">
+      <div className="brand">
+        <span className="brand-mark" aria-hidden="true">
+          QT
+        </span>
+        <div>
+          <b>QT Manager</b>
+          <small>
+            맑은샘광천교회 청년부{" "}
+            <i title="2026 교육국 제작" aria-label="2026 교육국 제작">
+              ⓘ
+            </i>
+          </small>
+        </div>
+      </div>
+      <div className="main-menu">
+        <button
+          className={active === "distribution" ? "active" : ""}
+          type="button"
+          onClick={onDistribution}
+        >
+          현장 배부
+        </button>
+        <button
+          className={active === "management" ? "active" : ""}
+          type="button"
+          data-testid="open-management"
+          onClick={onManagement}
+        >
+          신청자 관리 <small>⌄</small>
+        </button>
+      </div>
+      <div className="nav-tools">
+        <button className="icon-button" type="button" onClick={onHelp}>
+          ?
+        </button>
+        <button
+          className="theme-button"
+          type="button"
+          data-testid="theme-toggle"
+          aria-label="테마 전환"
+          onClick={onTheme}
+        >
+          <span>{theme === "dark" ? "☾" : "☀"}</span>
+          {theme === "dark" ? "다크" : "라이트"}
+        </button>
+        <button className="operator-button" type="button" onClick={onOperator}>
+          <span aria-hidden="true" />
+          <b>{operator ?? "담당자 설정"}</b>
+          <small>⌄</small>
+        </button>
+      </div>
+    </nav>
+  );
+}
+
+function Summary({
+  label,
+  value,
+  warning = false,
+}: {
+  label: string;
+  value: string;
+  warning?: boolean;
+}) {
+  return (
+    <div className={warning ? "warning" : ""}>
       <span>{label}</span>
-      <strong>
-        {value}
-        <small>{unit}</small>
-      </strong>
+      <b>{value}</b>
     </div>
   );
 }
@@ -504,7 +635,7 @@ function PersonRow({
   onSelect,
   onDistribute,
   onPartial,
-  onNote,
+  onCheckItem,
 }: {
   person: DeskPerson;
   selected: boolean;
@@ -512,7 +643,7 @@ function PersonRow({
   onSelect: () => void;
   onDistribute: () => void;
   onPartial: () => void;
-  onNote: () => void;
+  onCheckItem: () => void;
 }) {
   return (
     <article
@@ -522,43 +653,37 @@ function PersonRow({
       tabIndex={0}
       onClick={onSelect}
       onFocus={onSelect}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onCheckItem();
+      }}
       data-testid="person-row"
     >
-      <div className="identity">
-        <span className="cohort">{person.cohort ?? "--"}</span>
-        <div>
-          <h4>{person.name}</h4>
-          <p>
-            {person.phoneSuffix
-              ? `전화번호 끝 ${person.phoneSuffix}`
-              : "연락처 없음"}
-            {person.personStatus === "정보 보완 필요" && (
-              <em> · 정보 보완 필요</em>
-            )}
-          </p>
-        </div>
+      <span className="cohort">{person.cohort ?? "--"}</span>
+      <div className="person-name">
+        <b title={person.name}>{person.name}</b>
+        {person.hasCheckItem && <small>확인할 일 있음</small>}
       </div>
-      <div className="status-stack">
-        <span className={`status ${statusClass(person.subscriptionStatus)}`}>
-          {person.subscriptionStatus}
-        </span>
-        <span>{person.distributionStatus}</span>
+      <span className="phone" title={person.phone ?? "연락처 없음"}>
+        {person.phone ?? "연락처 없음"}
+      </span>
+      <div className={`subscription ${statusClass(person.subscriptionStatus)}`}>
+        <b>
+          ● {person.isLastIssue ? "이번 호 마지막" : person.subscriptionStatus}
+        </b>
+        <small>
+          {person.endDate
+            ? `${person.endDate}${person.subscriptionStatus === "구독 만료" ? " 종료" : "까지"}`
+            : "등록된 구독 없음"}
+        </small>
       </div>
-      <div className="subscription-detail">
-        {person.lastIssue ? (
-          <>
-            <span>구독 종료 {person.endDate}</span>
-            <span>
-              {person.distributedQuantity}/{person.targetQuantity}권 배부
-            </span>
-            {person.isLastIssue && (
-              <strong>이번 호가 마지막 · 다음 호부터 갱신 필요</strong>
-            )}
-          </>
-        ) : (
-          <span>등록된 구독 없음</span>
-        )}
-        {person.hasOpenQuickNote && <strong>● 현장 기록 있음</strong>}
+      <div className="distribution-cell">
+        <b>{person.distributionStatus}</b>
+        <small>
+          {person.targetQuantity
+            ? `${person.distributedQuantity} / ${person.targetQuantity}권`
+            : "—"}
+        </small>
       </div>
       <div className="row-actions">
         <button
@@ -573,30 +698,28 @@ function PersonRow({
         >
           {person.canDistribute
             ? `${person.remainingQuantity}권 배부`
-            : person.distributionStatus}
+            : person.subscriptionStatus === "구독 만료"
+              ? "구독 갱신"
+              : person.distributionStatus}
         </button>
-        {person.canDistribute && person.remainingQuantity > 1 && (
-          <button
-            className="text-button"
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onPartial();
-            }}
+        <details className="more-menu row-menu">
+          <summary
+            aria-label={`${person.name} 메뉴`}
+            onClick={(event) => event.stopPropagation()}
           >
-            일부만
-          </button>
-        )}
-        <button
-          className="text-button"
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onNote();
-          }}
-        >
-          기록
-        </button>
+            •••
+          </summary>
+          <div>
+            <button type="button" onClick={onCheckItem}>
+              확인할 일 추가
+            </button>
+            {person.canDistribute && person.remainingQuantity > 1 && (
+              <button type="button" onClick={onPartial}>
+                일부만 배부
+              </button>
+            )}
+          </div>
+        </details>
       </div>
     </article>
   );

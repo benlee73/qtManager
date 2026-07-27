@@ -14,7 +14,7 @@ export type DeskPerson = {
   subscriptionId: string | null;
   name: string;
   cohort: string | null;
-  phoneSuffix: string | null;
+  phone: string | null;
   personStatus: string;
   subscriptionStatus: string;
   distributionStatus: string;
@@ -24,7 +24,7 @@ export type DeskPerson = {
   lastIssue: string | null;
   endDate: string | null;
   isLastIssue: boolean;
-  hasOpenQuickNote: boolean;
+  hasCheckItem: boolean;
   canDistribute: boolean;
 };
 
@@ -41,19 +41,20 @@ export type DistributionDesk = {
     remainingQuantity: number;
   };
   people: DeskPerson[];
-  quickNotes: {
+  checkItems: {
     id: string;
     personId: string | null;
     summary: string;
     operatorName: string;
     updatedAt: string;
+    status: "확인 필요" | "확인 완료" | "보관";
+    personName: string | null;
   }[];
-  operationalNotes: {
+  pinnedNotes: {
     id: string;
     title: string;
     content: string;
     isPinned: boolean;
-    activeUntil: string | null;
   }[];
   purchaseCount: number;
   purchasedQuantity: number;
@@ -136,28 +137,44 @@ export function createDraft(
   });
 }
 
-export function createQuickNote(personId: string | null, content: string) {
-  return invoke<void>("create_quick_note_command", {
+export function createCheckItem(personId: string | null, content: string) {
+  return invoke<void>("create_check_item_command", {
     request: { personId, content },
   });
 }
 
-export function completeQuickNote(id: string) {
-  return invoke<void>("complete_quick_note_command", { id });
+export function updateCheckItemStatus(
+  id: string,
+  status: "needs_check" | "checked" | "archived",
+) {
+  return invoke<void>("update_check_item_status_command", {
+    request: { id, status },
+  });
 }
 
-export function createOperationalNote(input: {
+export function createPinnedNote(input: {
   title: string;
   content: string;
-  activeUntil: string;
   isPinned: boolean;
 }) {
-  return invoke<void>("create_operational_note_command", {
+  return invoke<void>("create_pinned_note_command", {
     request: {
       title: input.title,
       content: input.content,
-      activeUntil: input.activeUntil || null,
       isPinned: input.isPinned,
+    },
+  });
+}
+
+export function updatePinnedNote(
+  id: string,
+  input: { isPinned?: boolean; archived?: boolean },
+) {
+  return invoke<void>("update_pinned_note_command", {
+    request: {
+      id,
+      isPinned: input.isPinned ?? null,
+      archived: input.archived ?? false,
     },
   });
 }
