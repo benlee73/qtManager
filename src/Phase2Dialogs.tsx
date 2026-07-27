@@ -4,13 +4,13 @@ import type { ReversibleAction } from "./actionHistory";
 import {
   type DeskPerson,
   type Issue,
+  cancelPersonDistribution,
   createCheckItem,
   createDraft,
   createPinnedNote,
-  distribute,
+  distributePerson,
   recordPurchase,
   setOperator,
-  undoDistribution,
   updateCheckItemStatus,
   updatePinnedNote,
 } from "./phase2";
@@ -258,11 +258,7 @@ export function Phase2DialogContent({
             disabled={busy}
             onClick={() =>
               void mutate(
-                () =>
-                  undoDistribution(
-                    issue,
-                    dialog.person.subscriptionId ?? undefined,
-                  ),
+                () => cancelPersonDistribution(issue, dialog.person),
                 `${dialog.person.name}님의 최근 배부를 취소했습니다.`,
               )
             }
@@ -281,9 +277,9 @@ export function Phase2DialogContent({
           const data = new FormData(event.currentTarget);
           void mutate(
             () =>
-              distribute(
+              distributePerson(
                 issue,
-                dialog.person.subscriptionId!,
+                dialog.person,
                 Number(data.get("quantity")),
               ),
             `${dialog.person.name} · 일부 배부를 기록했습니다.`,

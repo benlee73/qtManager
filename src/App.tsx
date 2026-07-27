@@ -13,6 +13,7 @@ import {
 import { ManagementScreen } from "./ManagementScreen";
 import { NotificationStack } from "./Notifications";
 import { type Phase2Dialog, Phase2DialogContent } from "./Phase2Dialogs";
+import { EditDialog } from "./Phase3Dialogs";
 import type { ReversibleAction } from "./actionHistory";
 import { persistTheme, readStoredTheme, type Theme } from "./appearance";
 import {
@@ -21,7 +22,9 @@ import {
   type Issue,
   cancelLatestPurchase,
   createCheckItem,
-  distribute,
+  deleteCheckItem,
+  deletePinnedNote,
+  distributePerson,
   isTextEntryTarget,
   loadDesk,
   moveIssue,
@@ -30,6 +33,7 @@ import {
   updateCheckItemStatus,
   updatePinnedNote,
 } from "./phase2";
+import { type PersonDetail, loadPersonDetail } from "./phase3";
 import { useNotifications } from "./useNotifications";
 
 export default function App() {
@@ -42,11 +46,20 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [desk, setDesk] = useState<DistributionDesk | null>(null);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [listFilter, setListFilter] = useState("remaining");
+  const [sort, setSort] = useState<{
+    key: "cohort" | "name" | "subscription" | "distribution";
+    direction: "asc" | "desc";
+  } | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [dialog, setDialog] = useState<Phase2Dialog>(null);
+  const [editPerson, setEditPerson] = useState<PersonDetail | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    type: "check-item" | "pinned-note";
+    id: string;
+    label: string;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [quickItem, setQuickItem] = useState("");
   const [undoStack, setUndoStack] = useState<ReversibleAction[]>([]);
@@ -62,7 +75,7 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     try {
-      const next = await loadDesk(issue, query, showAll);
+      const next = await loadDesk(issue, query, true);
       setDesk(next);
       setSelectedPersonId((current) =>
         current && next.people.some((person) => person.personId === current)
@@ -73,7 +86,7 @@ export default function App() {
     } catch (reason) {
       notify(errorMessage(reason), "error");
     }
-  }, [issue, notify, query, showAll]);
+  }, [issue, notify, query]);
 
   useEffect(() => {
     const timeout = window.setTimeout(refresh, 70);
@@ -133,23 +146,69 @@ export default function App() {
   }, [mutate, redoStack]);
 
   const visiblePeople = useMemo(() => {
-    if (!desk || statusFilter === "all") return desk?.people ?? [];
-    return desk.people.filter((person) => {
-      if (statusFilter === "undistributed")
+    if (!desk) return [];
+    const filtered = desk.people.filter((person) => {
+      if (listFilter === "all") return true;
+      if (listFilter === "remaining")
+        return person.canDistribute && person.remainingQuantity > 0;
+      if (listFilter === "undistributed")
         return person.distributionStatus === "미배부";
-      if (statusFilter === "partial")
+      if (listFilter === "partial")
         return person.distributionStatus === "일부 배부";
-      if (statusFilter === "completed")
+      if (listFilter === "completed")
         return person.distributionStatus === "배부 완료";
       return person.subscriptionStatus === "구독 만료";
     });
-  }, [desk, statusFilter]);
+    if (!sort) return filtered;
+    const direction = sort.direction === "asc" ? 1 : -1;
+    const value = (person: DeskPerson) => {
+      if (sort.key === "cohort") return person.cohort ?? "";
+      if (sort.key === "name") return person.name;
+      if (sort.key === "subscription")
+        return `${person.subscriptionStatus}:${person.endDate ?? ""}`;
+      return `${distributionRank(person.distributionStatus)}:${person.remainingQuantity}`;
+    };
+    return [...filtered].sort(
+      (left, right) =>
+        value(left).localeCompare(value(right), "ko", {
+          numeric: true,
+          sensitivity: "base",
+        }) * direction,
+    );
+  }, [desk, listFilter, sort]);
+
+  const openPersonEdit = useCallback(
+    async (personId: string) => {
+      setBusy(true);
+      try {
+        setEditPerson(await loadPersonDetail(personId));
+      } catch (reason) {
+        notify(errorMessage(reason), "error");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [notify],
+  );
+
+  const toggleSort = (
+    key: "cohort" | "name" | "subscription" | "distribution",
+  ) => {
+    setSort((current) =>
+      current?.key === key
+        ? {
+            key,
+            direction: current.direction === "asc" ? "desc" : "asc",
+          }
+        : { key, direction: "asc" },
+    );
+  };
 
   const defaultDistribution = useCallback(
     async (person: DeskPerson) => {
-      if (!person.subscriptionId || !person.canDistribute) return;
+      if (!person.canDistribute) return;
       await mutate(
-        () => distribute(issue, person.subscriptionId!),
+        () => distributePerson(issue, person),
         `${person.name} · ${person.remainingQuantity}권 배부했습니다.`,
       );
     },
@@ -413,50 +472,53 @@ export default function App() {
             </div>
             <div className="table-title">
               <h2>
-                {query ? "검색 결과" : showAll ? "전체 신청자" : "남은 신청자"}{" "}
+                {query ? "검색 결과" : filterLabel(listFilter)}{" "}
                 <b>{visiblePeople.length}</b>
               </h2>
               <div className="list-filters">
-                <div className="view-toggle" aria-label="신청자 보기 범위">
-                  <button
-                    className={!showAll ? "active" : ""}
-                    type="button"
-                    onClick={() => {
-                      setShowAll(false);
-                      setStatusFilter("all");
-                    }}
-                  >
-                    남은 배부
-                  </button>
-                  <button
-                    className={showAll ? "active" : ""}
-                    type="button"
-                    onClick={() => setShowAll(true)}
-                  >
-                    전체
-                  </button>
-                </div>
-                {showAll && (
+                <label className="filter-control">
+                  <span>필터</span>
                   <select
-                    aria-label="상태 필터"
-                    value={statusFilter}
-                    onChange={(event) => setStatusFilter(event.target.value)}
+                    aria-label="신청자 필터"
+                    value={listFilter}
+                    onChange={(event) => setListFilter(event.target.value)}
                   >
-                    <option value="all">모든 상태</option>
+                    <option value="remaining">남은 배부</option>
+                    <option value="all">전체</option>
                     <option value="undistributed">미배부</option>
                     <option value="partial">일부 배부</option>
                     <option value="completed">배부 완료</option>
                     <option value="expired">구독 만료</option>
                   </select>
-                )}
+                </label>
               </div>
             </div>
-            <div className="table-head" aria-hidden="true">
-              <span>또래</span>
-              <span>신청자</span>
+            <div className="table-head">
+              <SortButton
+                label="또래"
+                column="cohort"
+                sort={sort}
+                onSort={toggleSort}
+              />
+              <SortButton
+                label="신청자"
+                column="name"
+                sort={sort}
+                onSort={toggleSort}
+              />
               <span>전화번호</span>
-              <span>구독</span>
-              <span>배부</span>
+              <SortButton
+                label="구독"
+                column="subscription"
+                sort={sort}
+                onSort={toggleSort}
+              />
+              <SortButton
+                label="배부"
+                column="distribution"
+                sort={sort}
+                onSort={toggleSort}
+              />
               <span />
             </div>
             <div
@@ -492,6 +554,7 @@ export default function App() {
                       personId: person.personId,
                     })
                   }
+                  onEdit={() => void openPersonEdit(person.personId)}
                 />
               ))}
               {desk && visiblePeople.length === 0 && (
@@ -565,6 +628,7 @@ export default function App() {
                 <article
                   className={`check-item ${item.status === "확인 완료" ? "checked" : ""}`}
                   key={item.id}
+                  data-item-id={item.id}
                 >
                   <label className="check-item-main">
                     <input
@@ -611,32 +675,47 @@ export default function App() {
                         {item.personName ? `${item.personName} 연결` : "일반"}
                       </b>
                     </small>
-                    <button
-                      type="button"
-                      aria-label="확인할 일 보관"
-                      onClick={() => {
-                        const previous =
-                          item.status === "확인 완료"
-                            ? "checked"
-                            : "needs_check";
-                        void mutate(
-                          () => updateCheckItemStatus(item.id, "archived"),
-                          "확인할 일을 보관했습니다.",
-                        ).then((saved) => {
-                          if (saved) {
-                            recordAction({
-                              description: "확인할 일 보관",
-                              undo: () =>
-                                updateCheckItemStatus(item.id, previous),
-                              redo: () =>
-                                updateCheckItemStatus(item.id, "archived"),
-                            });
-                          }
-                        });
-                      }}
-                    >
-                      보관
-                    </button>
+                    <span className="check-item-actions">
+                      <button
+                        type="button"
+                        aria-label="확인할 일 보관"
+                        onClick={() => {
+                          const previous =
+                            item.status === "확인 완료"
+                              ? "checked"
+                              : "needs_check";
+                          void mutate(
+                            () => updateCheckItemStatus(item.id, "archived"),
+                            "확인할 일을 보관했습니다.",
+                          ).then((saved) => {
+                            if (saved) {
+                              recordAction({
+                                description: "확인할 일 보관",
+                                undo: () =>
+                                  updateCheckItemStatus(item.id, previous),
+                                redo: () =>
+                                  updateCheckItemStatus(item.id, "archived"),
+                              });
+                            }
+                          });
+                        }}
+                      >
+                        보관
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="확인할 일 삭제"
+                        onClick={() => {
+                          setDeleteTarget({
+                            type: "check-item",
+                            id: item.id,
+                            label: "확인할 일",
+                          });
+                        }}
+                      >
+                        삭제
+                      </button>
+                    </span>
                   </div>
                 </article>
               ))}
@@ -654,9 +733,18 @@ export default function App() {
               </div>
               <div className="pinned-list">
                 {desk?.pinnedNotes.map((note) => (
-                  <article className="pinned-note" key={note.id}>
+                  <article
+                    className="pinned-note"
+                    key={note.id}
+                    data-note-id={note.id}
+                  >
                     <div>
-                      <span>{note.isPinned ? "● 고정" : "고정 해제됨"}</span>
+                      <p title={note.title}>
+                        {note.isPinned && (
+                          <span aria-label="상단 고정">📌</span>
+                        )}
+                        {note.title}
+                      </p>
                       <ActionMenu
                         id={`pinned-${note.id}`}
                         label="고정 메모 메뉴"
@@ -723,9 +811,21 @@ export default function App() {
                         >
                           보관
                         </button>
+                        <button
+                          className="danger-menu-item"
+                          type="button"
+                          onClick={() =>
+                            setDeleteTarget({
+                              type: "pinned-note",
+                              id: note.id,
+                              label: "고정 메모",
+                            })
+                          }
+                        >
+                          삭제
+                        </button>
                       </ActionMenu>
                     </div>
-                    <p title={note.title}>{note.title}</p>
                     <b title={note.content}>{note.content}</b>
                   </article>
                 ))}
@@ -754,6 +854,37 @@ export default function App() {
           onClose={() => desk?.operatorName && setDialog(null)}
           mutate={mutate}
           recordAction={recordAction}
+        />
+      )}
+      {editPerson && (
+        <EditDialog
+          person={editPerson}
+          busy={busy}
+          onClose={() => setEditPerson(null)}
+          onSaved={(work) =>
+            mutate(work, "QT 신청자 정보를 수정했습니다.").then((saved) => {
+              if (saved) setEditPerson(null);
+              return saved;
+            })
+          }
+        />
+      )}
+      {deleteTarget && (
+        <DeleteConfirmDialog
+          label={deleteTarget.label}
+          busy={busy}
+          onClose={() => setDeleteTarget(null)}
+          onDelete={() =>
+            void mutate(
+              () =>
+                deleteTarget.type === "check-item"
+                  ? deleteCheckItem(deleteTarget.id)
+                  : deletePinnedNote(deleteTarget.id),
+              `${deleteTarget.label}을 삭제했습니다.`,
+            ).then((saved) => {
+              if (saved) setDeleteTarget(null);
+            })
+          }
         />
       )}
       {helpOpen && <HelpPanel onClose={() => setHelpOpen(false)} />}
@@ -866,6 +997,7 @@ function PersonRow({
   onCancelDistribution,
   onPartial,
   onCheckItem,
+  onEdit,
 }: {
   person: DeskPerson;
   selected: boolean;
@@ -877,6 +1009,7 @@ function PersonRow({
   onCancelDistribution: () => void;
   onPartial: () => void;
   onCheckItem: () => void;
+  onEdit: () => void;
 }) {
   return (
     <article
@@ -885,9 +1018,13 @@ function PersonRow({
       aria-selected={selected}
       tabIndex={0}
       onClick={onSelect}
+      onDoubleClick={(event) => {
+        event.preventDefault();
+        onEdit();
+      }}
       onContextMenu={(event) => {
         event.preventDefault();
-        onCheckItem();
+        onOpenMenu(`person-${person.personId}`);
       }}
       data-testid="person-row"
     >
@@ -899,14 +1036,28 @@ function PersonRow({
       <span className="phone" title={person.phone ?? "연락처 없음"}>
         {person.phone ?? "연락처 없음"}
       </span>
-      <div className={`subscription ${statusClass(person.subscriptionStatus)}`}>
+      <div
+        className={`subscription ${statusClass(person.subscriptionStatus)}`}
+        title={person.distributionTargets
+          .map(
+            (target) =>
+              `${target.startIssue} → ${target.lastIssue} · ${target.targetQuantity}권`,
+          )
+          .join("\n")}
+      >
         <b>
-          {person.isLastIssue ? "이번 호 마지막" : person.subscriptionStatus}
+          {person.distributionTargets.length > 1
+            ? `${person.distributionTargets.length}개 구독`
+            : person.isLastIssue
+              ? "이번 호 마지막"
+              : person.subscriptionStatus}
         </b>
         <small>
-          {person.endDate
-            ? `${person.endDate}${person.subscriptionStatus === "구독 만료" ? " 종료" : "까지"}`
-            : "등록된 구독 없음"}
+          {person.distributionTargets.length > 1
+            ? `빠른 종료 ${person.distributionTargets[0]?.endDate}`
+            : person.endDate
+              ? `${person.endDate}${person.subscriptionStatus === "구독 만료" ? " 종료" : "까지"}`
+              : "등록된 구독 없음"}
         </small>
       </div>
       <div className="distribution-cell">
@@ -956,6 +1107,9 @@ function PersonRow({
           <button type="button" onClick={onCheckItem}>
             확인할 일 추가
           </button>
+          <button type="button" onClick={onEdit}>
+            신청자 정보 수정
+          </button>
           {person.canDistribute && person.remainingQuantity > 1 && (
             <button type="button" onClick={onPartial}>
               일부만 배부
@@ -965,6 +1119,100 @@ function PersonRow({
       </div>
     </article>
   );
+}
+
+function SortButton({
+  label,
+  column,
+  sort,
+  onSort,
+}: {
+  label: string;
+  column: "cohort" | "name" | "subscription" | "distribution";
+  sort: {
+    key: "cohort" | "name" | "subscription" | "distribution";
+    direction: "asc" | "desc";
+  } | null;
+  onSort: (key: "cohort" | "name" | "subscription" | "distribution") => void;
+}) {
+  const active = sort?.key === column;
+  return (
+    <button
+      className={active ? "active" : ""}
+      type="button"
+      onClick={() => onSort(column)}
+      aria-label={`${label} ${active && sort.direction === "asc" ? "내림차순" : "오름차순"} 정렬`}
+    >
+      {label}
+      <span aria-hidden="true">
+        {active ? (sort.direction === "asc" ? "↑" : "↓") : "↕"}
+      </span>
+    </button>
+  );
+}
+
+function DeleteConfirmDialog({
+  label,
+  busy,
+  onClose,
+  onDelete,
+}: {
+  label: string;
+  busy: boolean;
+  onClose: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section
+        className="dialog delete-confirm-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-dialog-title"
+      >
+        <div className="dialog-heading">
+          <div>
+            <h2 id="delete-dialog-title">{label}을 삭제할까요?</h2>
+            <p>
+              목록과 인수인계 데이터에서 영구 삭제되며 변경 이력만 남습니다.
+            </p>
+          </div>
+          <button type="button" aria-label="닫기" onClick={onClose}>
+            ×
+          </button>
+        </div>
+        <div className="confirm-actions">
+          <button className="secondary-button" type="button" onClick={onClose}>
+            돌아가기
+          </button>
+          <button
+            className="danger-button"
+            type="button"
+            disabled={busy}
+            onClick={onDelete}
+          >
+            삭제
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function filterLabel(filter: string) {
+  if (filter === "remaining") return "남은 신청자";
+  if (filter === "all") return "전체 신청자";
+  if (filter === "undistributed") return "미배부 신청자";
+  if (filter === "partial") return "일부 배부 신청자";
+  if (filter === "completed") return "배부 완료 신청자";
+  return "구독 만료 신청자";
+}
+
+function distributionRank(status: string) {
+  if (status === "미배부") return 0;
+  if (status === "일부 배부") return 1;
+  if (status === "배부 완료") return 2;
+  return 3;
 }
 
 function statusClass(status: string) {

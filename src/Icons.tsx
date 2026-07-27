@@ -34,12 +34,7 @@ export function RedoIcon() {
 
 export function BookLogo() {
   return (
-    <span className="book-logo" aria-hidden="true">
-      <b>QT</b>
-      <svg viewBox="0 0 40 22">
-        <path d="M20 20C15 15 9 14 2 15V2c7-1 13 1 18 5m0 13c5-5 11-6 18-5V2c-7-1-13 1-18 5v13Z" />
-        <path d="M20 7v13" />
-      </svg>
-    </span>
+    <img className="book-logo" src={qtManagerIcon} alt="" aria-hidden="true" />
   );
 }
+import qtManagerIcon from "./assets/qt-manager-icon.png";

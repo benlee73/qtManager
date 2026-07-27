@@ -12,6 +12,15 @@ export type IssueView = Issue & {
 export type DeskPerson = {
   personId: string;
   subscriptionId: string | null;
+  distributionTargets: {
+    subscriptionId: string;
+    startIssue: string;
+    lastIssue: string;
+    endDate: string;
+    targetQuantity: number;
+    distributedQuantity: number;
+    remainingQuantity: number;
+  }[];
   name: string;
   cohort: string | null;
   phone: string | null;
@@ -27,6 +36,30 @@ export type DeskPerson = {
   hasCheckItem: boolean;
   canDistribute: boolean;
 };
+
+export async function distributePerson(
+  issue: Issue,
+  person: DeskPerson,
+  quantity?: number,
+) {
+  let remaining = quantity ?? person.remainingQuantity;
+  for (const target of person.distributionTargets) {
+    const amount = Math.min(target.remainingQuantity, remaining);
+    if (amount > 0) await distribute(issue, target.subscriptionId, amount);
+    remaining -= amount;
+    if (remaining === 0) return;
+  }
+}
+
+export async function cancelPersonDistribution(
+  issue: Issue,
+  person: DeskPerson,
+) {
+  for (const target of person.distributionTargets) {
+    if (target.distributedQuantity > 0)
+      await undoDistribution(issue, target.subscriptionId);
+  }
+}
 
 export type CheckItemView = {
   id: string;
@@ -163,6 +196,10 @@ export function updateCheckItemStatus(
   });
 }
 
+export function deleteCheckItem(id: string) {
+  return invoke<void>("delete_check_item_command", { id });
+}
+
 export function createPinnedNote(input: {
   title: string;
   content: string;
@@ -188,6 +225,10 @@ export function updatePinnedNote(
       archived: input.archived ?? null,
     },
   });
+}
+
+export function deletePinnedNote(id: string) {
+  return invoke<void>("delete_pinned_note_command", { id });
 }
 
 export function recordPurchase(

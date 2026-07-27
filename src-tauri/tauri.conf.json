@@ -17,11 +17,9 @@
         "title": "QT Manager",
         "width": 1000,
         "height": 720,
-        "minWidth": 1000,
-        "minHeight": 720,
-        "maxWidth": 1000,
-        "maxHeight": 720,
-        "resizable": false
+        "minWidth": 900,
+        "minHeight": 640,
+        "resizable": true
       }
     ],
     "security": {

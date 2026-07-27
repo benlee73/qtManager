@@ -48,6 +48,7 @@ describe("QT Manager desktop flow", () => {
         (await textOf('[data-testid="person-row"]')).includes("1 / 2권"),
       { timeoutMsg: "1권 일부 배부가 화면에 반영되지 않았습니다." },
     );
+    await setSelect('select[aria-label="신청자 필터"]', "all");
 
     await browser.execute(() => {
       document
@@ -79,6 +80,7 @@ describe("QT Manager desktop flow", () => {
   });
 
   it("searches by cohort and phone, blocks an expired subscription, renews it, and marks a last issue", async () => {
+    await setSelect('select[aria-label="신청자 필터"]', "all");
     const selected = await selectedIssue();
     const expiredStart = shiftIssue(selected, -6);
     const lastIssueStart = shiftIssue(selected, -5);
@@ -154,6 +156,7 @@ describe("QT Manager desktop flow", () => {
   });
 
   it("creates linked and general check items, transitions all states, and keeps pinned notes periodless", async () => {
+    await setSelect('select[aria-label="신청자 필터"]', "all");
     const generalItem = `가상 일반 확인 ${Date.now()}`;
     await setInput("#quick-item", generalItem);
     await waitForEnabled('[data-testid="add-general-check-item"]');
@@ -180,6 +183,8 @@ describe("QT Manager desktop flow", () => {
         .querySelector('[data-testid="person-row"]')
         ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
     });
+    await waitForText(".menu-popover", "확인할 일 추가");
+    await clickButtonByText("확인할 일 추가");
     await waitForText("#dialog-title", "확인할 일 추가");
     await setInput("textarea[name='content']", "가상 신청자 연결 확인");
     await clickButtonByText("확인할 일 저장");
@@ -218,6 +223,39 @@ describe("QT Manager desktop flow", () => {
     await clickButtonByText("복원");
     await clickButtonByText("", "닫기");
     await waitForText(".check-item-list", "가상 신청자 연결 확인");
+    const deletedCheckItemId = await browser.execute(() => {
+      const item = [
+        ...document.querySelectorAll<HTMLElement>(".check-item"),
+      ].find((candidate) =>
+        candidate.textContent?.includes("가상 신청자 연결 확인"),
+      );
+      item
+        ?.querySelector<HTMLButtonElement>(
+          'button[aria-label="확인할 일 삭제"]',
+        )
+        ?.click();
+      return item?.dataset.itemId ?? "";
+    });
+    expect(deletedCheckItemId).not.toBe("");
+    await waitForText(".delete-confirm-dialog", "영구 삭제");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          ".delete-confirm-dialog .danger-button",
+        )
+        ?.click();
+    });
+    await browser.waitUntil(
+      async () =>
+        !(await browser.execute(
+          (id) =>
+            [...document.querySelectorAll<HTMLElement>(".check-item")].some(
+              (item) => item.dataset.itemId === id,
+            ),
+          deletedCheckItemId,
+        )),
+      { timeoutMsg: "확인할 일 삭제가 반영되지 않았습니다." },
+    );
 
     await clickButtonByText("", "고정 메모 추가");
     await setInput("input[name='title']", "가상 보관 위치");
@@ -229,9 +267,40 @@ describe("QT Manager desktop flow", () => {
     ).toBe(true);
     await clickButtonByText("고정 메모 저장");
     await waitForText(".pinned-list", "가상 보관 위치");
-    await clickButtonByText("", "고정 메모 메뉴");
+    const deletedPinnedNoteId = await browser.execute(() => {
+      const note = [
+        ...document.querySelectorAll<HTMLElement>(".pinned-note"),
+      ].find((candidate) => candidate.textContent?.includes("가상 보관 위치"));
+      return note?.dataset.noteId ?? "";
+    });
+    expect(deletedPinnedNoteId).not.toBe("");
+    await clickPinnedNoteMenu(deletedPinnedNoteId);
     await clickButtonByText("고정 해제");
-    await waitForText(".pinned-list", "고정 해제됨");
+    expect(await textOf(".pinned-list")).not.toContain("고정 해제됨");
+    await clickPinnedNoteMenu(deletedPinnedNoteId);
+    await browser.execute(() => {
+      [...document.querySelectorAll<HTMLButtonElement>(".menu-popover button")]
+        .find((button) => button.textContent?.trim() === "삭제")
+        ?.click();
+    });
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          ".delete-confirm-dialog .danger-button",
+        )
+        ?.click();
+    });
+    await browser.waitUntil(
+      async () =>
+        !(await browser.execute(
+          (id) =>
+            [...document.querySelectorAll<HTMLElement>(".pinned-note")].some(
+              (note) => note.dataset.noteId === id,
+            ),
+          deletedPinnedNoteId,
+        )),
+      { timeoutMsg: "고정 메모 삭제가 반영되지 않았습니다." },
+    );
 
     await clickButtonByText("", "기타 기능");
     await clickButtonByText("현장 개별 구매");
@@ -269,6 +338,7 @@ describe("QT Manager desktop flow", () => {
   });
 
   it("keeps one action menu open, closes it outside, toggles selection and filters the list", async () => {
+    await setSelect('select[aria-label="신청자 필터"]', "all");
     await setInput('[data-testid="people-search"]', "");
     await clickButtonByText("", "기타 기능");
     expect(
@@ -325,13 +395,26 @@ describe("QT Manager desktop flow", () => {
       ),
     ).toBe("false");
 
-    await clickButtonByText("전체");
-    expect(
-      await browser.execute(
-        () => document.querySelector('select[aria-label="상태 필터"]') !== null,
-      ),
-    ).toBe(true);
-    await setSelect('select[aria-label="상태 필터"]', "completed");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLElement>('[data-testid="person-row"]')
+        ?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    });
+    await waitForText("#management-dialog-title", "QT 신청자 정보 수정");
+    await clickButtonByText("", "닫기");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLElement>('[data-testid="person-row"]')
+        ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+    });
+    await waitForText(".menu-popover", "신청자 정보 수정");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLElement>(".table-title")
+        ?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    });
+
+    await setSelect('select[aria-label="신청자 필터"]', "completed");
     await browser.waitUntil(
       async () =>
         browser.execute(() =>
@@ -343,10 +426,47 @@ describe("QT Manager desktop flow", () => {
         ),
       { timeoutMsg: "배부 완료 필터가 목록에 반영되지 않았습니다." },
     );
-    await clickButtonByText("남은 배부");
+    await setInput('[data-testid="people-search"]', "가상");
+    expect(
+      await browser.execute(() =>
+        [
+          ...document.querySelectorAll<HTMLElement>(
+            '[data-testid="person-row"]',
+          ),
+        ].every((row) => row.textContent?.includes("배부 완료")),
+      ),
+    ).toBe(true);
+    await setSelect('select[aria-label="신청자 필터"]', "remaining");
+
+    const sortLabelBefore = await browser.execute(
+      () =>
+        document
+          .querySelector<HTMLButtonElement>(
+            '.table-head button[aria-label^="신청자"]',
+          )
+          ?.getAttribute("aria-label") ?? "",
+    );
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          '.table-head button[aria-label^="신청자"]',
+        )
+        ?.click();
+    });
+    const sortLabelAfter = await browser.execute(
+      () =>
+        document
+          .querySelector<HTMLButtonElement>(
+            '.table-head button[aria-label^="신청자"]',
+          )
+          ?.getAttribute("aria-label") ?? "",
+    );
+    expect(sortLabelAfter).not.toBe(sortLabelBefore);
   });
 
-  it("persists theme and enforces the fixed scroll-safe four-stat layout", async () => {
+  it("persists theme and keeps the resizable scroll-safe four-stat layout", async () => {
+    // macOS가 이전 개발 실행의 창 크기를 복원할 수 있으므로 기준 크기로 맞춘다.
+    await browser.setWindowSize(2000, 1440);
     await browser.execute(() => {
       localStorage.removeItem("qt-manager-theme");
     });
@@ -355,12 +475,17 @@ describe("QT Manager desktop flow", () => {
     expect(
       await browser.execute(() => document.documentElement.dataset.theme),
     ).toBe("dark");
+    const darkScrollbar = await browser.execute(() =>
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--scroll-thumb")
+        .trim(),
+    );
     expect(await textOf(".info-tooltip [role='tooltip']")).toContain(
       "2026 교육국 제작",
     );
     expect(
       await browser.execute(
-        () => document.querySelector(".book-logo svg") !== null,
+        () => document.querySelector("img.book-logo") !== null,
       ),
     ).toBe(true);
     mkdirSync("test-results", { recursive: true });
@@ -373,6 +498,12 @@ describe("QT Manager desktop flow", () => {
     expect(
       await browser.execute(() => document.documentElement.dataset.theme),
     ).toBe("light");
+    const lightScrollbar = await browser.execute(() =>
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--scroll-thumb")
+        .trim(),
+    );
+    expect(lightScrollbar).not.toBe(darkScrollbar);
     await setInput('[data-testid="people-search"]', "일치하지않는가상검색");
     await waitForText(
       '[data-testid="empty-list"]',
@@ -446,8 +577,19 @@ describe("QT Manager desktop flow", () => {
     expect(windowContract).toEqual({
       width: 1000,
       height: 720,
-      resizable: false,
+      resizable: true,
     });
+    // WebDriver 크기는 Retina 물리 픽셀 기준이고 Tauri 계약은 논리 픽셀 기준이다.
+    await browser.setWindowSize(2200, 1560);
+    const resized = await invokeTauri<{
+      width: number;
+      height: number;
+      resizable: boolean;
+    }>("main_window_contract_command");
+    expect(resized.resizable).toBe(true);
+    expect(resized.width).toBeGreaterThanOrEqual(1090);
+    expect(resized.height).toBeGreaterThanOrEqual(770);
+    await browser.setWindowSize(2000, 1440);
   });
 
   it("registers, edits, renews and archives a person from management", async () => {
@@ -874,6 +1016,17 @@ async function clickButtonByText(text: string, ariaLabel?: string) {
     text,
     ariaLabel,
   );
+}
+
+async function clickPinnedNoteMenu(noteId: string) {
+  await browser.execute((id) => {
+    const note = [
+      ...document.querySelectorAll<HTMLElement>(".pinned-note"),
+    ].find((candidate) => candidate.dataset.noteId === id);
+    note
+      ?.querySelector<HTMLButtonElement>('button[aria-label="고정 메모 메뉴"]')
+      ?.click();
+  }, noteId);
 }
 
 async function dispatchShortcut(key: string, shiftKey = false) {
