@@ -49,7 +49,7 @@ jobs:
           dmg_path="$(find target/universal-apple-darwin/release/bundle/dmg -name '*.dmg' -maxdepth 1 -print -quit)"
           test -n "$app_path"
           test -n "$dmg_path"
-          lipo -verify_arch x86_64 arm64 "$app_path/Contents/MacOS/qt-manager"
+          lipo "$app_path/Contents/MacOS/qt-manager" -verify_arch x86_64 arm64
           hdiutil verify "$dmg_path"
       - name: Build Windows NSIS installer
         if: runner.os == 'Windows'

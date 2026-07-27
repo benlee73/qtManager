@@ -65,6 +65,81 @@ describe("QT Manager desktop flow", () => {
     );
   });
 
+  it("searches by cohort and phone, blocks an expired subscription, renews it, and marks a last issue", async () => {
+    const selected = await selectedIssue();
+    const expiredStart = shiftIssue(selected, -6);
+    const lastIssueStart = shiftIssue(selected, -5);
+    const unique = String(Date.now()).slice(-8);
+    const expiredName = `가상만료${unique}`;
+    const expiredPhone = `010-${unique.slice(0, 4)}-${unique.slice(4)}`;
+    const expiredId = await invokeTauri<string>("register_person_command", {
+      request: {
+        name: expiredName,
+        cohort: "00",
+        phone: expiredPhone,
+        personNote: null,
+        issueYear: expiredStart.year,
+        issueMonth: expiredStart.startMonth,
+        quantity: 1,
+        appliedAt: null,
+        memo: null,
+        confirmDuplicate: true,
+      },
+    });
+
+    await setInput('[data-testid="people-search"]', `00 ${expiredName}`);
+    await waitForText('[data-testid="person-row"]', "구독 만료");
+    expect(
+      await browser.execute(
+        () =>
+          document.querySelector<HTMLButtonElement>(
+            '[data-testid="distribute"]',
+          )?.disabled,
+      ),
+    ).toBe(true);
+
+    await setInput(
+      '[data-testid="people-search"]',
+      expiredPhone.replaceAll("-", ""),
+    );
+    await waitForText('[data-testid="person-row"]', expiredName);
+    await invokeTauri("renew_subscription_command", {
+      request: {
+        personId: expiredId,
+        issueYear: selected.year,
+        issueMonth: selected.startMonth,
+        quantity: 1,
+        appliedAt: null,
+        memo: null,
+        confirmOverlap: false,
+      },
+    });
+    await setInput('[data-testid="people-search"]', "");
+    await setInput('[data-testid="people-search"]', expiredName);
+    await waitForText('[data-testid="person-row"]', "1권 배부");
+    await clickButtonByText("1권 배부");
+    await waitForText('[data-testid="person-row"]', "배부 완료");
+
+    const lastName = `가상마지막${unique}`;
+    await invokeTauri<string>("register_person_command", {
+      request: {
+        name: lastName,
+        cohort: "01",
+        phone: null,
+        personNote: null,
+        issueYear: lastIssueStart.year,
+        issueMonth: lastIssueStart.startMonth,
+        quantity: 1,
+        appliedAt: null,
+        memo: null,
+        confirmDuplicate: true,
+      },
+    });
+    await setInput('[data-testid="people-search"]', lastName);
+    await waitForText('[data-testid="person-row"]', "이번 호 마지막");
+    await waitForText('[data-testid="person-row"]', "까지");
+  });
+
   it("creates linked and general check items, transitions all states, and keeps pinned notes periodless", async () => {
     await setInput("#quick-item", "가상 일반 확인 필요");
     await waitForEnabled('[data-testid="add-general-check-item"]');
@@ -566,6 +641,23 @@ async function configureOperatorIfNeeded() {
   await browser.waitUntil(async () => (await textOf("#dialog-title")) === "", {
     timeoutMsg: "담당자 설정 창이 닫히지 않았습니다.",
   });
+}
+
+async function selectedIssue() {
+  const label = await textOf('[data-testid="selected-issue"]');
+  const match = label.match(/(\d{4})년\s+(\d{1,2})~/);
+  if (!match) throw new Error(`선택 호를 해석하지 못했습니다: ${label}`);
+  return { year: Number(match[1]), startMonth: Number(match[2]) };
+}
+
+function shiftIssue(
+  issue: { year: number; startMonth: number },
+  amount: number,
+) {
+  const absolute = issue.year * 6 + (issue.startMonth - 1) / 2 + amount;
+  const year = Math.floor(absolute / 6);
+  const index = ((absolute % 6) + 6) % 6;
+  return { year, startMonth: index * 2 + 1 };
 }
 
 async function setInput(selector: string, value: string) {
