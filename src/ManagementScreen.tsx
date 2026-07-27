@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { EditDialog, RegisterDialog, RenewDialog } from "./Phase3Dialogs";
 import { ApplicationImportDialog } from "./ApplicationImportDialog";
+import { HandoverDialog } from "./HandoverDialog";
 import type { Issue } from "./phase2";
 import {
   type PeopleManagement,
@@ -14,6 +15,7 @@ import {
 type ManagementDialog =
   | { type: "register" }
   | { type: "applications" }
+  | { type: "handover" }
   | { type: "edit"; person: PersonDetail }
   | { type: "renew"; person: PersonDetail }
   | null;
@@ -84,6 +86,14 @@ export function ManagementScreen({ issue }: { issue: Issue }) {
           <p>과거 구독과 배부 기록을 보존하면서 정보를 보완하고 갱신합니다.</p>
         </div>
         <div className="heading-actions">
+          <button
+            className="secondary-button"
+            data-testid="open-handover"
+            type="button"
+            onClick={() => setDialog({ type: "handover" })}
+          >
+            데이터 인수인계
+          </button>
           <button
             className="secondary-button"
             data-testid="open-application-import"
@@ -316,6 +326,9 @@ export function ManagementScreen({ issue }: { issue: Issue }) {
             await refresh();
           }}
         />
+      )}
+      {dialog?.type === "handover" && (
+        <HandoverDialog onClose={() => setDialog(null)} onChanged={refresh} />
       )}
       {dialog?.type === "edit" && (
         <EditDialog

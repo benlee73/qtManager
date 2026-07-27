@@ -415,6 +415,126 @@ describe("QT Manager desktop flow", () => {
     await clickButtonByText("", "닫기");
     await clickButtonByText("현장 배부");
   });
+
+  it("exports, replaces, restores and rejects a damaged handover workbook", async () => {
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
+        ?.click();
+    });
+    await waitForText("h2", "신청자 정보와 전체 이력");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="open-handover"]')
+        ?.click();
+    });
+    await waitForText("#handover-title", "데이터 인수인계");
+    await waitForText(
+      '[data-testid="privacy-warning"]',
+      "파일은 암호화되지 않습니다",
+    );
+    expect(
+      await browser.execute(
+        () =>
+          document.querySelector('[data-testid="export-state"]') !== null &&
+          document.querySelector('[data-testid="choose-state-import"]') !==
+            null,
+      ),
+    ).toBe(true);
+    mkdirSync("test-results", { recursive: true });
+    await browser.saveScreenshot("test-results/ui-handover.png");
+    await clickButtonByText("", "닫기");
+
+    const paths = await invokeTauri<{
+      exportPath: string;
+      corruptPath: string;
+    }>("state_transfer_e2e_paths_command");
+    const exported = await invokeTauri<{
+      people: number;
+      subscriptions: number;
+    }>("export_state_command", { path: paths.exportPath });
+    expect(exported.people).toBeGreaterThan(0);
+    const preview = await invokeTauri<{
+      formatVersion: number;
+      counts: { people: number };
+    }>("preview_state_import_command", { path: paths.exportPath });
+    expect(preview.formatVersion).toBe(1);
+    expect(preview.counts.people).toBe(exported.people);
+
+    const unique = `가상인수인계${Date.now()}`;
+    await invokeTauri<string>("register_person_command", {
+      request: {
+        name: unique,
+        cohort: "00",
+        phone: "010-0000-9753",
+        personNote: null,
+        issueYear: 2026,
+        issueMonth: 7,
+        quantity: 1,
+        appliedAt: null,
+        memo: null,
+        confirmDuplicate: true,
+      },
+    });
+    let management = await invokeTauri<{ people: { name: string }[] }>(
+      "load_people_management_command",
+      { query: unique, includeArchived: true },
+    );
+    expect(management.people.some((person) => person.name === unique)).toBe(
+      true,
+    );
+
+    await invokeTauri("apply_state_import_command", {
+      sourcePath: paths.exportPath,
+      sourceFileName: "handover.xlsx",
+      mode: "replace",
+      personResolutions: [],
+    });
+    management = await invokeTauri("load_people_management_command", {
+      query: unique,
+      includeArchived: true,
+    });
+    expect(management.people).toHaveLength(0);
+
+    const restore = await invokeTauri<{ sourceFileName: string }>(
+      "latest_restore_point_command",
+    );
+    expect(restore.sourceFileName).toBe("handover.xlsx");
+    await invokeTauri("undo_state_import_command");
+    management = await invokeTauri("load_people_management_command", {
+      query: unique,
+      includeArchived: true,
+    });
+    expect(management.people.some((person) => person.name === unique)).toBe(
+      true,
+    );
+
+    const damagedError = await browser.execute(async (path) => {
+      try {
+        await (
+          window as unknown as {
+            __TAURI_INTERNALS__: {
+              invoke: (
+                command: string,
+                args?: Record<string, unknown>,
+              ) => Promise<unknown>;
+            };
+          }
+        ).__TAURI_INTERNALS__.invoke("preview_state_import_command", { path });
+        return "";
+      } catch (reason) {
+        return String(reason);
+      }
+    }, paths.corruptPath);
+    expect(damagedError).toContain("XLSX");
+    management = await invokeTauri("load_people_management_command", {
+      query: unique,
+      includeArchived: true,
+    });
+    expect(management.people.some((person) => person.name === unique)).toBe(
+      true,
+    );
+  });
 });
 
 async function configureOperatorIfNeeded() {
@@ -541,5 +661,26 @@ async function textOf(selector: string) {
     (targetSelector) =>
       document.querySelector(targetSelector)?.textContent?.trim() ?? "",
     selector,
+  );
+}
+
+async function invokeTauri<T = unknown>(
+  command: string,
+  args?: Record<string, unknown>,
+) {
+  return browser.execute(
+    (nextCommand, nextArgs) =>
+      (
+        window as unknown as {
+          __TAURI_INTERNALS__: {
+            invoke: (
+              command: string,
+              args?: Record<string, unknown>,
+            ) => Promise<T>;
+          };
+        }
+      ).__TAURI_INTERNALS__.invoke(nextCommand, nextArgs),
+    command,
+    args,
   );
 }
