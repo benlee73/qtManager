@@ -66,14 +66,19 @@ jobs:
           if ($install.ExitCode -ne 0) {
             throw "Windows NSIS silent installation failed with exit code $($install.ExitCode)."
           }
-          $entry = Get-ChildItem "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall" |
+          $entry = Get-ChildItem "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall" |
             Get-ItemProperty |
             Where-Object { $_.DisplayName -eq "QT Manager" } |
             Select-Object -First 1
-          if ($null -eq $entry -or -not (Test-Path $entry.InstallLocation)) {
-            throw "Installed QT Manager location was not registered."
+          $registeredLocation = if ($null -ne $entry) { $entry.InstallLocation } else { $null }
+          $fallbackLocation = Join-Path $env:LOCALAPPDATA "QT Manager"
+          $installLocation = @($registeredLocation, $fallbackLocation) |
+            Where-Object { $_ -and (Test-Path $_) } |
+            Select-Object -First 1
+          if (-not $installLocation) {
+            throw "Installed QT Manager location was not found."
           }
-          $application = Get-ChildItem $entry.InstallLocation -Filter *.exe |
+          $application = Get-ChildItem $installLocation -Filter *.exe |
             Where-Object { $_.Name -notlike "uninstall*" } |
             Select-Object -First 1
           if ($null -eq $application) {
