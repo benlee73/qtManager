@@ -1,8 +1,7 @@
 use qt_domain::{
-    ChangeLog, Distribution, DistributionStatus, Issue, OneTimePurchase, OperationalNote,
-    OperationalNoteStatus, Person, PersonStatus, QuickNote, QuickNoteStatus, Subscription,
-    SubscriptionSource, SubscriptionStatus, assess_distribution, normalize_phone,
-    plan_distribution,
+    ChangeLog, CheckItem, CheckItemStatus, Distribution, DistributionStatus, Issue,
+    OneTimePurchase, Person, PersonStatus, PinnedNote, PinnedNoteStatus, Subscription,
+    SubscriptionSource, SubscriptionStatus, assess_distribution, plan_distribution,
 };
 use serde::{Deserialize, Serialize};
 
@@ -27,7 +26,7 @@ pub struct DeskRecord {
     pub person: Person,
     pub subscriptions: Vec<Subscription>,
     pub distributions: Vec<Distribution>,
-    pub has_open_quick_note: bool,
+    pub has_check_item: bool,
 }
 
 pub trait DistributionDeskRepository {
@@ -50,14 +49,10 @@ pub trait DistributionDeskRepository {
         subscription: &Subscription,
         change: &ChangeLog,
     ) -> Result<(), PortError>;
-    fn list_quick_notes(&self) -> Result<Vec<QuickNote>, PortError>;
-    fn save_quick_note(&mut self, note: &QuickNote, change: &ChangeLog) -> Result<(), PortError>;
-    fn list_operational_notes(&self) -> Result<Vec<OperationalNote>, PortError>;
-    fn save_operational_note(
-        &mut self,
-        note: &OperationalNote,
-        change: &ChangeLog,
-    ) -> Result<(), PortError>;
+    fn list_check_items(&self) -> Result<Vec<CheckItem>, PortError>;
+    fn save_check_item(&mut self, item: &CheckItem, change: &ChangeLog) -> Result<(), PortError>;
+    fn list_pinned_notes(&self) -> Result<Vec<PinnedNote>, PortError>;
+    fn save_pinned_note(&mut self, note: &PinnedNote, change: &ChangeLog) -> Result<(), PortError>;
     fn save_purchase(
         &mut self,
         purchase: &OneTimePurchase,
@@ -78,8 +73,8 @@ pub struct DistributionDesk {
     pub operator_name: Option<String>,
     pub totals: DeskTotals,
     pub people: Vec<DeskPerson>,
-    pub quick_notes: Vec<QuickNoteView>,
-    pub operational_notes: Vec<OperationalNoteView>,
+    pub check_items: Vec<CheckItemView>,
+    pub pinned_notes: Vec<PinnedNoteView>,
     pub purchase_count: u32,
     pub purchased_quantity: u32,
     pub can_undo_distribution: bool,
@@ -121,7 +116,7 @@ pub struct DeskPerson {
     pub subscription_id: Option<String>,
     pub name: String,
     pub cohort: Option<String>,
-    pub phone_suffix: Option<String>,
+    pub phone: Option<String>,
     pub person_status: String,
     pub subscription_status: String,
     pub distribution_status: String,
@@ -131,28 +126,29 @@ pub struct DeskPerson {
     pub last_issue: Option<String>,
     pub end_date: Option<String>,
     pub is_last_issue: bool,
-    pub has_open_quick_note: bool,
+    pub has_check_item: bool,
     pub can_distribute: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct QuickNoteView {
+pub struct CheckItemView {
     pub id: String,
     pub person_id: Option<String>,
     pub summary: String,
     pub operator_name: String,
     pub updated_at: String,
+    pub status: String,
+    pub person_name: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct OperationalNoteView {
+pub struct PinnedNoteView {
     pub id: String,
     pub title: String,
     pub content: String,
     pub is_pinned: bool,
-    pub active_until: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -185,18 +181,32 @@ pub struct CreateDraftRequest {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CreateQuickNoteRequest {
+pub struct CreateCheckItemRequest {
     pub person_id: Option<String>,
     pub content: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CreateOperationalNoteRequest {
+pub struct CreatePinnedNoteRequest {
     pub title: String,
     pub content: String,
-    pub active_until: Option<String>,
     pub is_pinned: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateCheckItemStatusRequest {
+    pub id: String,
+    pub status: CheckItemStatus,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatePinnedNoteRequest {
+    pub id: String,
+    pub is_pinned: Option<bool>,
+    pub archived: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -243,32 +253,39 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
             }
         }
     }
+    let person_names = people
+        .iter()
+        .map(|person| (person.person_id.clone(), person.name.clone()))
+        .collect::<std::collections::HashMap<_, _>>();
     if query.trim().is_empty() {
         people.retain(|person| person.can_distribute && person.remaining_quantity > 0);
     }
-
-    let quick_notes = repository
-        .list_quick_notes()?
+    let check_items = repository
+        .list_check_items()?
         .into_iter()
-        .filter(|note| note.status == QuickNoteStatus::Open)
-        .map(|note| QuickNoteView {
-            id: note.id,
-            person_id: note.person_id,
-            summary: summarize(&note.content, 48),
-            operator_name: note.operator_name,
-            updated_at: note.updated_at,
+        .map(|item| CheckItemView {
+            id: item.id,
+            person_name: item
+                .person_id
+                .as_ref()
+                .and_then(|id| person_names.get(id))
+                .cloned(),
+            person_id: item.person_id,
+            summary: summarize(&item.content, 48),
+            operator_name: item.operator_name,
+            updated_at: item.updated_at,
+            status: check_item_status_label(item.status).into(),
         })
         .collect();
-    let operational_notes = repository
-        .list_operational_notes()?
+    let pinned_notes = repository
+        .list_pinned_notes()?
         .into_iter()
-        .filter(|note| note.is_active_on(&clock.today()))
-        .map(|note| OperationalNoteView {
+        .filter(PinnedNote::is_visible)
+        .map(|note| PinnedNoteView {
             id: note.id,
             title: note.title,
             content: note.content,
             is_pinned: note.is_pinned,
-            active_until: note.active_until,
         })
         .collect();
     let (purchase_count, purchased_quantity) = repository.purchase_summary(selected_issue)?;
@@ -282,8 +299,8 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
         operator_name: repository.current_operator()?,
         totals,
         people,
-        quick_notes,
-        operational_notes,
+        check_items,
+        pinned_notes,
         purchase_count,
         purchased_quantity,
         can_undo_distribution,
@@ -314,11 +331,7 @@ fn desk_person(record: DeskRecord, issue: Issue) -> Result<DeskPerson, Applicati
         subscription_id: None,
         name: record.person.name,
         cohort: record.person.cohort,
-        phone_suffix: record
-            .person
-            .normalized_phone
-            .as_deref()
-            .and_then(phone_suffix),
+        phone: record.person.phone,
         person_status: match record.person.status {
             PersonStatus::Active => "정식 등록",
             PersonStatus::Draft => "정보 보완 필요",
@@ -333,7 +346,7 @@ fn desk_person(record: DeskRecord, issue: Issue) -> Result<DeskPerson, Applicati
         last_issue: None,
         end_date: None,
         is_last_issue: false,
-        has_open_quick_note: record.has_open_quick_note,
+        has_check_item: record.has_check_item,
         can_distribute: false,
     };
     let Some(subscription) = selected else {
@@ -486,7 +499,7 @@ where
         normalized_phone: request.phone.as_deref().map(normalize_phone),
         phone: clean_optional(request.phone),
         status: PersonStatus::Draft,
-        special_note: None,
+        person_note: None,
         created_at: now.clone(),
         updated_at: now.clone(),
     };
@@ -519,10 +532,10 @@ where
     Ok(())
 }
 
-pub fn create_quick_note<R, C, I>(
+pub fn create_check_item<R, C, I>(
     repository: &mut R,
     services: &RuntimeServices<'_, C, I>,
-    request: CreateQuickNoteRequest,
+    request: CreateCheckItemRequest,
 ) -> Result<(), ApplicationError>
 where
     R: DistributionDeskRepository,
@@ -530,66 +543,75 @@ where
     I: IdGenerator,
 {
     let now = services.clock.now();
-    let note = QuickNote {
+    let item = CheckItem {
         id: services.ids.next_id(),
         person_id: request.person_id,
         content: request.content.trim().into(),
-        status: QuickNoteStatus::Open,
+        status: CheckItemStatus::NeedsCheck,
         operator_name: required_operator(repository)?,
         created_at: now.clone(),
         updated_at: now.clone(),
-        completed_at: None,
+        checked_at: None,
     };
-    note.validate()?;
+    item.validate()?;
     let change = change_log(
         services.ids.next_id(),
         &now,
-        &note.operator_name,
-        "quick_note_created",
-        "quick_note",
-        &note.id,
-        "현장 기록 추가",
+        &item.operator_name,
+        "check_item_created",
+        "check_item",
+        &item.id,
+        if item.person_id.is_some() {
+            "신청자 연결 확인할 일 추가"
+        } else {
+            "일반 확인할 일 추가"
+        },
     );
-    repository.save_quick_note(&note, &change)?;
+    repository.save_check_item(&item, &change)?;
     Ok(())
 }
 
-pub fn complete_quick_note<R, C, I>(
+pub fn update_check_item_status<R, C, I>(
     repository: &mut R,
     services: &RuntimeServices<'_, C, I>,
-    id: &str,
+    request: UpdateCheckItemStatusRequest,
 ) -> Result<(), ApplicationError>
 where
     R: DistributionDeskRepository,
     C: Clock,
     I: IdGenerator,
 {
-    let mut note = repository
-        .list_quick_notes()?
+    let mut item = repository
+        .list_check_items()?
         .into_iter()
-        .find(|note| note.id == id)
+        .find(|item| item.id == request.id)
         .ok_or(ApplicationError::MissingDeskRecord)?;
     let now = services.clock.now();
-    note.status = QuickNoteStatus::Completed;
-    note.completed_at = Some(now.clone());
-    note.updated_at = now.clone();
+    item.status = request.status;
+    item.checked_at = (request.status == CheckItemStatus::Checked).then(|| now.clone());
+    item.updated_at = now.clone();
+    let (action, summary) = match request.status {
+        CheckItemStatus::NeedsCheck => ("check_item_reopened", "확인할 일 확인 필요"),
+        CheckItemStatus::Checked => ("check_item_checked", "확인할 일 확인 완료"),
+        CheckItemStatus::Archived => ("check_item_archived", "확인할 일 보관"),
+    };
     let change = change_log(
         services.ids.next_id(),
         &now,
         &required_operator(repository)?,
-        "quick_note_completed",
-        "quick_note",
-        &note.id,
-        "현장 기록 완료",
+        action,
+        "check_item",
+        &item.id,
+        summary,
     );
-    repository.save_quick_note(&note, &change)?;
+    repository.save_check_item(&item, &change)?;
     Ok(())
 }
 
-pub fn create_operational_note<R, C, I>(
+pub fn create_pinned_note<R, C, I>(
     repository: &mut R,
     services: &RuntimeServices<'_, C, I>,
-    request: CreateOperationalNoteRequest,
+    request: CreatePinnedNoteRequest,
 ) -> Result<(), ApplicationError>
 where
     R: DistributionDeskRepository,
@@ -597,14 +619,12 @@ where
     I: IdGenerator,
 {
     let now = services.clock.now();
-    let note = OperationalNote {
+    let note = PinnedNote {
         id: services.ids.next_id(),
         title: request.title.trim().into(),
         content: request.content.trim().into(),
-        active_from: services.clock.today(),
-        active_until: clean_optional(request.active_until),
         is_pinned: request.is_pinned,
-        status: OperationalNoteStatus::Active,
+        status: PinnedNoteStatus::Active,
         operator_name: required_operator(repository)?,
         created_at: now.clone(),
         updated_at: now.clone(),
@@ -615,12 +635,56 @@ where
         services.ids.next_id(),
         &now,
         &note.operator_name,
-        "operational_note_created",
-        "operational_note",
+        "pinned_note_created",
+        "pinned_note",
         &note.id,
-        "운영 메모 추가",
+        "고정 메모 추가",
     );
-    repository.save_operational_note(&note, &change)?;
+    repository.save_pinned_note(&note, &change)?;
+    Ok(())
+}
+
+pub fn update_pinned_note<R, C, I>(
+    repository: &mut R,
+    services: &RuntimeServices<'_, C, I>,
+    request: UpdatePinnedNoteRequest,
+) -> Result<(), ApplicationError>
+where
+    R: DistributionDeskRepository,
+    C: Clock,
+    I: IdGenerator,
+{
+    let mut note = repository
+        .list_pinned_notes()?
+        .into_iter()
+        .find(|note| note.id == request.id)
+        .ok_or(ApplicationError::MissingDeskRecord)?;
+    let now = services.clock.now();
+    if let Some(is_pinned) = request.is_pinned {
+        note.is_pinned = is_pinned;
+    }
+    if request.archived {
+        note.status = PinnedNoteStatus::Archived;
+        note.archived_at = Some(now.clone());
+    }
+    note.updated_at = now.clone();
+    let summary = if request.archived {
+        "고정 메모 보관"
+    } else if note.is_pinned {
+        "고정 메모 상단 고정"
+    } else {
+        "고정 메모 상단 고정 해제"
+    };
+    let change = change_log(
+        services.ids.next_id(),
+        &now,
+        &required_operator(repository)?,
+        "pinned_note_updated",
+        "pinned_note",
+        &note.id,
+        summary,
+    );
+    repository.save_pinned_note(&note, &change)?;
     Ok(())
 }
 
@@ -755,14 +819,17 @@ fn recommended_issue(today: &str) -> Result<Issue, ApplicationError> {
     Ok(Issue::new(year, start_month)?)
 }
 
-fn phone_suffix(phone: &str) -> Option<String> {
-    (phone.len() >= 4).then(|| phone[phone.len() - 4..].to_owned())
-}
-
 fn clean_optional(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
+}
+
+fn normalize_phone(value: &str) -> String {
+    value
+        .chars()
+        .filter(char::is_ascii_digit)
+        .collect::<String>()
 }
 
 fn summarize(value: &str, max_chars: usize) -> String {
@@ -781,6 +848,14 @@ fn subscription_status(status: SubscriptionStatus) -> &'static str {
         SubscriptionStatus::Active => "유효",
         SubscriptionStatus::Expired => "구독 만료",
         SubscriptionStatus::NeedsReview => "확인 필요",
+    }
+}
+
+fn check_item_status_label(status: CheckItemStatus) -> &'static str {
+    match status {
+        CheckItemStatus::NeedsCheck => "확인 필요",
+        CheckItemStatus::Checked => "확인 완료",
+        CheckItemStatus::Archived => "보관",
     }
 }
 
@@ -845,8 +920,8 @@ mod tests {
     struct MemoryRepository {
         operator: Option<String>,
         records: Vec<DeskRecord>,
-        quick_notes: Vec<QuickNote>,
-        operational_notes: Vec<OperationalNote>,
+        check_items: Vec<CheckItem>,
+        pinned_notes: Vec<PinnedNote>,
         distributions: Vec<Distribution>,
         purchases: Vec<OneTimePurchase>,
     }
@@ -909,31 +984,32 @@ mod tests {
                 person: person.clone(),
                 subscriptions: vec![subscription.clone()],
                 distributions: vec![],
-                has_open_quick_note: false,
+                has_check_item: false,
             });
             Ok(())
         }
-        fn list_quick_notes(&self) -> Result<Vec<QuickNote>, PortError> {
-            Ok(self.quick_notes.clone())
+        fn list_check_items(&self) -> Result<Vec<CheckItem>, PortError> {
+            Ok(self.check_items.clone())
         }
-        fn save_quick_note(
+        fn save_check_item(
             &mut self,
-            note: &QuickNote,
+            item: &CheckItem,
             _change: &ChangeLog,
         ) -> Result<(), PortError> {
-            self.quick_notes.retain(|item| item.id != note.id);
-            self.quick_notes.push(note.clone());
+            self.check_items.retain(|current| current.id != item.id);
+            self.check_items.push(item.clone());
             Ok(())
         }
-        fn list_operational_notes(&self) -> Result<Vec<OperationalNote>, PortError> {
-            Ok(self.operational_notes.clone())
+        fn list_pinned_notes(&self) -> Result<Vec<PinnedNote>, PortError> {
+            Ok(self.pinned_notes.clone())
         }
-        fn save_operational_note(
+        fn save_pinned_note(
             &mut self,
-            note: &OperationalNote,
+            note: &PinnedNote,
             _change: &ChangeLog,
         ) -> Result<(), PortError> {
-            self.operational_notes.push(note.clone());
+            self.pinned_notes.retain(|current| current.id != note.id);
+            self.pinned_notes.push(note.clone());
             Ok(())
         }
         fn save_purchase(
@@ -990,7 +1066,7 @@ mod tests {
             phone: Some("010-1234-5678".into()),
             normalized_phone: Some("01012345678".into()),
             status: PersonStatus::Active,
-            special_note: None,
+            person_note: None,
             created_at: now.into(),
             updated_at: now.into(),
         };
@@ -1011,7 +1087,7 @@ mod tests {
             }],
             person,
             distributions: vec![],
-            has_open_quick_note: true,
+            has_check_item: true,
         }
     }
 
@@ -1034,7 +1110,7 @@ mod tests {
         assert_eq!(desk.totals.target_people, 1);
         assert_eq!(desk.totals.remaining_people, 1);
         assert_eq!(desk.totals.target_quantity, 2);
-        assert_eq!(desk.people[0].phone_suffix.as_deref(), Some("5678"));
+        assert_eq!(desk.people[0].phone.as_deref(), Some("010-1234-5678"));
     }
 
     #[test]
@@ -1103,7 +1179,7 @@ mod tests {
     }
 
     #[test]
-    fn quick_and_operational_notes_remain_separate() {
+    fn check_items_and_pinned_notes_remain_separate_and_support_all_states() {
         let mut repository = MemoryRepository {
             operator: Some("담당자".into()),
             ..Default::default()
@@ -1113,29 +1189,49 @@ mod tests {
             clock: &FixedClock,
             ids: &ids,
         };
-        create_quick_note(
+        create_check_item(
             &mut repository,
             &services,
-            CreateQuickNoteRequest {
+            CreateCheckItemRequest {
                 person_id: None,
                 content: "신규 신청 확인".into(),
             },
         )
         .unwrap();
-        create_operational_note(
+        create_pinned_note(
             &mut repository,
             &services,
-            CreateOperationalNoteRequest {
+            CreatePinnedNoteRequest {
                 title: "보관 위치".into(),
                 content: "예배당 뒤편".into(),
-                active_until: None,
                 is_pinned: true,
             },
         )
         .unwrap();
 
-        assert_eq!(repository.quick_notes.len(), 1);
-        assert_eq!(repository.operational_notes.len(), 1);
+        let item_id = repository.check_items[0].id.clone();
+        update_check_item_status(
+            &mut repository,
+            &services,
+            UpdateCheckItemStatusRequest {
+                id: item_id.clone(),
+                status: CheckItemStatus::Checked,
+            },
+        )
+        .unwrap();
+        update_check_item_status(
+            &mut repository,
+            &services,
+            UpdateCheckItemStatusRequest {
+                id: item_id,
+                status: CheckItemStatus::Archived,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(repository.check_items[0].status, CheckItemStatus::Archived);
+        assert_eq!(repository.pinned_notes.len(), 1);
+        assert!(repository.pinned_notes[0].is_visible());
     }
 
     #[test]

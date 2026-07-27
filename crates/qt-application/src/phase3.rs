@@ -57,9 +57,9 @@ pub struct PersonSummary {
     pub id: String,
     pub name: String,
     pub cohort: Option<String>,
-    pub phone_suffix: Option<String>,
+    pub phone: Option<String>,
     pub status: String,
-    pub special_note: Option<String>,
+    pub person_note: Option<String>,
     pub subscription_count: u32,
     pub latest_last_issue: Option<String>,
 }
@@ -72,7 +72,7 @@ pub struct PersonDetail {
     pub cohort: Option<String>,
     pub phone: Option<String>,
     pub status: String,
-    pub special_note: Option<String>,
+    pub person_note: Option<String>,
     pub subscriptions: Vec<SubscriptionView>,
     pub distributions: Vec<DistributionView>,
 }
@@ -105,7 +105,7 @@ pub struct DuplicateCandidate {
     pub id: String,
     pub name: String,
     pub cohort: Option<String>,
-    pub phone_suffix: Option<String>,
+    pub phone: Option<String>,
     pub status: String,
 }
 
@@ -115,7 +115,7 @@ pub struct RegisterPersonRequest {
     pub name: String,
     pub cohort: Option<String>,
     pub phone: Option<String>,
-    pub special_note: Option<String>,
+    pub person_note: Option<String>,
     pub issue_year: i32,
     pub issue_month: u8,
     pub quantity: u32,
@@ -131,7 +131,7 @@ pub struct UpdatePersonRequest {
     pub name: String,
     pub cohort: Option<String>,
     pub phone: Option<String>,
-    pub special_note: Option<String>,
+    pub person_note: Option<String>,
     pub confirm_duplicate: bool,
 }
 
@@ -176,9 +176,9 @@ pub fn load_people_management<R: PeopleManagementRepository>(
             id: person.id,
             name: person.name,
             cohort: person.cohort,
-            phone_suffix: phone_suffix(person.normalized_phone.as_deref()),
+            phone: person.phone,
             status: person_status(person.status).into(),
-            special_note: person.special_note,
+            person_note: person.person_note,
             subscription_count: record
                 .subscriptions
                 .iter()
@@ -236,7 +236,7 @@ pub fn load_person_detail<R: PeopleManagementRepository>(
         cohort: record.person.cohort,
         phone: record.person.phone,
         status: person_status(record.person.status).into(),
-        special_note: record.person.special_note,
+        person_note: record.person.person_note,
         subscriptions,
         distributions,
     })
@@ -263,7 +263,7 @@ pub fn preview_duplicates<R: PeopleManagementRepository>(
             id: person.id,
             name: person.name,
             cohort: person.cohort,
-            phone_suffix: phone_suffix(person.normalized_phone.as_deref()),
+            phone: person.phone,
             status: person_status(person.status).into(),
         })
         .collect())
@@ -300,7 +300,7 @@ where
         phone,
         normalized_phone,
         status: PersonStatus::Active,
-        special_note: clean_owned(request.special_note),
+        person_note: clean_owned(request.person_note),
         created_at: now.clone(),
         updated_at: now.clone(),
     };
@@ -371,7 +371,7 @@ where
     person.cohort = clean_owned(request.cohort);
     person.phone = phone;
     person.normalized_phone = normalized_phone;
-    person.special_note = clean_owned(request.special_note);
+    person.person_note = clean_owned(request.person_note);
     person.status = PersonStatus::Active;
     person.updated_at = runtime.clock.now();
     person.validate()?;
@@ -551,13 +551,6 @@ fn clean_owned(value: Option<String>) -> Option<String> {
         .filter(|item| !item.is_empty())
 }
 
-fn phone_suffix(value: Option<&str>) -> Option<String> {
-    value
-        .filter(|item| !item.is_empty())
-        .map(|item| item.chars().rev().take(4).collect::<String>())
-        .map(|item| item.chars().rev().collect())
-}
-
 fn person_status(status: PersonStatus) -> &'static str {
     match status {
         PersonStatus::Active => "정식 등록",
@@ -710,7 +703,7 @@ mod tests {
                 name: "가상정식".into(),
                 cohort: Some("00".into()),
                 phone: Some("010-0000-1234".into()),
-                special_note: Some("두 권 신청".into()),
+                person_note: Some("두 권 신청".into()),
                 issue_year: 2026,
                 issue_month: 7,
                 quantity: 2,
@@ -740,7 +733,7 @@ mod tests {
             phone: None,
             normalized_phone: None,
             status: PersonStatus::Draft,
-            special_note: None,
+            person_note: None,
             created_at: now.clone(),
             updated_at: now.clone(),
         };
@@ -772,7 +765,7 @@ mod tests {
                 name: "가상정식".into(),
                 cohort: Some("00".into()),
                 phone: Some("010-0000-9999".into()),
-                special_note: None,
+                person_note: None,
                 confirm_duplicate: false,
             },
         )
@@ -806,7 +799,7 @@ mod tests {
             phone: Some("010-0000-1111".into()),
             normalized_phone: Some("01000001111".into()),
             status: PersonStatus::Active,
-            special_note: None,
+            person_note: None,
             created_at: now.clone(),
             updated_at: now,
         };
@@ -826,7 +819,7 @@ mod tests {
                 name: "가상중복".into(),
                 cohort: Some("00".into()),
                 phone: Some("01000001111".into()),
-                special_note: None,
+                person_note: None,
                 issue_year: 2026,
                 issue_month: 7,
                 quantity: 1,

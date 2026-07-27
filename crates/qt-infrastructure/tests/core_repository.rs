@@ -12,8 +12,8 @@ fn migrates_idempotently_and_runs_atomic_core_round_trip() {
 
     let first = repository.migrate_core().unwrap();
     let second = repository.migrate_core().unwrap();
-    assert_eq!(first.schema_version, 2);
-    assert_eq!(first.newly_applied, 2);
+    assert_eq!(first.schema_version, 3);
+    assert_eq!(first.newly_applied, 3);
     assert_eq!(second.newly_applied, 0);
 
     let logger = StderrEventLogger;
@@ -55,7 +55,7 @@ fn upgrades_phase0_database_without_losing_probe_row() {
     let report = repository.migrate_core().unwrap();
     drop(repository);
 
-    assert_eq!(report.newly_applied, 1);
+    assert_eq!(report.newly_applied, 2);
     let connection = Connection::open(&path).unwrap();
     let count: i64 = connection
         .query_row("SELECT COUNT(*) FROM phase0_people", [], |row| row.get(0))
@@ -77,7 +77,7 @@ fn rolls_back_person_when_subscription_write_fails() {
         phone: None,
         normalized_phone: None,
         status: PersonStatus::Active,
-        special_note: None,
+        person_note: None,
         created_at: now.into(),
         updated_at: now.into(),
     };

@@ -70,7 +70,7 @@ impl CoreRepository for SqliteCoreRepository {
         self.connection
             .query_row(
                 "
-                SELECT id, name, cohort, phone, normalized_phone, status, special_note,
+                SELECT id, name, cohort, phone, normalized_phone, status, person_note,
                        created_at, updated_at
                 FROM people
                 WHERE id = ?1
@@ -153,7 +153,7 @@ pub(crate) fn upsert_person(
         .execute(
             "
             INSERT INTO people(
-                id, name, cohort, phone, normalized_phone, status, special_note,
+                id, name, cohort, phone, normalized_phone, status, person_note,
                 created_at, updated_at
             )
             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
@@ -163,7 +163,7 @@ pub(crate) fn upsert_person(
                 phone = excluded.phone,
                 normalized_phone = excluded.normalized_phone,
                 status = excluded.status,
-                special_note = excluded.special_note,
+                person_note = excluded.person_note,
                 updated_at = excluded.updated_at
             ",
             params![
@@ -173,7 +173,7 @@ pub(crate) fn upsert_person(
                 person.phone,
                 person.normalized_phone,
                 person_status(person.status),
-                person.special_note,
+                person.person_note,
                 person.created_at,
                 person.updated_at
             ],
@@ -312,7 +312,7 @@ pub(crate) fn person_from_row(row: &Row<'_>) -> rusqlite::Result<Person> {
         phone: row.get(3)?,
         normalized_phone: row.get(4)?,
         status: parse_person_status(row.get::<_, String>(5)?.as_str())?,
-        special_note: row.get(6)?,
+        person_note: row.get(6)?,
         created_at: row.get(7)?,
         updated_at: row.get(8)?,
     })

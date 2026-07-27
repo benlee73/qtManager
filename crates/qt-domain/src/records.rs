@@ -19,7 +19,7 @@ pub struct Person {
     pub phone: Option<String>,
     pub normalized_phone: Option<String>,
     pub status: PersonStatus,
-    pub special_note: Option<String>,
+    pub person_note: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -88,28 +88,28 @@ pub fn person_matches_search(person: &Person, query: &str) -> bool {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum QuickNoteStatus {
-    Open,
-    Completed,
+pub enum CheckItemStatus {
+    NeedsCheck,
+    Checked,
     Archived,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct QuickNote {
+pub struct CheckItem {
     pub id: String,
     pub person_id: Option<String>,
     pub content: String,
-    pub status: QuickNoteStatus,
+    pub status: CheckItemStatus,
     pub operator_name: String,
     pub created_at: String,
     pub updated_at: String,
-    pub completed_at: Option<String>,
+    pub checked_at: Option<String>,
 }
 
-impl QuickNote {
+impl CheckItem {
     pub fn validate(&self) -> Result<(), DomainError> {
-        required_id(&self.id, "quick_note_id")?;
+        required_id(&self.id, "check_item_id")?;
         if self.content.trim().is_empty() {
             return Err(DomainError::EmptyContent);
         }
@@ -123,30 +123,28 @@ impl QuickNote {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum OperationalNoteStatus {
+pub enum PinnedNoteStatus {
     Active,
     Archived,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct OperationalNote {
+pub struct PinnedNote {
     pub id: String,
     pub title: String,
     pub content: String,
-    pub active_from: String,
-    pub active_until: Option<String>,
     pub is_pinned: bool,
-    pub status: OperationalNoteStatus,
+    pub status: PinnedNoteStatus,
     pub operator_name: String,
     pub created_at: String,
     pub updated_at: String,
     pub archived_at: Option<String>,
 }
 
-impl OperationalNote {
+impl PinnedNote {
     pub fn validate(&self) -> Result<(), DomainError> {
-        required_id(&self.id, "operational_note_id")?;
+        required_id(&self.id, "pinned_note_id")?;
         if self.title.trim().is_empty() {
             return Err(DomainError::EmptyTitle);
         }
@@ -160,13 +158,8 @@ impl OperationalNote {
         timestamp(&self.updated_at, "updated_at")
     }
 
-    pub fn is_active_on(&self, date: &str) -> bool {
-        self.status == OperationalNoteStatus::Active
-            && self.active_from.as_str() <= date
-            && self
-                .active_until
-                .as_deref()
-                .is_none_or(|until| date <= until)
+    pub fn is_visible(&self) -> bool {
+        self.status == PinnedNoteStatus::Active
     }
 }
 
@@ -252,7 +245,7 @@ mod tests {
             phone: None,
             normalized_phone: None,
             status: PersonStatus::Active,
-            special_note: None,
+            person_note: None,
             created_at: "2026-07-24T10:00:00+09:00".into(),
             updated_at: "2026-07-24T10:00:00+09:00".into(),
         };
@@ -269,7 +262,7 @@ mod tests {
             phone: Some("010-1234-5678".into()),
             normalized_phone: Some("01012345678".into()),
             status: PersonStatus::Active,
-            special_note: None,
+            person_note: None,
             created_at: "2026-07-24T10:00:00+09:00".into(),
             updated_at: "2026-07-24T10:00:00+09:00".into(),
         };
@@ -290,7 +283,7 @@ mod tests {
             phone: None,
             normalized_phone: None,
             status: PersonStatus::Draft,
-            special_note: None,
+            person_note: None,
             created_at: "2026-07-24T10:00:00+09:00".into(),
             updated_at: "2026-07-24T10:00:00+09:00".into(),
         };
@@ -303,22 +296,41 @@ mod tests {
     }
 
     #[test]
-    fn operational_note_respects_active_period() {
-        let note = OperationalNote {
+    fn pinned_note_has_no_period_and_visibility_only_depends_on_archive_status() {
+        let mut note = PinnedNote {
             id: "note-1".into(),
             title: "보관 위치".into(),
             content: "책장 아래".into(),
-            active_from: "2026-07-01".into(),
-            active_until: Some("2026-09-30".into()),
             is_pinned: true,
-            status: OperationalNoteStatus::Active,
+            status: PinnedNoteStatus::Active,
             operator_name: "담당자".into(),
             created_at: "2026-07-24T10:00:00+09:00".into(),
             updated_at: "2026-07-24T10:00:00+09:00".into(),
             archived_at: None,
         };
 
-        assert!(note.is_active_on("2026-07-24"));
-        assert!(!note.is_active_on("2026-10-01"));
+        assert!(note.is_visible());
+        note.status = PinnedNoteStatus::Archived;
+        assert!(!note.is_visible());
+    }
+
+    #[test]
+    fn check_item_supports_needs_check_checked_and_archived_states() {
+        let mut item = CheckItem {
+            id: "check-1".into(),
+            person_id: None,
+            content: "수량 확인".into(),
+            status: CheckItemStatus::NeedsCheck,
+            operator_name: "가상담당자".into(),
+            created_at: "2026-07-24T10:00:00+09:00".into(),
+            updated_at: "2026-07-24T10:00:00+09:00".into(),
+            checked_at: None,
+        };
+        assert_eq!(item.validate(), Ok(()));
+        item.status = CheckItemStatus::Checked;
+        item.checked_at = Some("2026-07-24T11:00:00+09:00".into());
+        assert_eq!(item.validate(), Ok(()));
+        item.status = CheckItemStatus::Archived;
+        assert_eq!(item.validate(), Ok(()));
     }
 }

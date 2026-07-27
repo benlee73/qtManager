@@ -55,7 +55,7 @@ fn persists_registration_profile_completion_renewal_archive_and_history_across_r
                 name: "가상관리".into(),
                 cohort: Some("00".into()),
                 phone: Some("010-0000-1234".into()),
-                special_note: Some("연락은 문자".into()),
+                person_note: Some("연락은 문자".into()),
                 issue_year: 2026,
                 issue_month: 7,
                 quantity: 2,
@@ -81,7 +81,7 @@ fn persists_registration_profile_completion_renewal_archive_and_history_across_r
                 name: "가상관리수정".into(),
                 cohort: Some("00".into()),
                 phone: Some("010-0000-9999".into()),
-                special_note: Some("두 권 수령".into()),
+                person_note: Some("두 권 수령".into()),
                 confirm_duplicate: false,
             },
         )
@@ -109,6 +109,7 @@ fn persists_registration_profile_completion_renewal_archive_and_history_across_r
     let visible = load_people_management(&mut repository, "9999", true).unwrap();
     assert_eq!(visible.people.len(), 1);
     assert_eq!(visible.people[0].status, "보관됨");
+    assert_eq!(visible.people[0].phone.as_deref(), Some("010-0000-9999"));
     let detail = load_person_detail(&mut repository, &person_id).unwrap();
     assert_eq!(detail.subscriptions.len(), 2);
     assert_eq!(

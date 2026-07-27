@@ -19,12 +19,13 @@ pub use application_import::{
 };
 pub use phase1::{CoreRepository, MigrationReport, Phase1Report, RunPhase1Probe};
 pub use phase2::{
-    Clock, CreateDraftRequest, CreateOperationalNoteRequest, CreateQuickNoteRequest, DeskRecord,
-    DistributionDesk, DistributionDeskRepository, IdGenerator, RecordDistributionRequest,
-    RecordPurchaseRequest, RuntimeServices, UndoDistributionRequest, cancel_latest_purchase,
-    complete_quick_note, create_draft, create_operational_note, create_quick_note,
-    load_distribution_desk, record_distribution, record_purchase, save_operator,
-    undo_last_distribution,
+    CheckItemView, Clock, CreateCheckItemRequest, CreateDraftRequest, CreatePinnedNoteRequest,
+    DeskRecord, DistributionDesk, DistributionDeskRepository, IdGenerator, PinnedNoteView,
+    RecordDistributionRequest, RecordPurchaseRequest, RuntimeServices, UndoDistributionRequest,
+    UpdateCheckItemStatusRequest, UpdatePinnedNoteRequest, cancel_latest_purchase,
+    create_check_item, create_draft, create_pinned_note, load_distribution_desk,
+    record_distribution, record_purchase, save_operator, undo_last_distribution,
+    update_check_item_status, update_pinned_note,
 };
 pub use phase3::{
     DistributionView, DuplicateCandidate, ManagedPersonRecord, PeopleManagement,

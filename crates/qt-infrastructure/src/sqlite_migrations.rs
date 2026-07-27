@@ -156,6 +156,66 @@ CREATE UNIQUE INDEX idx_subscriptions_source_reference
     WHERE source_reference IS NOT NULL;
 ";
 
+const VERSION_3: &str = "
+ALTER TABLE people RENAME COLUMN special_note TO person_note;
+
+CREATE TABLE check_items (
+    id TEXT PRIMARY KEY,
+    person_id TEXT REFERENCES people(id),
+    content TEXT NOT NULL CHECK(length(trim(content)) > 0),
+    status TEXT NOT NULL CHECK(status IN ('needs_check', 'checked', 'archived')),
+    operator_name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    checked_at TEXT
+);
+
+INSERT INTO check_items(
+    id, person_id, content, status, operator_name, created_at, updated_at, checked_at
+)
+SELECT id, person_id, content,
+       CASE status
+           WHEN 'open' THEN 'needs_check'
+           WHEN 'completed' THEN 'checked'
+           ELSE 'archived'
+       END,
+       operator_name, created_at, updated_at, completed_at
+FROM quick_notes;
+
+DROP TABLE quick_notes;
+
+CREATE TABLE pinned_notes (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL CHECK(length(trim(title)) > 0),
+    content TEXT NOT NULL CHECK(length(trim(content)) > 0),
+    is_pinned INTEGER NOT NULL CHECK(is_pinned IN (0, 1)),
+    status TEXT NOT NULL CHECK(status IN ('active', 'archived')),
+    operator_name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    archived_at TEXT,
+    legacy_active_from TEXT,
+    legacy_active_until TEXT
+);
+
+INSERT INTO pinned_notes(
+    id, title, content, is_pinned, status, operator_name, created_at, updated_at,
+    archived_at, legacy_active_from, legacy_active_until
+)
+SELECT id, title, content, is_pinned, status, operator_name, created_at, updated_at,
+       archived_at, active_from, active_until
+FROM operational_notes;
+
+DROP TABLE operational_notes;
+
+CREATE INDEX idx_check_items_status_updated
+    ON check_items(status, updated_at DESC);
+CREATE INDEX idx_check_items_person
+    ON check_items(person_id);
+CREATE INDEX idx_pinned_notes_status_pinned
+    ON pinned_notes(status, is_pinned DESC, updated_at DESC);
+";
+
 pub(crate) fn configure(connection: &Connection) -> Result<(), PortError> {
     connection
         .pragma_update(None, "foreign_keys", "ON")
@@ -196,7 +256,7 @@ pub(crate) fn migrate(connection: &mut Connection) -> Result<MigrationReport, Po
     }
 
     let mut newly_applied = 0;
-    for (version, sql) in [(1_u16, VERSION_1), (2_u16, VERSION_2)] {
+    for (version, sql) in [(1_u16, VERSION_1), (2_u16, VERSION_2), (3_u16, VERSION_3)] {
         let exists: bool = transaction
             .query_row(
                 "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = ?1)",
@@ -229,4 +289,84 @@ fn port_error(error: rusqlite::Error) -> PortError {
     PortError::new(format!(
         "SQLite 스키마 마이그레이션에 실패했습니다: {error}"
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn version_three_preserves_linked_items_person_notes_and_legacy_periods() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    applied_at TEXT NOT NULL
+                );
+                INSERT INTO schema_migrations VALUES (1, '2026-07-01T00:00:00Z');
+                INSERT INTO schema_migrations VALUES (2, '2026-07-01T00:00:00Z');
+                ",
+            )
+            .unwrap();
+        connection.execute_batch(VERSION_1).unwrap();
+        connection.execute_batch(VERSION_2).unwrap();
+        connection
+            .execute_batch(
+                "
+                INSERT INTO people VALUES (
+                    'person-1', '가상 신청자', '00', NULL, NULL, 'active',
+                    '지속 참고', '2026-07-01T00:00:00Z', '2026-07-01T00:00:00Z'
+                );
+                INSERT INTO quick_notes VALUES (
+                    'item-1', 'person-1', '수량 확인', 'completed', '가상담당자',
+                    '2026-07-01T00:00:00Z', '2026-07-02T00:00:00Z',
+                    '2026-07-02T00:00:00Z'
+                );
+                INSERT INTO operational_notes VALUES (
+                    'note-1', '보관 위치', '가상 선반', '2026-07-01', '2026-09-30',
+                    1, 'active', '가상담당자', '2026-07-01T00:00:00Z',
+                    '2026-07-02T00:00:00Z', NULL
+                );
+                ",
+            )
+            .unwrap();
+
+        let report = migrate(&mut connection).unwrap();
+
+        assert_eq!(report.newly_applied, 1);
+        let person_note: String = connection
+            .query_row(
+                "SELECT person_note FROM people WHERE id = 'person-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(person_note, "지속 참고");
+        let item: (String, String, String) = connection
+            .query_row(
+                "SELECT person_id, status, checked_at FROM check_items WHERE id = 'item-1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            item,
+            (
+                "person-1".into(),
+                "checked".into(),
+                "2026-07-02T00:00:00Z".into()
+            )
+        );
+        let periods: (String, String) = connection
+            .query_row(
+                "SELECT legacy_active_from, legacy_active_until
+                 FROM pinned_notes WHERE id = 'note-1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(periods, ("2026-07-01".into(), "2026-09-30".into()));
+    }
 }

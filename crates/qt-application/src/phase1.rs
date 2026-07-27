@@ -175,7 +175,7 @@ impl Phase1Fixture {
             phone: None,
             normalized_phone: None,
             status: PersonStatus::Active,
-            special_note: None,
+            person_note: None,
             created_at: now.into(),
             updated_at: now.into(),
         };
@@ -338,7 +338,7 @@ mod tests {
 
         let report = use_case.execute().unwrap();
 
-        assert_eq!(report.schema_version, 2);
+        assert_eq!(report.schema_version, 3);
         assert_eq!(report.subscription_status, "유효");
         assert_eq!(report.distribution_status, "배부 완료");
         assert_eq!(report.target_quantity, 2);

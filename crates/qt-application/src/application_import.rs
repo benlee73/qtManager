@@ -144,7 +144,7 @@ pub struct ApplicationPersonCandidate {
     pub person_id: String,
     pub name: String,
     pub cohort: Option<String>,
-    pub phone_suffix: Option<String>,
+    pub phone: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -293,7 +293,7 @@ where
                     phone: Some(row.phone.trim().into()),
                     normalized_phone: Some(normalize_phone(&row.phone)),
                     status: PersonStatus::Active,
-                    special_note: None,
+                    person_note: None,
                     created_at: now.clone(),
                     updated_at: now.clone(),
                 }
@@ -400,7 +400,7 @@ fn add_candidates<R: PeopleManagementRepository>(
             person_id: person.id,
             name: person.name,
             cohort: person.cohort,
-            phone_suffix: phone_suffix(person.normalized_phone.as_deref()),
+            phone: person.phone,
         })
         .collect();
     if view.candidates.is_empty() {
@@ -445,13 +445,6 @@ fn validate_import_row(row: &ImportApplicationRowRequest) -> Result<(), Applicat
     }
     Issue::new(row.issue_year, row.issue_month)?;
     Ok(())
-}
-
-fn phone_suffix(value: Option<&str>) -> Option<String> {
-    value
-        .filter(|item| !item.is_empty())
-        .map(|item| item.chars().rev().take(4).collect::<String>())
-        .map(|item| item.chars().rev().collect())
 }
 
 fn change(

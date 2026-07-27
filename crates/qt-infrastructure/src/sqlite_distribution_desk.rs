@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use qt_application::{CoreRepository, DeskRecord, DistributionDeskRepository, PortError};
 use qt_domain::{
-    ChangeLog, Distribution, Issue, OneTimePurchase, OperationalNote, OperationalNoteStatus,
-    Person, QuickNote, QuickNoteStatus, Subscription,
+    ChangeLog, CheckItem, CheckItemStatus, Distribution, Issue, OneTimePurchase, Person,
+    PinnedNote, PinnedNoteStatus, Subscription,
 };
 use rusqlite::{OptionalExtension, Row, params};
 
@@ -52,7 +52,7 @@ impl DistributionDeskRepository for SqliteCoreRepository {
             .connection
             .prepare(&format!(
                 "
-                SELECT id, name, cohort, phone, normalized_phone, status, special_note,
+                SELECT id, name, cohort, phone, normalized_phone, status, person_note,
                        created_at, updated_at
                 FROM people p
                 WHERE p.status != 'archived' AND ({})
@@ -70,7 +70,7 @@ impl DistributionDeskRepository for SqliteCoreRepository {
 
         let mut subscriptions = subscriptions_by_person(&self.connection, query)?;
         let mut distributions = distributions_by_subscription(&self.connection, query, issue)?;
-        let note_people = open_note_people(&self.connection)?;
+        let item_people = needs_check_people(&self.connection)?;
         Ok(people
             .into_iter()
             .map(|person| {
@@ -81,12 +81,12 @@ impl DistributionDeskRepository for SqliteCoreRepository {
                         distributions.remove(&subscription.id).unwrap_or_default()
                     })
                     .collect();
-                let has_open_quick_note = note_people.contains_key(&person.id);
+                let has_check_item = item_people.contains_key(&person.id);
                 DeskRecord {
                     person,
                     subscriptions: person_subscriptions,
                     distributions: person_distributions,
-                    has_open_quick_note,
+                    has_check_item,
                 }
             })
             .collect())
@@ -134,28 +134,28 @@ impl DistributionDeskRepository for SqliteCoreRepository {
         self.register_subscription(person, subscription, change)
     }
 
-    fn list_quick_notes(&self) -> Result<Vec<QuickNote>, PortError> {
+    fn list_check_items(&self) -> Result<Vec<CheckItem>, PortError> {
         let mut statement = self
             .connection
             .prepare(
                 "
                 SELECT id, person_id, content, status, operator_name, created_at, updated_at,
-                       completed_at
-                FROM quick_notes
+                       checked_at
+                FROM check_items
                 WHERE status != 'archived'
                 ORDER BY updated_at DESC, id DESC
                 ",
             )
             .map_err(port_error)?;
         statement
-            .query_map([], quick_note_from_row)
+            .query_map([], check_item_from_row)
             .map_err(port_error)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(port_error)
     }
 
-    fn save_quick_note(&mut self, note: &QuickNote, change: &ChangeLog) -> Result<(), PortError> {
-        note.validate()
+    fn save_check_item(&mut self, item: &CheckItem, change: &ChangeLog) -> Result<(), PortError> {
+        item.validate()
             .map_err(|error| PortError::new(error.to_string()))?;
         change
             .validate()
@@ -164,9 +164,9 @@ impl DistributionDeskRepository for SqliteCoreRepository {
         transaction
             .execute(
                 "
-                INSERT INTO quick_notes(
+                INSERT INTO check_items(
                     id, person_id, content, status, operator_name, created_at, updated_at,
-                    completed_at
+                    checked_at
                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
                 ON CONFLICT(id) DO UPDATE SET
                     person_id = excluded.person_id,
@@ -174,17 +174,17 @@ impl DistributionDeskRepository for SqliteCoreRepository {
                     status = excluded.status,
                     operator_name = excluded.operator_name,
                     updated_at = excluded.updated_at,
-                    completed_at = excluded.completed_at
+                    checked_at = excluded.checked_at
                 ",
                 params![
-                    note.id,
-                    note.person_id,
-                    note.content,
-                    quick_note_status(note.status),
-                    note.operator_name,
-                    note.created_at,
-                    note.updated_at,
-                    note.completed_at
+                    item.id,
+                    item.person_id,
+                    item.content,
+                    check_item_status(item.status),
+                    item.operator_name,
+                    item.created_at,
+                    item.updated_at,
+                    item.checked_at
                 ],
             )
             .map_err(port_error)?;
@@ -192,46 +192,40 @@ impl DistributionDeskRepository for SqliteCoreRepository {
         transaction.commit().map_err(port_error)
     }
 
-    fn list_operational_notes(&self) -> Result<Vec<OperationalNote>, PortError> {
+    fn list_pinned_notes(&self) -> Result<Vec<PinnedNote>, PortError> {
         let mut statement = self
             .connection
             .prepare(
                 "
-                SELECT id, title, content, active_from, active_until, is_pinned, status,
-                       operator_name, created_at, updated_at, archived_at
-                FROM operational_notes
+                SELECT id, title, content, is_pinned, status, operator_name,
+                       created_at, updated_at, archived_at
+                FROM pinned_notes
                 WHERE status != 'archived'
                 ORDER BY is_pinned DESC, updated_at DESC, id DESC
                 ",
             )
             .map_err(port_error)?;
         statement
-            .query_map([], operational_note_from_row)
+            .query_map([], pinned_note_from_row)
             .map_err(port_error)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(port_error)
     }
 
-    fn save_operational_note(
-        &mut self,
-        note: &OperationalNote,
-        change: &ChangeLog,
-    ) -> Result<(), PortError> {
+    fn save_pinned_note(&mut self, note: &PinnedNote, change: &ChangeLog) -> Result<(), PortError> {
         note.validate()
             .map_err(|error| PortError::new(error.to_string()))?;
         let transaction = self.connection.transaction().map_err(port_error)?;
         transaction
             .execute(
                 "
-                INSERT INTO operational_notes(
-                    id, title, content, active_from, active_until, is_pinned, status,
-                    operator_name, created_at, updated_at, archived_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                INSERT INTO pinned_notes(
+                    id, title, content, is_pinned, status, operator_name,
+                    created_at, updated_at, archived_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
                 ON CONFLICT(id) DO UPDATE SET
                     title = excluded.title,
                     content = excluded.content,
-                    active_from = excluded.active_from,
-                    active_until = excluded.active_until,
                     is_pinned = excluded.is_pinned,
                     status = excluded.status,
                     operator_name = excluded.operator_name,
@@ -242,10 +236,8 @@ impl DistributionDeskRepository for SqliteCoreRepository {
                     note.id,
                     note.title,
                     note.content,
-                    note.active_from,
-                    note.active_until,
                     note.is_pinned,
-                    operational_note_status(note.status),
+                    pinned_note_status(note.status),
                     note.operator_name,
                     note.created_at,
                     note.updated_at,
@@ -440,9 +432,14 @@ fn search_predicate(alias: &str) -> String {
     )
 }
 
-fn open_note_people(connection: &rusqlite::Connection) -> Result<HashMap<String, bool>, PortError> {
+fn needs_check_people(
+    connection: &rusqlite::Connection,
+) -> Result<HashMap<String, bool>, PortError> {
     let mut statement = connection
-        .prepare("SELECT DISTINCT person_id FROM quick_notes WHERE status = 'open' AND person_id IS NOT NULL")
+        .prepare(
+            "SELECT DISTINCT person_id FROM check_items
+             WHERE status = 'needs_check' AND person_id IS NOT NULL",
+        )
         .map_err(port_error)?;
     let ids = statement
         .query_map([], |row| row.get::<_, String>(0))
@@ -452,41 +449,39 @@ fn open_note_people(connection: &rusqlite::Connection) -> Result<HashMap<String,
     Ok(ids.into_iter().map(|id| (id, true)).collect())
 }
 
-fn quick_note_from_row(row: &Row<'_>) -> rusqlite::Result<QuickNote> {
-    Ok(QuickNote {
+fn check_item_from_row(row: &Row<'_>) -> rusqlite::Result<CheckItem> {
+    Ok(CheckItem {
         id: row.get(0)?,
         person_id: row.get(1)?,
         content: row.get(2)?,
         status: match row.get::<_, String>(3)?.as_str() {
-            "open" => QuickNoteStatus::Open,
-            "completed" => QuickNoteStatus::Completed,
-            "archived" => QuickNoteStatus::Archived,
-            value => return Err(invalid_enum("quick note status", value)),
+            "needs_check" => CheckItemStatus::NeedsCheck,
+            "checked" => CheckItemStatus::Checked,
+            "archived" => CheckItemStatus::Archived,
+            value => return Err(invalid_enum("check item status", value)),
         },
         operator_name: row.get(4)?,
         created_at: row.get(5)?,
         updated_at: row.get(6)?,
-        completed_at: row.get(7)?,
+        checked_at: row.get(7)?,
     })
 }
 
-fn operational_note_from_row(row: &Row<'_>) -> rusqlite::Result<OperationalNote> {
-    Ok(OperationalNote {
+fn pinned_note_from_row(row: &Row<'_>) -> rusqlite::Result<PinnedNote> {
+    Ok(PinnedNote {
         id: row.get(0)?,
         title: row.get(1)?,
         content: row.get(2)?,
-        active_from: row.get(3)?,
-        active_until: row.get(4)?,
-        is_pinned: row.get(5)?,
-        status: match row.get::<_, String>(6)?.as_str() {
-            "active" => OperationalNoteStatus::Active,
-            "archived" => OperationalNoteStatus::Archived,
-            value => return Err(invalid_enum("operational note status", value)),
+        is_pinned: row.get(3)?,
+        status: match row.get::<_, String>(4)?.as_str() {
+            "active" => PinnedNoteStatus::Active,
+            "archived" => PinnedNoteStatus::Archived,
+            value => return Err(invalid_enum("pinned note status", value)),
         },
-        operator_name: row.get(7)?,
-        created_at: row.get(8)?,
-        updated_at: row.get(9)?,
-        archived_at: row.get(10)?,
+        operator_name: row.get(5)?,
+        created_at: row.get(6)?,
+        updated_at: row.get(7)?,
+        archived_at: row.get(8)?,
     })
 }
 
@@ -513,18 +508,18 @@ fn purchase_from_row(row: &Row<'_>) -> rusqlite::Result<OneTimePurchase> {
     })
 }
 
-fn quick_note_status(status: QuickNoteStatus) -> &'static str {
+fn check_item_status(status: CheckItemStatus) -> &'static str {
     match status {
-        QuickNoteStatus::Open => "open",
-        QuickNoteStatus::Completed => "completed",
-        QuickNoteStatus::Archived => "archived",
+        CheckItemStatus::NeedsCheck => "needs_check",
+        CheckItemStatus::Checked => "checked",
+        CheckItemStatus::Archived => "archived",
     }
 }
 
-fn operational_note_status(status: OperationalNoteStatus) -> &'static str {
+fn pinned_note_status(status: PinnedNoteStatus) -> &'static str {
     match status {
-        OperationalNoteStatus::Active => "active",
-        OperationalNoteStatus::Archived => "archived",
+        PinnedNoteStatus::Active => "active",
+        PinnedNoteStatus::Archived => "archived",
     }
 }
 

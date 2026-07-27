@@ -39,7 +39,7 @@ impl PeopleManagementRepository for SqliteCoreRepository {
             .connection
             .prepare(
                 "
-                SELECT id, name, cohort, phone, normalized_phone, status, special_note,
+                SELECT id, name, cohort, phone, normalized_phone, status, person_note,
                        created_at, updated_at
                 FROM people
                 WHERE (?1 OR status != 'archived')
@@ -103,7 +103,7 @@ impl PeopleManagementRepository for SqliteCoreRepository {
             .connection
             .query_row(
                 "
-                SELECT id, name, cohort, phone, normalized_phone, status, special_note,
+                SELECT id, name, cohort, phone, normalized_phone, status, person_note,
                        created_at, updated_at
                 FROM people WHERE id = ?1
                 ",
@@ -172,7 +172,7 @@ impl PeopleManagementRepository for SqliteCoreRepository {
             .connection
             .prepare(
                 "
-                SELECT id, name, cohort, phone, normalized_phone, status, special_note,
+                SELECT id, name, cohort, phone, normalized_phone, status, person_note,
                        created_at, updated_at
                 FROM people
                 WHERE status != 'archived'

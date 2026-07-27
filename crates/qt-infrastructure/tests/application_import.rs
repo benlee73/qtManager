@@ -105,6 +105,10 @@ fn previews_imports_links_candidates_and_rejects_a_repeated_response_after_resta
         .unwrap();
         assert_eq!(preview.rows[0].status, "candidate");
         assert_eq!(preview.rows[0].candidates[0].person_id, person_id);
+        assert_eq!(
+            preview.rows[0].candidates[0].phone.as_deref(),
+            Some("010-0000-1234")
+        );
         let row = request_from_preview(&preview.rows[0], Some(person_id.clone()), false);
         import_applications(
             &mut repository,
