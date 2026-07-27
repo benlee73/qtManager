@@ -221,14 +221,7 @@ describe("QT Manager desktop flow", () => {
     await browser.execute(() => {
       localStorage.removeItem("qt-manager-theme");
     });
-    await browser.refresh();
-    await browser.waitUntil(
-      async () =>
-        (await browser.execute(
-          () => document.documentElement.dataset.theme ?? null,
-        )) !== null,
-      { timeoutMsg: "새로고침 뒤 기본 테마가 적용되지 않았습니다." },
-    );
+    await refreshApp("새로고침 뒤 기본 테마가 적용되지 않았습니다.");
     await configureOperatorIfNeeded();
     expect(
       await browser.execute(() => document.documentElement.dataset.theme),
@@ -251,14 +244,7 @@ describe("QT Manager desktop flow", () => {
     await browser.saveScreenshot("test-results/ui-light-short-list.png");
     await setInput('[data-testid="people-search"]', "");
     await browser.saveScreenshot("test-results/ui-light.png");
-    await browser.refresh();
-    await browser.waitUntil(
-      async () =>
-        (await browser.execute(
-          () => document.documentElement.dataset.theme ?? null,
-        )) !== null,
-      { timeoutMsg: "새로고침 뒤 저장한 테마가 적용되지 않았습니다." },
-    );
+    await refreshApp("새로고침 뒤 저장한 테마가 적용되지 않았습니다.");
     expect(
       await browser.execute(() => document.documentElement.dataset.theme),
     ).toBe("light");
@@ -641,6 +627,25 @@ async function configureOperatorIfNeeded() {
   await browser.waitUntil(async () => (await textOf("#dialog-title")) === "", {
     timeoutMsg: "담당자 설정 창이 닫히지 않았습니다.",
   });
+}
+
+async function refreshApp(timeoutMsg: string) {
+  const marker = `before-refresh-${Date.now()}`;
+  await browser.execute((value) => {
+    document.documentElement.dataset.e2eReloadMarker = value;
+  }, marker);
+  await browser.refresh();
+  await browser.waitUntil(
+    async () =>
+      browser.execute(
+        (previousMarker) =>
+          document.documentElement.dataset.e2eReloadMarker !== previousMarker &&
+          document.documentElement.dataset.theme !== undefined &&
+          document.querySelector('[data-testid="people-search"]') !== null,
+        marker,
+      ),
+    { timeoutMsg },
+  );
 }
 
 async function selectedIssue() {
