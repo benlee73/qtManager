@@ -28,6 +28,13 @@ e2e-build:
     pnpm build
     cargo build --package qt-manager
 
+bundle_args := if os() == "macos" { "--bundles app,dmg" } else if os() == "windows" { "--bundles nsis" } else { "" }
+
+package:
+    pnpm tauri build {{bundle_args}}
+
+release-check: check e2e package
+
 generate-fixture:
     cargo run --package qt-infrastructure --example generate_legacy_fixture -- tests/fixtures/legacy-2026-anonymous.xlsx
 

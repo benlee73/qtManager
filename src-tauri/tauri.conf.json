@@ -31,6 +31,18 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all"
+    "targets": "all",
+    "category": "Productivity",
+    "shortDescription": "교회 QT 신청과 배부를 오프라인으로 관리합니다.",
+    "longDescription": "맑은샘광천교회 교육국의 QT 신청자, 구독, 배부 기록과 담당자 인수인계를 관리하는 로컬 데스크톱 앱입니다.",
+    "copyright": "Copyright © 2026 맑은샘광천교회 교육국",
+    "macOS": {
+      "minimumSystemVersion": "12.0"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
   }
 }
