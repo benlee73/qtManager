@@ -239,6 +239,15 @@ impl DistributionDeskRepository for SqliteCoreRepository {
         transaction.commit().map_err(port_error)
     }
 
+    fn delete_check_item(&mut self, id: &str, change: &ChangeLog) -> Result<(), PortError> {
+        let transaction = self.connection.transaction().map_err(port_error)?;
+        upsert_change(&transaction, change)?;
+        transaction
+            .execute("DELETE FROM check_items WHERE id = ?1", params![id])
+            .map_err(port_error)?;
+        transaction.commit().map_err(port_error)
+    }
+
     fn list_pinned_notes(&self) -> Result<Vec<PinnedNote>, PortError> {
         let mut statement = self
             .connection
@@ -313,6 +322,15 @@ impl DistributionDeskRepository for SqliteCoreRepository {
             )
             .map_err(port_error)?;
         upsert_change(&transaction, change)?;
+        transaction.commit().map_err(port_error)
+    }
+
+    fn delete_pinned_note(&mut self, id: &str, change: &ChangeLog) -> Result<(), PortError> {
+        let transaction = self.connection.transaction().map_err(port_error)?;
+        upsert_change(&transaction, change)?;
+        transaction
+            .execute("DELETE FROM pinned_notes WHERE id = ?1", params![id])
+            .map_err(port_error)?;
         transaction.commit().map_err(port_error)
     }
 

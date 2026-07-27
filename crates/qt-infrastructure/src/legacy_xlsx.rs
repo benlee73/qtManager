@@ -321,14 +321,40 @@ fn issue_from_cell(cell: Option<&Data>) -> Option<Issue> {
         .filter(|part| !part.is_empty())
         .filter_map(|part| part.parse::<i32>().ok())
         .collect::<Vec<_>>();
-    let year_index = numbers.iter().position(|number| *number >= 2000)?;
-    let year = *numbers.get(year_index)?;
-    let month = u8::try_from(*numbers.get(year_index + 1)?).ok()?;
+    let (year, month) = if let Some(year_index) = numbers.iter().position(|number| *number >= 2000)
+    {
+        (
+            *numbers.get(year_index)?,
+            u8::try_from(*numbers.get(year_index + 1)?).ok()?,
+        )
+    } else {
+        let short_year = *numbers.first()?;
+        let month = u8::try_from(*numbers.get(1)?).ok()?;
+        if !(0..=99).contains(&short_year) {
+            return None;
+        }
+        (2000 + short_year, month)
+    };
     let start_month = if month % 2 == 0 { month - 1 } else { month };
     Issue::new(year, start_month).ok()
 }
 
 fn split_identity(raw: &str) -> (String, Option<String>) {
+    let compact = raw.trim();
+    if compact.len() >= 3 {
+        let mut characters = compact.chars();
+        let first = characters.next();
+        let second = characters.next();
+        if first.is_some_and(|value| value.is_ascii_digit())
+            && second.is_some_and(|value| value.is_ascii_digit())
+        {
+            let cohort = compact.get(0..2).map(str::to_string);
+            let name = compact.get(2..).unwrap_or_default().trim().to_string();
+            if !name.is_empty() {
+                return (name, cohort);
+            }
+        }
+    }
     let mut cohort = None;
     let mut name = Vec::new();
     for token in raw.split_whitespace() {
@@ -509,6 +535,18 @@ mod tests {
         assert_eq!(
             split_identity("94 가상 신청자"),
             ("가상 신청자".into(), Some("94".into()))
+        );
+        assert_eq!(
+            split_identity("93가상신청자"),
+            ("가상신청자".into(), Some("93".into()))
+        );
+    }
+
+    #[test]
+    fn parses_two_digit_legacy_years() {
+        assert_eq!(
+            issue_from_cell(Some(&Data::String("26.05".into()))),
+            Issue::new(2026, 5).ok()
         );
     }
 }

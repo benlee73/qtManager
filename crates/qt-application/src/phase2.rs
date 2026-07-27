@@ -63,11 +63,13 @@ pub trait DistributionDeskRepository {
         Ok(Vec::new())
     }
     fn save_check_item(&mut self, item: &CheckItem, change: &ChangeLog) -> Result<(), PortError>;
+    fn delete_check_item(&mut self, id: &str, change: &ChangeLog) -> Result<(), PortError>;
     fn list_pinned_notes(&self) -> Result<Vec<PinnedNote>, PortError>;
     fn list_archived_pinned_notes(&self) -> Result<Vec<PinnedNote>, PortError> {
         Ok(Vec::new())
     }
     fn save_pinned_note(&mut self, note: &PinnedNote, change: &ChangeLog) -> Result<(), PortError>;
+    fn delete_pinned_note(&mut self, id: &str, change: &ChangeLog) -> Result<(), PortError>;
     fn save_purchase(
         &mut self,
         purchase: &OneTimePurchase,
@@ -131,6 +133,7 @@ pub struct DeskTotals {
 pub struct DeskPerson {
     pub person_id: String,
     pub subscription_id: Option<String>,
+    pub distribution_targets: Vec<DistributionTargetView>,
     pub name: String,
     pub cohort: Option<String>,
     pub phone: Option<String>,
@@ -145,6 +148,18 @@ pub struct DeskPerson {
     pub is_last_issue: bool,
     pub has_check_item: bool,
     pub can_distribute: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DistributionTargetView {
+    pub subscription_id: String,
+    pub start_issue: String,
+    pub last_issue: String,
+    pub end_date: String,
+    pub target_quantity: u32,
+    pub distributed_quantity: u32,
+    pub remaining_quantity: u32,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -362,6 +377,7 @@ fn desk_person(record: DeskRecord, issue: Issue) -> Result<DeskPerson, Applicati
     let mut view = DeskPerson {
         person_id: record.person.id,
         subscription_id: None,
+        distribution_targets: Vec::new(),
         name: record.person.name,
         cohort: record.person.cohort,
         phone: record.person.phone,
@@ -385,10 +401,57 @@ fn desk_person(record: DeskRecord, issue: Issue) -> Result<DeskPerson, Applicati
     let Some(subscription) = selected else {
         return Ok(view);
     };
-    let conflict = active.len() > 1;
-    let subscription_assessment = subscription.assess(issue, conflict)?;
+    if !active.is_empty() {
+        let mut targets = active
+            .iter()
+            .map(|subscription| {
+                let subscription_assessment = subscription.assess(issue, false)?;
+                let distribution_assessment =
+                    assess_distribution(subscription, issue, false, &record.distributions)?;
+                Ok(DistributionTargetView {
+                    subscription_id: subscription.id.clone(),
+                    start_issue: subscription.start_issue.display_name(),
+                    last_issue: subscription_assessment.last_issue.display_name(),
+                    end_date: subscription_assessment.last_issue.end_date(),
+                    target_quantity: distribution_assessment.target_quantity,
+                    distributed_quantity: distribution_assessment.distributed_quantity,
+                    remaining_quantity: distribution_assessment.remaining_quantity,
+                })
+            })
+            .collect::<Result<Vec<_>, ApplicationError>>()?;
+        targets.sort_by(|left, right| {
+            left.end_date
+                .cmp(&right.end_date)
+                .then(left.subscription_id.cmp(&right.subscription_id))
+        });
+        view.subscription_id = targets.first().map(|target| target.subscription_id.clone());
+        view.target_quantity = targets.iter().map(|target| target.target_quantity).sum();
+        view.distributed_quantity = targets
+            .iter()
+            .map(|target| target.distributed_quantity.min(target.target_quantity))
+            .sum();
+        view.remaining_quantity = targets.iter().map(|target| target.remaining_quantity).sum();
+        view.subscription_status = "유효".into();
+        view.distribution_status = if view.distributed_quantity == 0 {
+            "미배부"
+        } else if view.remaining_quantity == 0 {
+            "배부 완료"
+        } else {
+            "일부 배부"
+        }
+        .into();
+        view.last_issue = targets.last().map(|target| target.last_issue.clone());
+        view.end_date = targets.last().map(|target| target.end_date.clone());
+        view.is_last_issue = targets
+            .iter()
+            .any(|target| target.last_issue == issue.display_name());
+        view.can_distribute = view.remaining_quantity > 0;
+        view.distribution_targets = targets;
+        return Ok(view);
+    }
+    let subscription_assessment = subscription.assess(issue, false)?;
     let distribution_assessment =
-        assess_distribution(subscription, issue, conflict, &record.distributions)?;
+        assess_distribution(subscription, issue, false, &record.distributions)?;
     view.subscription_id = Some(subscription.id.clone());
     view.subscription_status = subscription_status(subscription_assessment.status).into();
     view.distribution_status = distribution_status(distribution_assessment.status).into();
@@ -419,7 +482,7 @@ where
     let issue = Issue::new(request.issue_year, request.issue_month)?;
     let records = repository.list_desk_records("", issue)?;
     let (subscription, distributions, conflict) =
-        find_subscription(&records, &request.subscription_id, issue)?;
+        find_subscription(&records, &request.subscription_id)?;
     let planned = plan_distribution(
         subscription,
         issue,
@@ -647,6 +710,38 @@ where
     Ok(())
 }
 
+pub fn delete_check_item<R, C, I>(
+    repository: &mut R,
+    services: &RuntimeServices<'_, C, I>,
+    id: &str,
+) -> Result<(), ApplicationError>
+where
+    R: DistributionDeskRepository,
+    C: Clock,
+    I: IdGenerator,
+{
+    let exists = repository
+        .list_check_items()?
+        .into_iter()
+        .chain(repository.list_archived_check_items()?)
+        .any(|item| item.id == id);
+    if !exists {
+        return Err(ApplicationError::MissingDeskRecord);
+    }
+    let now = services.clock.now();
+    let change = change_log(
+        services.ids.next_id(),
+        &now,
+        &required_operator(repository)?,
+        "check_item_deleted",
+        "check_item",
+        id,
+        "확인할 일 삭제",
+    );
+    repository.delete_check_item(id, &change)?;
+    Ok(())
+}
+
 pub fn create_pinned_note<R, C, I>(
     repository: &mut R,
     services: &RuntimeServices<'_, C, I>,
@@ -735,6 +830,38 @@ where
     Ok(())
 }
 
+pub fn delete_pinned_note<R, C, I>(
+    repository: &mut R,
+    services: &RuntimeServices<'_, C, I>,
+    id: &str,
+) -> Result<(), ApplicationError>
+where
+    R: DistributionDeskRepository,
+    C: Clock,
+    I: IdGenerator,
+{
+    let exists = repository
+        .list_pinned_notes()?
+        .into_iter()
+        .chain(repository.list_archived_pinned_notes()?)
+        .any(|note| note.id == id);
+    if !exists {
+        return Err(ApplicationError::MissingDeskRecord);
+    }
+    let now = services.clock.now();
+    let change = change_log(
+        services.ids.next_id(),
+        &now,
+        &required_operator(repository)?,
+        "pinned_note_deleted",
+        "pinned_note",
+        id,
+        "고정 메모 삭제",
+    );
+    repository.delete_pinned_note(id, &change)?;
+    Ok(())
+}
+
 pub fn record_purchase<R, C, I>(
     repository: &mut R,
     services: &RuntimeServices<'_, C, I>,
@@ -814,7 +941,6 @@ where
 fn find_subscription<'a>(
     records: &'a [DeskRecord],
     subscription_id: &str,
-    issue: Issue,
 ) -> Result<(&'a Subscription, &'a [Distribution], bool), ApplicationError> {
     for record in records {
         if let Some(subscription) = record
@@ -822,13 +948,9 @@ fn find_subscription<'a>(
             .iter()
             .find(|subscription| subscription.id == subscription_id)
         {
-            let conflict = record
-                .subscriptions
-                .iter()
-                .filter(|candidate| candidate.includes(issue).unwrap_or(false))
-                .count()
-                > 1;
-            return Ok((subscription, &record.distributions, conflict));
+            // 여러 권을 각기 다른 시작 호로 신청할 수 있으므로 서로 다른 구독은
+            // 선택 호에 겹쳐도 각 구독의 독립적인 배부 자격으로 처리한다.
+            return Ok((subscription, &record.distributions, false));
         }
     }
     Err(ApplicationError::MissingDeskRecord)
@@ -1060,6 +1182,10 @@ mod tests {
             self.check_items.push(item.clone());
             Ok(())
         }
+        fn delete_check_item(&mut self, id: &str, _change: &ChangeLog) -> Result<(), PortError> {
+            self.check_items.retain(|item| item.id != id);
+            Ok(())
+        }
         fn list_pinned_notes(&self) -> Result<Vec<PinnedNote>, PortError> {
             Ok(self
                 .pinned_notes
@@ -1083,6 +1209,10 @@ mod tests {
         ) -> Result<(), PortError> {
             self.pinned_notes.retain(|current| current.id != note.id);
             self.pinned_notes.push(note.clone());
+            Ok(())
+        }
+        fn delete_pinned_note(&mut self, id: &str, _change: &ChangeLog) -> Result<(), PortError> {
+            self.pinned_notes.retain(|note| note.id != id);
             Ok(())
         }
         fn save_purchase(
@@ -1185,6 +1315,37 @@ mod tests {
         assert_eq!(desk.totals.remaining_people, 1);
         assert_eq!(desk.totals.target_quantity, 2);
         assert_eq!(desk.people[0].phone.as_deref(), Some("010-1234-5678"));
+    }
+
+    #[test]
+    fn overlapping_independent_subscriptions_are_summed_per_person() {
+        let mut record = record(1);
+        let mut second = record.subscriptions[0].clone();
+        second.id = "subscription-2".into();
+        second.start_issue = Issue::new(2026, 5).unwrap();
+        record.subscriptions.push(second);
+        let mut repository = MemoryRepository {
+            operator: Some("담당자".into()),
+            records: vec![record],
+            ..Default::default()
+        };
+
+        let desk = load_distribution_desk(
+            &mut repository,
+            &FixedClock,
+            Issue::new(2026, 7).unwrap(),
+            "",
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(desk.people.len(), 1);
+        assert_eq!(desk.people[0].distribution_targets.len(), 2);
+        assert_eq!(desk.people[0].target_quantity, 2);
+        assert_eq!(desk.people[0].remaining_quantity, 2);
+        assert!(desk.people[0].can_distribute);
+        assert_eq!(desk.totals.target_people, 1);
+        assert_eq!(desk.totals.target_quantity, 2);
     }
 
     #[test]
@@ -1405,6 +1566,13 @@ mod tests {
             CheckItemStatus::NeedsCheck
         );
         assert!(repository.pinned_notes[0].is_visible());
+
+        let item_id = repository.check_items[0].id.clone();
+        let note_id = repository.pinned_notes[0].id.clone();
+        delete_check_item(&mut repository, &services, &item_id).unwrap();
+        delete_pinned_note(&mut repository, &services, &note_id).unwrap();
+        assert!(repository.check_items.is_empty());
+        assert!(repository.pinned_notes.is_empty());
     }
 
     #[test]

@@ -9,12 +9,12 @@ use qt_application::{
     RegisterPersonRequest, RenewSubscriptionRequest, RestorePointView, RunPhase0Probe,
     RunPhase1Probe, RuntimeServices, StateCounts, UndoDistributionRequest,
     UpdateCheckItemStatusRequest, UpdatePersonRequest, UpdatePinnedNoteRequest, apply_state_import,
-    cancel_latest_purchase, create_check_item, create_draft, create_pinned_note, export_state,
-    import_applications, load_distribution_desk, load_people_management, load_person_detail,
-    preview_applications, preview_duplicates, preview_state_import, record_distribution,
-    record_purchase, register_person, renew_subscription, save_operator, set_person_archived,
-    undo_last_distribution, undo_state_import, update_check_item_status, update_person,
-    update_pinned_note,
+    cancel_latest_purchase, create_check_item, create_draft, create_pinned_note, delete_check_item,
+    delete_pinned_note, export_state, import_applications, load_distribution_desk,
+    load_people_management, load_person_detail, preview_applications, preview_duplicates,
+    preview_state_import, record_distribution, record_purchase, register_person,
+    renew_subscription, save_operator, set_person_archived, undo_last_distribution,
+    undo_state_import, update_check_item_status, update_person, update_pinned_note,
 };
 use qt_domain::Issue;
 use qt_infrastructure::{
@@ -343,6 +343,29 @@ fn update_check_item_status_command(
 }
 
 #[tauri::command]
+fn delete_check_item_command(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    let mut repository = open_operational_repository(&app)?;
+    let runtime = SystemRuntime;
+    let logger = event_logger(&app);
+    logger.info("check_item_delete_started");
+    let result = delete_check_item(
+        &mut repository,
+        &RuntimeServices {
+            clock: &runtime,
+            ids: &runtime,
+        },
+        &id,
+    )
+    .map_err(|error| error.to_string());
+    if result.is_ok() {
+        logger.info("check_item_delete_completed");
+    } else {
+        logger.error("check_item_delete_failed");
+    }
+    result
+}
+
+#[tauri::command]
 fn create_pinned_note_command(
     app: tauri::AppHandle,
     request: CreatePinnedNoteRequest,
@@ -390,6 +413,29 @@ fn update_pinned_note_command(
         logger.info("pinned_note_update_completed");
     } else {
         logger.error("pinned_note_update_failed");
+    }
+    result
+}
+
+#[tauri::command]
+fn delete_pinned_note_command(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    let mut repository = open_operational_repository(&app)?;
+    let runtime = SystemRuntime;
+    let logger = event_logger(&app);
+    logger.info("pinned_note_delete_started");
+    let result = delete_pinned_note(
+        &mut repository,
+        &RuntimeServices {
+            clock: &runtime,
+            ids: &runtime,
+        },
+        &id,
+    )
+    .map_err(|error| error.to_string());
+    if result.is_ok() {
+        logger.info("pinned_note_delete_completed");
+    } else {
+        logger.error("pinned_note_delete_failed");
     }
     result
 }
@@ -753,8 +799,10 @@ pub fn run() {
             create_draft_command,
             create_check_item_command,
             update_check_item_status_command,
+            delete_check_item_command,
             create_pinned_note_command,
             update_pinned_note_command,
+            delete_pinned_note_command,
             record_purchase_command,
             cancel_latest_purchase_command,
             load_people_management_command,

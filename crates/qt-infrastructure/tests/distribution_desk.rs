@@ -4,8 +4,9 @@ use qt_application::{
     Clock, CreateCheckItemRequest, CreateDraftRequest, CreatePinnedNoteRequest,
     DistributionDeskRepository, IdGenerator, RecordDistributionRequest, RecordPurchaseRequest,
     RuntimeServices, UndoDistributionRequest, UpdateCheckItemStatusRequest, create_check_item,
-    create_draft, create_pinned_note, load_distribution_desk, record_distribution, record_purchase,
-    save_operator, undo_last_distribution, update_check_item_status,
+    create_draft, create_pinned_note, delete_check_item, delete_pinned_note,
+    load_distribution_desk, record_distribution, record_purchase, save_operator,
+    undo_last_distribution, update_check_item_status,
 };
 use qt_domain::{CheckItemStatus, Issue};
 use qt_infrastructure::SqliteCoreRepository;
@@ -153,4 +154,10 @@ fn persists_and_searches_complete_distribution_desk_flow_after_reopen() {
         load_distribution_desk(&mut reopened, &FixedClock, issue, "가상", false).unwrap();
     assert_eq!(after_undo.people[0].distribution_status, "미배부");
     assert_eq!(after_undo.check_items[0].status, "확인 완료");
+
+    delete_check_item(&mut reopened, &services, &restored.check_items[0].id).unwrap();
+    delete_pinned_note(&mut reopened, &services, &restored.pinned_notes[0].id).unwrap();
+    let after_delete = load_distribution_desk(&mut reopened, &FixedClock, issue, "", true).unwrap();
+    assert!(after_delete.check_items.is_empty());
+    assert!(after_delete.pinned_notes.is_empty());
 }
