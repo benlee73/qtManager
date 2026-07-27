@@ -262,6 +262,22 @@ describe("QT Manager desktop flow", () => {
         ?.click();
     });
     await waitForText("h2", "신청자 정보와 전체 이력");
+    const headingFits = await browser.execute(() => {
+      const heading = document
+        .querySelector<HTMLElement>(".management-heading")!
+        .getBoundingClientRect();
+      return [
+        ...document.querySelectorAll<HTMLElement>(".heading-actions button"),
+      ].every((button) => {
+        const rect = button.getBoundingClientRect();
+        return (
+          rect.top >= heading.top &&
+          rect.bottom <= heading.bottom &&
+          rect.right <= heading.right
+        );
+      });
+    });
+    expect(headingFits).toBe(true);
     await browser.execute(() => {
       document
         .querySelector<HTMLButtonElement>(

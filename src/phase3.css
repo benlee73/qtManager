@@ -29,6 +29,14 @@
   color: var(--muted);
 }
 
+.heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .management-grid {
   display: grid;
   min-height: 0;
