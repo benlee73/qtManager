@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import type { ReversibleAction } from "./actionHistory";
 import {
   type DeskPerson,
   type Issue,
@@ -9,6 +10,9 @@ import {
   distribute,
   recordPurchase,
   setOperator,
+  undoDistribution,
+  updateCheckItemStatus,
+  updatePinnedNote,
 } from "./phase2";
 
 export type Phase2Dialog =
@@ -18,6 +22,7 @@ export type Phase2Dialog =
   | { type: "pinned-note" }
   | { type: "purchase" }
   | { type: "partial"; person: DeskPerson }
+  | { type: "cancel-distribution"; person: DeskPerson }
   | null;
 
 export function Phase2DialogContent({
@@ -26,12 +31,14 @@ export function Phase2DialogContent({
   busy,
   onClose,
   mutate,
+  recordAction,
 }: {
   dialog: Exclude<Phase2Dialog, null>;
   issue: Issue;
   busy: boolean;
   onClose: () => void;
-  mutate: (work: () => Promise<void>, success: string) => Promise<void>;
+  mutate: (work: () => Promise<unknown>, success: string) => Promise<boolean>;
+  recordAction: (action: ReversibleAction) => void;
 }) {
   if (dialog.type === "operator") {
     return (
@@ -120,14 +127,21 @@ export function Phase2DialogContent({
           onSubmit={(event) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
-            void mutate(
-              () =>
-                createCheckItem(
-                  dialog.personId,
-                  String(data.get("content") ?? ""),
-                ),
-              "확인할 일을 저장했습니다.",
-            );
+            let createdId = "";
+            void mutate(async () => {
+              createdId = await createCheckItem(
+                dialog.personId,
+                String(data.get("content") ?? ""),
+              );
+            }, "확인할 일을 저장했습니다.").then((saved) => {
+              if (saved && createdId) {
+                recordAction({
+                  description: "확인할 일 추가",
+                  undo: () => updateCheckItemStatus(createdId, "archived"),
+                  redo: () => updateCheckItemStatus(createdId, "needs_check"),
+                });
+              }
+            });
           }}
         >
           <p className="dialog-description">
@@ -149,15 +163,22 @@ export function Phase2DialogContent({
           onSubmit={(event) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
-            void mutate(
-              () =>
-                createPinnedNote({
-                  title: String(data.get("title") ?? ""),
-                  content: String(data.get("content") ?? ""),
-                  isPinned: data.get("isPinned") === "on",
-                }),
-              "고정 메모를 저장했습니다.",
-            );
+            let createdId = "";
+            void mutate(async () => {
+              createdId = await createPinnedNote({
+                title: String(data.get("title") ?? ""),
+                content: String(data.get("content") ?? ""),
+                isPinned: data.get("isPinned") === "on",
+              });
+            }, "고정 메모를 저장했습니다.").then((saved) => {
+              if (saved && createdId) {
+                recordAction({
+                  description: "고정 메모 추가",
+                  undo: () => updatePinnedNote(createdId, { archived: true }),
+                  redo: () => updatePinnedNote(createdId, { archived: false }),
+                });
+              }
+            });
           }}
         >
           <p className="dialog-description">
@@ -217,6 +238,38 @@ export function Phase2DialogContent({
           </Field>
           <SubmitButton busy={busy}>구매·전달 기록</SubmitButton>
         </form>
+      </FormDialog>
+    );
+  }
+  if (dialog.type === "cancel-distribution") {
+    return (
+      <FormDialog title="배부를 취소할까요?" onClose={onClose}>
+        <p className="dialog-description">
+          {dialog.person.name}님의 이번 호 최근 배부 기록을 취소합니다. 취소
+          이력은 남으며 필요한 경우 다시 배부할 수 있습니다.
+        </p>
+        <div className="confirm-actions">
+          <button className="secondary-button" type="button" onClick={onClose}>
+            돌아가기
+          </button>
+          <button
+            className="danger-button"
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              void mutate(
+                () =>
+                  undoDistribution(
+                    issue,
+                    dialog.person.subscriptionId ?? undefined,
+                  ),
+                `${dialog.person.name}님의 최근 배부를 취소했습니다.`,
+              )
+            }
+          >
+            배부 취소
+          </button>
+        </div>
       </FormDialog>
     );
   }

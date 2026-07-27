@@ -43,6 +43,15 @@ pub trait DistributionDeskRepository {
         &self,
         issue: Issue,
     ) -> Result<Option<Distribution>, PortError>;
+    fn latest_reversible_distribution_for_subscription(
+        &self,
+        issue: Issue,
+        subscription_id: &str,
+    ) -> Result<Option<Distribution>, PortError> {
+        Ok(self
+            .latest_reversible_distribution(issue)?
+            .filter(|item| item.subscription_id == subscription_id))
+    }
     fn save_draft(
         &mut self,
         person: &Person,
@@ -50,8 +59,14 @@ pub trait DistributionDeskRepository {
         change: &ChangeLog,
     ) -> Result<(), PortError>;
     fn list_check_items(&self) -> Result<Vec<CheckItem>, PortError>;
+    fn list_archived_check_items(&self) -> Result<Vec<CheckItem>, PortError> {
+        Ok(Vec::new())
+    }
     fn save_check_item(&mut self, item: &CheckItem, change: &ChangeLog) -> Result<(), PortError>;
     fn list_pinned_notes(&self) -> Result<Vec<PinnedNote>, PortError>;
+    fn list_archived_pinned_notes(&self) -> Result<Vec<PinnedNote>, PortError> {
+        Ok(Vec::new())
+    }
     fn save_pinned_note(&mut self, note: &PinnedNote, change: &ChangeLog) -> Result<(), PortError>;
     fn save_purchase(
         &mut self,
@@ -75,6 +90,8 @@ pub struct DistributionDesk {
     pub people: Vec<DeskPerson>,
     pub check_items: Vec<CheckItemView>,
     pub pinned_notes: Vec<PinnedNoteView>,
+    pub archived_check_items: Vec<CheckItemView>,
+    pub archived_pinned_notes: Vec<PinnedNoteView>,
     pub purchase_count: u32,
     pub purchased_quantity: u32,
     pub can_undo_distribution: bool,
@@ -166,6 +183,7 @@ pub struct RecordDistributionRequest {
 pub struct UndoDistributionRequest {
     pub issue_year: i32,
     pub issue_month: u8,
+    pub subscription_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -206,7 +224,7 @@ pub struct UpdateCheckItemStatusRequest {
 pub struct UpdatePinnedNoteRequest {
     pub id: String,
     pub is_pinned: Option<bool>,
-    pub archived: bool,
+    pub archived: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -225,6 +243,7 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
     clock: &C,
     selected_issue: Issue,
     query: &str,
+    show_all: bool,
 ) -> Result<DistributionDesk, ApplicationError> {
     repository.migrate()?;
     let records = repository.list_desk_records(query, selected_issue)?;
@@ -257,36 +276,48 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
         .iter()
         .map(|person| (person.person_id.clone(), person.name.clone()))
         .collect::<std::collections::HashMap<_, _>>();
-    if query.trim().is_empty() {
+    if query.trim().is_empty() && !show_all {
         people.retain(|person| person.can_distribute && person.remaining_quantity > 0);
     }
+    let to_check_item_view = |item: CheckItem| CheckItemView {
+        id: item.id,
+        person_name: item
+            .person_id
+            .as_ref()
+            .and_then(|id| person_names.get(id))
+            .cloned(),
+        person_id: item.person_id,
+        summary: summarize(&item.content, 48),
+        operator_name: item.operator_name,
+        updated_at: item.updated_at,
+        status: check_item_status_label(item.status).into(),
+    };
     let check_items = repository
         .list_check_items()?
         .into_iter()
-        .map(|item| CheckItemView {
-            id: item.id,
-            person_name: item
-                .person_id
-                .as_ref()
-                .and_then(|id| person_names.get(id))
-                .cloned(),
-            person_id: item.person_id,
-            summary: summarize(&item.content, 48),
-            operator_name: item.operator_name,
-            updated_at: item.updated_at,
-            status: check_item_status_label(item.status).into(),
-        })
+        .map(&to_check_item_view)
         .collect();
+    let to_pinned_note_view = |note: PinnedNote| PinnedNoteView {
+        id: note.id,
+        title: note.title,
+        content: note.content,
+        is_pinned: note.is_pinned,
+    };
     let pinned_notes = repository
         .list_pinned_notes()?
         .into_iter()
         .filter(PinnedNote::is_visible)
-        .map(|note| PinnedNoteView {
-            id: note.id,
-            title: note.title,
-            content: note.content,
-            is_pinned: note.is_pinned,
-        })
+        .map(&to_pinned_note_view)
+        .collect();
+    let archived_check_items = repository
+        .list_archived_check_items()?
+        .into_iter()
+        .map(&to_check_item_view)
+        .collect();
+    let archived_pinned_notes = repository
+        .list_archived_pinned_notes()?
+        .into_iter()
+        .map(&to_pinned_note_view)
         .collect();
     let (purchase_count, purchased_quantity) = repository.purchase_summary(selected_issue)?;
     let can_undo_distribution = repository
@@ -301,6 +332,8 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
         people,
         check_items,
         pinned_notes,
+        archived_check_items,
+        archived_pinned_notes,
         purchase_count,
         purchased_quantity,
         can_undo_distribution,
@@ -430,9 +463,13 @@ where
     I: IdGenerator,
 {
     let issue = Issue::new(request.issue_year, request.issue_month)?;
-    let original = repository
-        .latest_reversible_distribution(issue)?
-        .ok_or(ApplicationError::NothingToUndo)?;
+    let original = match request.subscription_id.as_deref() {
+        Some(subscription_id) => {
+            repository.latest_reversible_distribution_for_subscription(issue, subscription_id)?
+        }
+        None => repository.latest_reversible_distribution(issue)?,
+    }
+    .ok_or(ApplicationError::NothingToUndo)?;
     let now = services.clock.now();
     let reversal = Distribution {
         id: services.ids.next_id(),
@@ -536,7 +573,7 @@ pub fn create_check_item<R, C, I>(
     repository: &mut R,
     services: &RuntimeServices<'_, C, I>,
     request: CreateCheckItemRequest,
-) -> Result<(), ApplicationError>
+) -> Result<String, ApplicationError>
 where
     R: DistributionDeskRepository,
     C: Clock,
@@ -567,8 +604,9 @@ where
             "일반 확인할 일 추가"
         },
     );
+    let id = item.id.clone();
     repository.save_check_item(&item, &change)?;
-    Ok(())
+    Ok(id)
 }
 
 pub fn update_check_item_status<R, C, I>(
@@ -584,6 +622,7 @@ where
     let mut item = repository
         .list_check_items()?
         .into_iter()
+        .chain(repository.list_archived_check_items()?)
         .find(|item| item.id == request.id)
         .ok_or(ApplicationError::MissingDeskRecord)?;
     let now = services.clock.now();
@@ -612,7 +651,7 @@ pub fn create_pinned_note<R, C, I>(
     repository: &mut R,
     services: &RuntimeServices<'_, C, I>,
     request: CreatePinnedNoteRequest,
-) -> Result<(), ApplicationError>
+) -> Result<String, ApplicationError>
 where
     R: DistributionDeskRepository,
     C: Clock,
@@ -640,8 +679,9 @@ where
         &note.id,
         "고정 메모 추가",
     );
+    let id = note.id.clone();
     repository.save_pinned_note(&note, &change)?;
-    Ok(())
+    Ok(id)
 }
 
 pub fn update_pinned_note<R, C, I>(
@@ -657,19 +697,26 @@ where
     let mut note = repository
         .list_pinned_notes()?
         .into_iter()
+        .chain(repository.list_archived_pinned_notes()?)
         .find(|note| note.id == request.id)
         .ok_or(ApplicationError::MissingDeskRecord)?;
     let now = services.clock.now();
     if let Some(is_pinned) = request.is_pinned {
         note.is_pinned = is_pinned;
     }
-    if request.archived {
-        note.status = PinnedNoteStatus::Archived;
-        note.archived_at = Some(now.clone());
+    if let Some(archived) = request.archived {
+        note.status = if archived {
+            PinnedNoteStatus::Archived
+        } else {
+            PinnedNoteStatus::Active
+        };
+        note.archived_at = archived.then(|| now.clone());
     }
     note.updated_at = now.clone();
-    let summary = if request.archived {
+    let summary = if request.archived == Some(true) {
         "고정 메모 보관"
+    } else if request.archived == Some(false) {
+        "고정 메모 복원"
     } else if note.is_pinned {
         "고정 메모 상단 고정"
     } else {
@@ -989,7 +1036,20 @@ mod tests {
             Ok(())
         }
         fn list_check_items(&self) -> Result<Vec<CheckItem>, PortError> {
-            Ok(self.check_items.clone())
+            Ok(self
+                .check_items
+                .iter()
+                .filter(|item| item.status != CheckItemStatus::Archived)
+                .cloned()
+                .collect())
+        }
+        fn list_archived_check_items(&self) -> Result<Vec<CheckItem>, PortError> {
+            Ok(self
+                .check_items
+                .iter()
+                .filter(|item| item.status == CheckItemStatus::Archived)
+                .cloned()
+                .collect())
         }
         fn save_check_item(
             &mut self,
@@ -1001,7 +1061,20 @@ mod tests {
             Ok(())
         }
         fn list_pinned_notes(&self) -> Result<Vec<PinnedNote>, PortError> {
-            Ok(self.pinned_notes.clone())
+            Ok(self
+                .pinned_notes
+                .iter()
+                .filter(|note| note.status == PinnedNoteStatus::Active)
+                .cloned()
+                .collect())
+        }
+        fn list_archived_pinned_notes(&self) -> Result<Vec<PinnedNote>, PortError> {
+            Ok(self
+                .pinned_notes
+                .iter()
+                .filter(|note| note.status == PinnedNoteStatus::Archived)
+                .cloned()
+                .collect())
         }
         fn save_pinned_note(
             &mut self,
@@ -1103,6 +1176,7 @@ mod tests {
             &FixedClock,
             Issue::new(2026, 7).unwrap(),
             "",
+            false,
         )
         .unwrap();
 
@@ -1111,6 +1185,54 @@ mod tests {
         assert_eq!(desk.totals.remaining_people, 1);
         assert_eq!(desk.totals.target_quantity, 2);
         assert_eq!(desk.people[0].phone.as_deref(), Some("010-1234-5678"));
+    }
+
+    #[test]
+    fn completed_people_are_hidden_from_remaining_and_visible_in_all() {
+        let mut repository = MemoryRepository {
+            operator: Some("담당자".into()),
+            records: vec![record(1)],
+            ..Default::default()
+        };
+        let ids = SequenceIds(Cell::new(0));
+        let services = RuntimeServices {
+            clock: &FixedClock,
+            ids: &ids,
+        };
+        record_distribution(
+            &mut repository,
+            &services,
+            RecordDistributionRequest {
+                issue_year: 2026,
+                issue_month: 7,
+                subscription_id: "subscription-1".into(),
+                quantity: None,
+                note: None,
+            },
+        )
+        .unwrap();
+
+        let remaining = load_distribution_desk(
+            &mut repository,
+            &FixedClock,
+            Issue::new(2026, 7).unwrap(),
+            "",
+            false,
+        )
+        .unwrap();
+        let all = load_distribution_desk(
+            &mut repository,
+            &FixedClock,
+            Issue::new(2026, 7).unwrap(),
+            "",
+            true,
+        )
+        .unwrap();
+
+        assert!(remaining.people.is_empty());
+        assert_eq!(all.people.len(), 1);
+        assert_eq!(all.people[0].distribution_status, "배부 완료");
+        assert_eq!(all.totals.completed_people, 1);
     }
 
     #[test]
@@ -1154,6 +1276,7 @@ mod tests {
             &FixedClock,
             Issue::new(2026, 7).unwrap(),
             "가상",
+            false,
         )
         .unwrap();
         assert_eq!(complete.people[0].distribution_status, "배부 완료");
@@ -1164,6 +1287,7 @@ mod tests {
             UndoDistributionRequest {
                 issue_year: 2026,
                 issue_month: 7,
+                subscription_id: None,
             },
         )
         .unwrap();
@@ -1172,6 +1296,7 @@ mod tests {
             &FixedClock,
             Issue::new(2026, 7).unwrap(),
             "가상",
+            false,
         )
         .unwrap();
         assert_eq!(partial.people[0].distribution_status, "일부 배부");
@@ -1210,6 +1335,7 @@ mod tests {
         .unwrap();
 
         let item_id = repository.check_items[0].id.clone();
+        let note_id = repository.pinned_notes[0].id.clone();
         update_check_item_status(
             &mut repository,
             &services,
@@ -1223,14 +1349,61 @@ mod tests {
             &mut repository,
             &services,
             UpdateCheckItemStatusRequest {
-                id: item_id,
+                id: item_id.clone(),
                 status: CheckItemStatus::Archived,
+            },
+        )
+        .unwrap();
+        update_pinned_note(
+            &mut repository,
+            &services,
+            UpdatePinnedNoteRequest {
+                id: note_id.clone(),
+                is_pinned: None,
+                archived: Some(true),
             },
         )
         .unwrap();
 
         assert_eq!(repository.check_items[0].status, CheckItemStatus::Archived);
         assert_eq!(repository.pinned_notes.len(), 1);
+        assert!(!repository.pinned_notes[0].is_visible());
+        let desk = load_distribution_desk(
+            &mut repository,
+            &FixedClock,
+            Issue::new(2026, 7).unwrap(),
+            "",
+            false,
+        )
+        .unwrap();
+        assert!(desk.check_items.is_empty());
+        assert!(desk.pinned_notes.is_empty());
+        assert_eq!(desk.archived_check_items.len(), 1);
+        assert_eq!(desk.archived_pinned_notes.len(), 1);
+
+        update_check_item_status(
+            &mut repository,
+            &services,
+            UpdateCheckItemStatusRequest {
+                id: item_id,
+                status: CheckItemStatus::NeedsCheck,
+            },
+        )
+        .unwrap();
+        update_pinned_note(
+            &mut repository,
+            &services,
+            UpdatePinnedNoteRequest {
+                id: note_id,
+                is_pinned: None,
+                archived: Some(false),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            repository.check_items[0].status,
+            CheckItemStatus::NeedsCheck
+        );
         assert!(repository.pinned_notes[0].is_visible());
     }
 

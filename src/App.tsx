@@ -1,8 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { ActionMenu } from "./ActionMenu";
+import { ArchiveDialog } from "./ArchiveDialog";
 import { HelpPanel } from "./HelpPanel";
+import {
+  BookLogo,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  RedoIcon,
+  UndoIcon,
+} from "./Icons";
 import { ManagementScreen } from "./ManagementScreen";
+import { NotificationStack } from "./Notifications";
 import { type Phase2Dialog, Phase2DialogContent } from "./Phase2Dialogs";
+import type { ReversibleAction } from "./actionHistory";
 import { persistTheme, readStoredTheme, type Theme } from "./appearance";
 import {
   type DeskPerson,
@@ -19,6 +30,7 @@ import {
   updateCheckItemStatus,
   updatePinnedNote,
 } from "./phase2";
+import { useNotifications } from "./useNotifications";
 
 export default function App() {
   const [screen, setScreen] = useState<"distribution" | "management">(
@@ -29,14 +41,19 @@ export default function App() {
   const [issue, setIssue] = useState<Issue>(() => recommendedIssue());
   const [query, setQuery] = useState("");
   const [desk, setDesk] = useState<DistributionDesk | null>(null);
-  const [selected, setSelected] = useState(0);
+  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const [dialog, setDialog] = useState<Phase2Dialog>(null);
-  const [notice, setNotice] = useState("");
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [quickItem, setQuickItem] = useState("");
+  const [undoStack, setUndoStack] = useState<ReversibleAction[]>([]);
+  const [redoStack, setRedoStack] = useState<ReversibleAction[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
   const quickItemRef = useRef<HTMLTextAreaElement>(null);
+  const { notifications, notify, dismiss } = useNotifications();
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -45,16 +62,18 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     try {
-      const next = await loadDesk(issue, query);
+      const next = await loadDesk(issue, query, showAll);
       setDesk(next);
-      setSelected((current) =>
-        Math.min(current, Math.max(next.people.length - 1, 0)),
+      setSelectedPersonId((current) =>
+        current && next.people.some((person) => person.personId === current)
+          ? current
+          : null,
       );
       if (!next.operatorName) setDialog({ type: "operator" });
     } catch (reason) {
-      setError(errorMessage(reason));
+      notify(errorMessage(reason), "error");
     }
-  }, [issue, query]);
+  }, [issue, notify, query, showAll]);
 
   useEffect(() => {
     const timeout = window.setTimeout(refresh, 70);
@@ -62,22 +81,69 @@ export default function App() {
   }, [refresh]);
 
   const mutate = useCallback(
-    async (work: () => Promise<void>, success: string) => {
+    async (work: () => Promise<unknown>, success: string) => {
       setBusy(true);
-      setError("");
       try {
         await work();
         setDialog(null);
-        setNotice(success);
+        notify(success);
         await refresh();
+        return true;
       } catch (reason) {
-        setError(errorMessage(reason));
+        notify(errorMessage(reason), "error");
+        return false;
       } finally {
         setBusy(false);
       }
     },
-    [refresh],
+    [notify, refresh],
   );
+
+  const recordAction = useCallback((action: ReversibleAction) => {
+    setUndoStack((current) => [...current, action]);
+    setRedoStack([]);
+  }, []);
+
+  const undoAction = useCallback(async () => {
+    const action = undoStack.at(-1);
+    if (!action) {
+      if (desk?.canUndoDistribution) {
+        await mutate(
+          () => undoDistribution(issue),
+          "최근 배부를 되돌렸습니다.",
+        );
+      }
+      return;
+    }
+    if (await mutate(action.undo, `${action.description}: 되돌렸습니다.`)) {
+      setUndoStack((current) => current.slice(0, -1));
+      setRedoStack((current) => [...current, action]);
+    }
+  }, [desk?.canUndoDistribution, issue, mutate, undoStack]);
+
+  const redoAction = useCallback(async () => {
+    const action = redoStack.at(-1);
+    if (!action) return;
+    if (
+      await mutate(action.redo, `${action.description}: 다시 실행했습니다.`)
+    ) {
+      setRedoStack((current) => current.slice(0, -1));
+      setUndoStack((current) => [...current, action]);
+    }
+  }, [mutate, redoStack]);
+
+  const visiblePeople = useMemo(() => {
+    if (!desk || statusFilter === "all") return desk?.people ?? [];
+    return desk.people.filter((person) => {
+      if (statusFilter === "undistributed")
+        return person.distributionStatus === "미배부";
+      if (statusFilter === "partial")
+        return person.distributionStatus === "일부 배부";
+      if (statusFilter === "completed")
+        return person.distributionStatus === "배부 완료";
+      return person.subscriptionStatus === "구독 만료";
+    });
+  }, [desk, statusFilter]);
 
   const defaultDistribution = useCallback(
     async (person: DeskPerson) => {
@@ -101,7 +167,9 @@ export default function App() {
         setHelpOpen(true);
       } else if (modified && event.key === "Enter") {
         event.preventDefault();
-        const person = desk?.people[selected];
+        const person = visiblePeople.find(
+          (candidate) => candidate.personId === selectedPersonId,
+        );
         if (person) void defaultDistribution(person);
       } else if (modified && event.key.toLowerCase() === "n") {
         event.preventDefault();
@@ -115,27 +183,32 @@ export default function App() {
         quickItemRef.current?.focus();
       } else if (modified && event.key.toLowerCase() === "z") {
         event.preventDefault();
-        if (desk?.canUndoDistribution) {
-          void mutate(
-            () => undoDistribution(issue),
-            "최근 배부를 되돌렸습니다.",
-          );
-        }
+        if (event.shiftKey) void redoAction();
+        else void undoAction();
       } else if (
         !isTextEntryTarget(event.target) &&
         (event.key === "ArrowDown" || event.key === "ArrowUp")
       ) {
         event.preventDefault();
-        setSelected((current) =>
-          event.key === "ArrowDown"
-            ? Math.min(current + 1, Math.max((desk?.people.length ?? 1) - 1, 0))
-            : Math.max(current - 1, 0),
+        const current = visiblePeople.findIndex(
+          (person) => person.personId === selectedPersonId,
         );
+        const next =
+          event.key === "ArrowDown"
+            ? Math.min(current + 1, Math.max(visiblePeople.length - 1, 0))
+            : Math.max(current < 0 ? 0 : current - 1, 0);
+        setSelectedPersonId(visiblePeople[next]?.personId ?? null);
       }
     }
     window.addEventListener("keydown", handleKeydown);
     return () => window.removeEventListener("keydown", handleKeydown);
-  }, [defaultDistribution, desk, issue, mutate, selected]);
+  }, [
+    defaultDistribution,
+    redoAction,
+    selectedPersonId,
+    undoAction,
+    visiblePeople,
+  ]);
 
   if (screen === "management") {
     return (
@@ -151,8 +224,9 @@ export default function App() {
           onOperator={() => setDialog({ type: "operator" })}
         />
         <div className="management-host">
-          <ManagementScreen issue={issue} />
+          <ManagementScreen issue={issue} notify={notify} />
         </div>
+        <NotificationStack notifications={notifications} onDismiss={dismiss} />
         {helpOpen && (
           <HelpPanel topic="people" onClose={() => setHelpOpen(false)} />
         )}
@@ -163,6 +237,7 @@ export default function App() {
             busy={busy}
             onClose={() => desk?.operatorName && setDialog(null)}
             mutate={mutate}
+            recordAction={recordAction}
           />
         )}
       </div>
@@ -171,12 +246,19 @@ export default function App() {
 
   const submitQuickItem = () => {
     if (!quickItem.trim()) return;
-    void mutate(
-      () => createCheckItem(null, quickItem),
-      "일반 확인할 일을 추가했습니다.",
-    ).then(() => {
-      setQuickItem("");
-      quickItemRef.current?.focus();
+    let createdId = "";
+    void mutate(async () => {
+      createdId = await createCheckItem(null, quickItem);
+    }, "일반 확인할 일을 추가했습니다.").then((saved) => {
+      if (saved) {
+        recordAction({
+          description: "확인할 일 추가",
+          undo: () => updateCheckItemStatus(createdId, "archived"),
+          redo: () => updateCheckItemStatus(createdId, "needs_check"),
+        });
+        setQuickItem("");
+        quickItemRef.current?.focus();
+      }
     });
   };
 
@@ -193,17 +275,28 @@ export default function App() {
         onOperator={() => setDialog({ type: "operator" })}
       />
 
-      <main className="desk">
+      <main
+        className="desk"
+        onPointerDown={(event) => {
+          const target = event.target as HTMLElement;
+          if (
+            !target.closest(
+              "button, input, textarea, select, a, [role='option'], .more-menu",
+            )
+          ) {
+            setSelectedPersonId(null);
+          }
+        }}
+      >
         <header className="desk-header">
           <div className="issue-picker">
-            <p>현장 배부</p>
             <div>
               <button
                 type="button"
                 aria-label="이전 호"
                 onClick={() => setIssue((current) => moveIssue(current, -1))}
               >
-                ‹
+                <ChevronLeftIcon />
               </button>
               <h1 data-testid="selected-issue">
                 {desk?.selectedIssue.label ??
@@ -214,7 +307,7 @@ export default function App() {
                 aria-label="다음 호"
                 onClick={() => setIssue((current) => moveIssue(current, 1))}
               >
-                ›
+                <ChevronRightIcon />
               </button>
             </div>
           </div>
@@ -237,21 +330,35 @@ export default function App() {
               value={`${desk?.totals.distributedQuantity ?? 0}/${desk?.totals.targetQuantity ?? 0}권`}
             />
           </section>
-          <button
-            className="undo-icon"
-            type="button"
-            aria-label="마지막 배부 되돌리기"
-            title="마지막 배부 되돌리기"
-            disabled={!desk?.canUndoDistribution || busy}
-            onClick={() =>
-              void mutate(
-                () => undoDistribution(issue),
-                "최근 배부를 되돌렸습니다.",
-              )
-            }
-          >
-            ↶
-          </button>
+          <div className="history-buttons">
+            <button
+              className="undo-icon"
+              type="button"
+              aria-label="마지막 동작 되돌리기"
+              title={
+                undoStack.at(-1)?.description ??
+                (desk?.canUndoDistribution
+                  ? "마지막 배부 되돌리기"
+                  : "되돌릴 동작 없음")
+              }
+              disabled={
+                (undoStack.length === 0 && !desk?.canUndoDistribution) || busy
+              }
+              onClick={() => void undoAction()}
+            >
+              <UndoIcon />
+            </button>
+            <button
+              className="undo-icon"
+              type="button"
+              aria-label="되돌린 동작 다시 실행"
+              title={redoStack.at(-1)?.description ?? "다시 실행할 동작 없음"}
+              disabled={redoStack.length === 0 || busy}
+              onClick={() => void redoAction()}
+            >
+              <RedoIcon />
+            </button>
+          </div>
         </header>
 
         <div className="workspace">
@@ -277,37 +384,72 @@ export default function App() {
               >
                 + 현장 간이 등록
               </button>
-              <details className="more-menu">
-                <summary aria-label="기타 기능">•••</summary>
-                <div>
+              <ActionMenu
+                id="desk-more"
+                label="기타 기능"
+                openMenu={openMenu}
+                onOpenMenu={setOpenMenu}
+              >
+                <button
+                  type="button"
+                  onClick={() => setDialog({ type: "purchase" })}
+                >
+                  현장 개별 구매
+                </button>
+                {(desk?.purchaseCount ?? 0) > 0 && (
                   <button
                     type="button"
-                    onClick={() => setDialog({ type: "purchase" })}
+                    onClick={() =>
+                      void mutate(
+                        () => cancelLatestPurchase(issue),
+                        "최근 개별 구매를 취소했습니다.",
+                      )
+                    }
                   >
-                    현장 개별 구매
+                    최근 구매 취소
                   </button>
-                  {(desk?.purchaseCount ?? 0) > 0 && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void mutate(
-                          () => cancelLatestPurchase(issue),
-                          "최근 개별 구매를 취소했습니다.",
-                        )
-                      }
-                    >
-                      최근 구매 취소
-                    </button>
-                  )}
-                </div>
-              </details>
+                )}
+              </ActionMenu>
             </div>
             <div className="table-title">
               <h2>
-                {query ? "검색 결과" : "남은 신청자"}{" "}
-                <b>{desk?.people.length ?? 0}</b>
+                {query ? "검색 결과" : showAll ? "전체 신청자" : "남은 신청자"}{" "}
+                <b>{visiblePeople.length}</b>
               </h2>
-              <span>미배부·일부 배부</span>
+              <div className="list-filters">
+                <div className="view-toggle" aria-label="신청자 보기 범위">
+                  <button
+                    className={!showAll ? "active" : ""}
+                    type="button"
+                    onClick={() => {
+                      setShowAll(false);
+                      setStatusFilter("all");
+                    }}
+                  >
+                    남은 배부
+                  </button>
+                  <button
+                    className={showAll ? "active" : ""}
+                    type="button"
+                    onClick={() => setShowAll(true)}
+                  >
+                    전체
+                  </button>
+                </div>
+                {showAll && (
+                  <select
+                    aria-label="상태 필터"
+                    value={statusFilter}
+                    onChange={(event) => setStatusFilter(event.target.value)}
+                  >
+                    <option value="all">모든 상태</option>
+                    <option value="undistributed">미배부</option>
+                    <option value="partial">일부 배부</option>
+                    <option value="completed">배부 완료</option>
+                    <option value="expired">구독 만료</option>
+                  </select>
+                )}
+              </div>
             </div>
             <div className="table-head" aria-hidden="true">
               <span>또래</span>
@@ -317,15 +459,32 @@ export default function App() {
               <span>배부</span>
               <span />
             </div>
-            <div className="person-list" role="listbox" aria-label="QT 신청자">
-              {desk?.people.map((person, index) => (
+            <div
+              className="person-list"
+              role="listbox"
+              aria-label="QT 신청자"
+              onClick={(event) => {
+                if (event.target === event.currentTarget)
+                  setSelectedPersonId(null);
+              }}
+            >
+              {visiblePeople.map((person) => (
                 <PersonRow
                   key={`${person.personId}-${person.subscriptionId ?? "none"}`}
                   person={person}
-                  selected={selected === index}
+                  selected={selectedPersonId === person.personId}
                   busy={busy}
-                  onSelect={() => setSelected(index)}
+                  openMenu={openMenu}
+                  onOpenMenu={setOpenMenu}
+                  onSelect={() =>
+                    setSelectedPersonId((current) =>
+                      current === person.personId ? null : person.personId,
+                    )
+                  }
                   onDistribute={() => void defaultDistribution(person)}
+                  onCancelDistribution={() =>
+                    setDialog({ type: "cancel-distribution", person })
+                  }
                   onPartial={() => setDialog({ type: "partial", person })}
                   onCheckItem={() =>
                     setDialog({
@@ -335,7 +494,7 @@ export default function App() {
                   }
                 />
               ))}
-              {desk && desk.people.length === 0 && (
+              {desk && visiblePeople.length === 0 && (
                 <div className="empty-state" data-testid="empty-list">
                   <strong>
                     {query
@@ -355,13 +514,22 @@ export default function App() {
           <aside className="notes-panel">
             <header>
               <div>
-                <p>현장 배부</p>
                 <h2>확인할 일</h2>
               </div>
-              <span className="count-badge">
-                {desk?.checkItems.filter((item) => item.status === "확인 필요")
-                  .length ?? 0}
-              </span>
+              <div>
+                <button
+                  className="archive-button"
+                  type="button"
+                  onClick={() => setArchiveOpen(true)}
+                >
+                  보관함
+                </button>
+                <span className="count-badge">
+                  {desk?.checkItems.filter(
+                    (item) => item.status === "확인 필요",
+                  ).length ?? 0}
+                </span>
+              </div>
             </header>
             <form
               className="sticky-input"
@@ -370,17 +538,19 @@ export default function App() {
                 submitQuickItem();
               }}
             >
-              <label htmlFor="quick-item">빠른 확인할 일</label>
+              <label className="sr-only" htmlFor="quick-item">
+                새 확인할 일
+              </label>
               <textarea
                 id="quick-item"
                 ref={quickItemRef}
                 autoFocus
                 value={quickItem}
                 onChange={(event) => setQuickItem(event.target.value)}
-                placeholder="신청자 연결 없이 바로 입력하세요…"
+                placeholder="확인할 내용을 입력하세요…"
               />
               <div>
-                <small>일반 항목으로 저장</small>
+                <small>일반 확인할 일로 저장</small>
                 <button
                   type="submit"
                   data-testid="add-general-check-item"
@@ -392,50 +562,78 @@ export default function App() {
             </form>
             <div className="check-item-list">
               {desk?.checkItems.map((item) => (
-                <article className="check-item" key={item.id}>
-                  <p title={item.summary}>{item.summary}</p>
+                <article
+                  className={`check-item ${item.status === "확인 완료" ? "checked" : ""}`}
+                  key={item.id}
+                >
+                  <label className="check-item-main">
+                    <input
+                      type="checkbox"
+                      checked={item.status === "확인 완료"}
+                      aria-label={`${item.summary} 확인 완료`}
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        void mutate(
+                          () =>
+                            updateCheckItemStatus(
+                              item.id,
+                              checked ? "checked" : "needs_check",
+                            ),
+                          checked
+                            ? "확인할 일을 완료했습니다."
+                            : "확인할 일을 다시 확인하도록 바꿨습니다.",
+                        ).then((saved) => {
+                          if (saved) {
+                            recordAction({
+                              description: checked
+                                ? "확인할 일 완료"
+                                : "확인할 일 다시 열기",
+                              undo: () =>
+                                updateCheckItemStatus(
+                                  item.id,
+                                  checked ? "needs_check" : "checked",
+                                ),
+                              redo: () =>
+                                updateCheckItemStatus(
+                                  item.id,
+                                  checked ? "checked" : "needs_check",
+                                ),
+                            });
+                          }
+                        });
+                      }}
+                    />
+                    <p title={item.summary}>{item.summary}</p>
+                  </label>
                   <div>
                     <small>
                       <b>
                         {item.personName ? `${item.personName} 연결` : "일반"}
                       </b>
-                      {" · "}
-                      {item.status}
                     </small>
-                    {item.status === "확인 필요" ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void mutate(
-                            () => updateCheckItemStatus(item.id, "checked"),
-                            "확인할 일을 완료했습니다.",
-                          )
-                        }
-                      >
-                        확인 완료
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void mutate(
-                            () => updateCheckItemStatus(item.id, "needs_check"),
-                            "확인 필요 상태로 되돌렸습니다.",
-                          )
-                        }
-                      >
-                        다시 확인
-                      </button>
-                    )}
                     <button
                       type="button"
                       aria-label="확인할 일 보관"
-                      onClick={() =>
+                      onClick={() => {
+                        const previous =
+                          item.status === "확인 완료"
+                            ? "checked"
+                            : "needs_check";
                         void mutate(
                           () => updateCheckItemStatus(item.id, "archived"),
                           "확인할 일을 보관했습니다.",
-                        )
-                      }
+                        ).then((saved) => {
+                          if (saved) {
+                            recordAction({
+                              description: "확인할 일 보관",
+                              undo: () =>
+                                updateCheckItemStatus(item.id, previous),
+                              redo: () =>
+                                updateCheckItemStatus(item.id, "archived"),
+                            });
+                          }
+                        });
+                      }}
                     >
                       보관
                     </button>
@@ -459,39 +657,73 @@ export default function App() {
                   <article className="pinned-note" key={note.id}>
                     <div>
                       <span>{note.isPinned ? "● 고정" : "고정 해제됨"}</span>
-                      <details className="more-menu note-menu">
-                        <summary aria-label="고정 메모 메뉴">•••</summary>
-                        <div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void mutate(
-                                () =>
-                                  updatePinnedNote(note.id, {
-                                    isPinned: !note.isPinned,
-                                  }),
-                                note.isPinned
-                                  ? "상단 고정을 해제했습니다."
-                                  : "메모를 상단에 고정했습니다.",
-                              )
-                            }
-                          >
-                            {note.isPinned ? "고정 해제" : "상단 고정"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void mutate(
-                                () =>
-                                  updatePinnedNote(note.id, { archived: true }),
-                                "고정 메모를 보관했습니다.",
-                              )
-                            }
-                          >
-                            보관
-                          </button>
-                        </div>
-                      </details>
+                      <ActionMenu
+                        id={`pinned-${note.id}`}
+                        label="고정 메모 메뉴"
+                        openMenu={openMenu}
+                        onOpenMenu={setOpenMenu}
+                        className="note-menu"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextPinned = !note.isPinned;
+                            void mutate(
+                              () =>
+                                updatePinnedNote(note.id, {
+                                  isPinned: nextPinned,
+                                }),
+                              note.isPinned
+                                ? "상단 고정을 해제했습니다."
+                                : "메모를 상단에 고정했습니다.",
+                            ).then((saved) => {
+                              if (saved) {
+                                recordAction({
+                                  description: nextPinned
+                                    ? "고정 메모 상단 고정"
+                                    : "고정 메모 고정 해제",
+                                  undo: () =>
+                                    updatePinnedNote(note.id, {
+                                      isPinned: !nextPinned,
+                                    }),
+                                  redo: () =>
+                                    updatePinnedNote(note.id, {
+                                      isPinned: nextPinned,
+                                    }),
+                                });
+                              }
+                            });
+                          }}
+                        >
+                          {note.isPinned ? "고정 해제" : "상단 고정"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void mutate(
+                              () =>
+                                updatePinnedNote(note.id, { archived: true }),
+                              "고정 메모를 보관했습니다.",
+                            ).then((saved) => {
+                              if (saved) {
+                                recordAction({
+                                  description: "고정 메모 보관",
+                                  undo: () =>
+                                    updatePinnedNote(note.id, {
+                                      archived: false,
+                                    }),
+                                  redo: () =>
+                                    updatePinnedNote(note.id, {
+                                      archived: true,
+                                    }),
+                                });
+                              }
+                            });
+                          }}
+                        >
+                          보관
+                        </button>
+                      </ActionMenu>
                     </div>
                     <p title={note.title}>{note.title}</p>
                     <b title={note.content}>{note.content}</b>
@@ -503,23 +735,16 @@ export default function App() {
         </div>
       </main>
 
-      {(notice || error) && (
-        <div
-          className={`toast ${error ? "error" : ""}`}
-          role={error ? "alert" : "status"}
-        >
-          <span>{error || notice}</span>
-          <button
-            type="button"
-            aria-label="알림 닫기"
-            onClick={() => {
-              setNotice("");
-              setError("");
-            }}
-          >
-            ×
-          </button>
-        </div>
+      <NotificationStack notifications={notifications} onDismiss={dismiss} />
+      {archiveOpen && desk && (
+        <ArchiveDialog
+          checkItems={desk.archivedCheckItems}
+          pinnedNotes={desk.archivedPinnedNotes}
+          busy={busy}
+          onClose={() => setArchiveOpen(false)}
+          mutate={mutate}
+          recordAction={recordAction}
+        />
       )}
       {dialog && (
         <Phase2DialogContent
@@ -528,6 +753,7 @@ export default function App() {
           busy={busy}
           onClose={() => desk?.operatorName && setDialog(null)}
           mutate={mutate}
+          recordAction={recordAction}
         />
       )}
       {helpOpen && <HelpPanel onClose={() => setHelpOpen(false)} />}
@@ -557,16 +783,17 @@ function TopNavigation({
   return (
     <nav className="topnav">
       <div className="brand">
-        <span className="brand-mark" aria-hidden="true">
-          QT
-        </span>
+        <BookLogo />
         <div>
           <b>QT Manager</b>
           <small>
             맑은샘광천교회 청년부{" "}
-            <i title="2026 교육국 제작" aria-label="2026 교육국 제작">
-              ⓘ
-            </i>
+            <span className="info-tooltip">
+              <button type="button" aria-label="제작 정보">
+                i
+              </button>
+              <span role="tooltip">2026 교육국 제작</span>
+            </span>
           </small>
         </div>
       </div>
@@ -632,27 +859,32 @@ function PersonRow({
   person,
   selected,
   busy,
+  openMenu,
+  onOpenMenu,
   onSelect,
   onDistribute,
+  onCancelDistribution,
   onPartial,
   onCheckItem,
 }: {
   person: DeskPerson;
   selected: boolean;
   busy: boolean;
+  openMenu: string | null;
+  onOpenMenu: (id: string | null) => void;
   onSelect: () => void;
   onDistribute: () => void;
+  onCancelDistribution: () => void;
   onPartial: () => void;
   onCheckItem: () => void;
 }) {
   return (
     <article
-      className={`person-row ${selected ? "selected" : ""}`}
+      className={`person-row ${selected ? "selected" : ""} ${distributionClass(person.distributionStatus)}`}
       role="option"
       aria-selected={selected}
       tabIndex={0}
       onClick={onSelect}
-      onFocus={onSelect}
       onContextMenu={(event) => {
         event.preventDefault();
         onCheckItem();
@@ -669,7 +901,7 @@ function PersonRow({
       </span>
       <div className={`subscription ${statusClass(person.subscriptionStatus)}`}>
         <b>
-          ● {person.isLastIssue ? "이번 호 마지막" : person.subscriptionStatus}
+          {person.isLastIssue ? "이번 호 마지막" : person.subscriptionStatus}
         </b>
         <small>
           {person.endDate
@@ -687,39 +919,49 @@ function PersonRow({
       </div>
       <div className="row-actions">
         <button
-          className="primary-button"
+          className={
+            person.distributionStatus === "배부 완료"
+              ? "cancel-distribution-button"
+              : "primary-button"
+          }
           data-testid="distribute"
           type="button"
-          disabled={!person.canDistribute || busy}
+          disabled={
+            (!person.canDistribute &&
+              person.distributionStatus !== "배부 완료") ||
+            busy
+          }
           onClick={(event) => {
             event.stopPropagation();
-            onDistribute();
+            if (person.distributionStatus === "배부 완료")
+              onCancelDistribution();
+            else onDistribute();
           }}
         >
-          {person.canDistribute
-            ? `${person.remainingQuantity}권 배부`
-            : person.subscriptionStatus === "구독 만료"
-              ? "구독 갱신"
-              : person.distributionStatus}
+          {person.distributionStatus === "배부 완료"
+            ? "배부 취소"
+            : person.canDistribute
+              ? `${person.remainingQuantity}권 배부`
+              : person.subscriptionStatus === "구독 만료"
+                ? "구독 갱신"
+                : person.distributionStatus}
         </button>
-        <details className="more-menu row-menu">
-          <summary
-            aria-label={`${person.name} 메뉴`}
-            onClick={(event) => event.stopPropagation()}
-          >
-            •••
-          </summary>
-          <div>
-            <button type="button" onClick={onCheckItem}>
-              확인할 일 추가
+        <ActionMenu
+          id={`person-${person.personId}`}
+          label={`${person.name} 메뉴`}
+          openMenu={openMenu}
+          onOpenMenu={onOpenMenu}
+          className="row-menu"
+        >
+          <button type="button" onClick={onCheckItem}>
+            확인할 일 추가
+          </button>
+          {person.canDistribute && person.remainingQuantity > 1 && (
+            <button type="button" onClick={onPartial}>
+              일부만 배부
             </button>
-            {person.canDistribute && person.remainingQuantity > 1 && (
-              <button type="button" onClick={onPartial}>
-                일부만 배부
-              </button>
-            )}
-          </div>
-        </details>
+          )}
+        </ActionMenu>
       </div>
     </article>
   );
@@ -730,6 +972,12 @@ function statusClass(status: string) {
   if (status === "구독 만료") return "expired";
   if (status === "확인 필요") return "review";
   return "";
+}
+
+function distributionClass(status: string) {
+  if (status === "일부 배부") return "distribution-partial";
+  if (status === "배부 완료") return "distribution-complete";
+  return "distribution-undistributed";
 }
 
 function errorMessage(reason: unknown) {

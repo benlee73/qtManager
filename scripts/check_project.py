@@ -76,6 +76,9 @@ def verify_release_metadata() -> None:
         raise AssertionError("배포 식별자가 예고 없이 바뀌었습니다.")
     if tauri["bundle"].get("active") is not True:
         raise AssertionError("Tauri 설치 패키지 생성이 비활성화되어 있습니다.")
+    icons = tauri["bundle"].get("icon", [])
+    if not {"icons/icon.icns", "icons/icon.ico"}.issubset(icons):
+        raise AssertionError("macOS와 Windows 앱 아이콘이 패키지에 설정되지 않았습니다.")
 
 
 def verify_offline_runtime() -> None:

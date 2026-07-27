@@ -60,7 +60,8 @@ fn persists_and_searches_complete_distribution_desk_flow_after_reopen() {
         },
     )
     .unwrap();
-    let found = load_distribution_desk(&mut repository, &FixedClock, issue, "94가상").unwrap();
+    let found =
+        load_distribution_desk(&mut repository, &FixedClock, issue, "94가상", false).unwrap();
     assert_eq!(found.people.len(), 1);
     assert_eq!(found.people[0].phone.as_deref(), Some("010-1234-5678"));
     let subscription_id = found.people[0].subscription_id.clone().unwrap();
@@ -112,7 +113,8 @@ fn persists_and_searches_complete_distribution_desk_flow_after_reopen() {
     drop(repository);
 
     let mut reopened = SqliteCoreRepository::open(&path).unwrap();
-    let restored = load_distribution_desk(&mut reopened, &FixedClock, issue, "12345678").unwrap();
+    let restored =
+        load_distribution_desk(&mut reopened, &FixedClock, issue, "12345678", false).unwrap();
     assert_eq!(restored.people[0].distribution_status, "일부 배부");
     assert_eq!(restored.people[0].remaining_quantity, 1);
     assert!(restored.people[0].has_check_item);
@@ -143,10 +145,12 @@ fn persists_and_searches_complete_distribution_desk_flow_after_reopen() {
         UndoDistributionRequest {
             issue_year: 2026,
             issue_month: 7,
+            subscription_id: None,
         },
     )
     .unwrap();
-    let after_undo = load_distribution_desk(&mut reopened, &FixedClock, issue, "가상").unwrap();
+    let after_undo =
+        load_distribution_desk(&mut reopened, &FixedClock, issue, "가상", false).unwrap();
     assert_eq!(after_undo.people[0].distribution_status, "미배부");
     assert_eq!(after_undo.check_items[0].status, "확인 완료");
 }

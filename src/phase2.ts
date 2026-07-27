@@ -28,6 +28,23 @@ export type DeskPerson = {
   canDistribute: boolean;
 };
 
+export type CheckItemView = {
+  id: string;
+  personId: string | null;
+  summary: string;
+  operatorName: string;
+  updatedAt: string;
+  status: "확인 필요" | "확인 완료" | "보관";
+  personName: string | null;
+};
+
+export type PinnedNoteView = {
+  id: string;
+  title: string;
+  content: string;
+  isPinned: boolean;
+};
+
 export type DistributionDesk = {
   selectedIssue: IssueView;
   recommendedIssue: IssueView;
@@ -41,21 +58,10 @@ export type DistributionDesk = {
     remainingQuantity: number;
   };
   people: DeskPerson[];
-  checkItems: {
-    id: string;
-    personId: string | null;
-    summary: string;
-    operatorName: string;
-    updatedAt: string;
-    status: "확인 필요" | "확인 완료" | "보관";
-    personName: string | null;
-  }[];
-  pinnedNotes: {
-    id: string;
-    title: string;
-    content: string;
-    isPinned: boolean;
-  }[];
+  checkItems: CheckItemView[];
+  pinnedNotes: PinnedNoteView[];
+  archivedCheckItems: CheckItemView[];
+  archivedPinnedNotes: PinnedNoteView[];
   purchaseCount: number;
   purchasedQuantity: number;
   canUndoDistribution: boolean;
@@ -87,11 +93,12 @@ export function isTextEntryTarget(target: EventTarget | null): boolean {
   );
 }
 
-export function loadDesk(issue: Issue, query: string) {
+export function loadDesk(issue: Issue, query: string, showAll = false) {
   return invoke<DistributionDesk>("load_distribution_desk_command", {
     issueYear: issue.year,
     issueMonth: issue.startMonth,
     query,
+    showAll,
   });
 }
 
@@ -115,9 +122,13 @@ export function distribute(
   });
 }
 
-export function undoDistribution(issue: Issue) {
+export function undoDistribution(issue: Issue, subscriptionId?: string) {
   return invoke<void>("undo_distribution_command", {
-    request: { issueYear: issue.year, issueMonth: issue.startMonth },
+    request: {
+      issueYear: issue.year,
+      issueMonth: issue.startMonth,
+      subscriptionId: subscriptionId ?? null,
+    },
   });
 }
 
@@ -138,7 +149,7 @@ export function createDraft(
 }
 
 export function createCheckItem(personId: string | null, content: string) {
-  return invoke<void>("create_check_item_command", {
+  return invoke<string>("create_check_item_command", {
     request: { personId, content },
   });
 }
@@ -157,7 +168,7 @@ export function createPinnedNote(input: {
   content: string;
   isPinned: boolean;
 }) {
-  return invoke<void>("create_pinned_note_command", {
+  return invoke<string>("create_pinned_note_command", {
     request: {
       title: input.title,
       content: input.content,
@@ -174,7 +185,7 @@ export function updatePinnedNote(
     request: {
       id,
       isPinned: input.isPinned ?? null,
-      archived: input.archived ?? false,
+      archived: input.archived ?? null,
     },
   });
 }

@@ -4,6 +4,8 @@
   min-height: 0;
   grid-template-rows: 82px minmax(0, 1fr);
   overflow: hidden;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .primary-button.compact {
@@ -14,19 +16,20 @@
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 2rem;
+  gap: 18px;
   padding: 14px 18px 10px;
 }
 
 .management-heading h2 {
   margin-bottom: 0.35rem;
-  font-size: 18px;
-  letter-spacing: -0.04em;
+  font-size: 19px;
+  letter-spacing: -0.01em;
 }
 
 .management-heading > div > p:last-child {
   margin-bottom: 0;
   color: var(--muted);
+  font-size: 12px;
 }
 
 .heading-actions {
@@ -49,7 +52,7 @@
 }
 
 .management-list-panel {
-  padding: 1.2rem;
+  padding: 16px;
   border-right: 1px solid var(--line);
   background: var(--panel-high);
 }
@@ -62,7 +65,7 @@
 .archived-toggle {
   margin-top: 0.8rem;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 12px;
 }
 
 .management-counts {
@@ -70,13 +73,13 @@
   justify-content: space-between;
   padding: 1rem 0 0.65rem;
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .management-person-list {
   display: grid;
-  gap: 0.4rem;
+  gap: 6px;
   min-height: 0;
   max-height: none;
   height: calc(100% - 104px);
@@ -86,10 +89,10 @@
 .management-person-list > button {
   display: grid;
   grid-template-columns: 2.6rem minmax(0, 1fr);
-  gap: 0.7rem;
+  gap: 10px;
   align-items: center;
   width: 100%;
-  padding: 0.8rem;
+  padding: 11px;
   border: 1px solid transparent;
   border-radius: 0.7rem;
   color: inherit;
@@ -111,13 +114,14 @@
 .management-person-list small {
   margin-top: 0.2rem;
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .management-person-list em {
   grid-column: 2;
   color: var(--green-700);
-  font-size: 0.68rem;
+  font-size: 11px;
   font-style: normal;
   font-weight: 700;
 }
@@ -131,7 +135,7 @@
 .person-detail-panel {
   position: relative;
   overflow-y: auto;
-  padding: 1.8rem 2rem;
+  padding: 22px 24px;
 }
 
 .detail-heading {
@@ -172,7 +176,7 @@
 }
 
 .person-note strong {
-  font-size: 0.76rem;
+  font-size: 12px;
 }
 
 .person-note p {
@@ -185,7 +189,7 @@
 
 .detail-section > h3 {
   margin-bottom: 0.75rem;
-  font-size: 0.92rem;
+  font-size: 14px;
 }
 
 .history-list,
@@ -207,12 +211,13 @@
 .history-list small {
   margin: 0.25rem 0 0;
   color: var(--muted);
-  font-size: 0.74rem;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .history-list article > span {
   color: var(--green-700);
-  font-size: 0.72rem;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -225,7 +230,7 @@
   grid-template-columns: 1fr 6rem 9rem;
   padding: 0.65rem 0.2rem;
   border-bottom: 1px solid #edf0ea;
-  font-size: 0.78rem;
+  font-size: 12px;
 }
 
 .distribution-history time {
@@ -237,7 +242,7 @@
   padding: 0;
   color: #a04434;
   background: transparent;
-  font-size: 0.76rem;
+  font-size: 12px;
   text-decoration: underline;
 }
 
@@ -314,7 +319,7 @@
   border-radius: 8px;
   color: var(--text);
   background: var(--note);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -338,7 +343,7 @@
   align-items: center;
   gap: 12px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .preview-metadata strong {
@@ -365,7 +370,7 @@
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .import-mode legend {
@@ -389,7 +394,7 @@
   border: 1px solid #c7ad67;
   border-radius: 7px;
   background: var(--note);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .person-conflict div,
@@ -416,7 +421,7 @@
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel-high);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .restore-card span,
@@ -428,7 +433,7 @@
 .inline-error,
 .inline-success {
   margin: 0;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .inline-error {

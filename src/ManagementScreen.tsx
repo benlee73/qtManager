@@ -20,7 +20,13 @@ type ManagementDialog =
   | { type: "renew"; person: PersonDetail }
   | null;
 
-export function ManagementScreen({ issue }: { issue: Issue }) {
+export function ManagementScreen({
+  issue,
+  notify,
+}: {
+  issue: Issue;
+  notify: (message: string, kind?: "success" | "error") => void;
+}) {
   const [query, setQuery] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
   const [management, setManagement] = useState<PeopleManagement | null>(null);
@@ -28,8 +34,6 @@ export function ManagementScreen({ issue }: { issue: Issue }) {
   const [detail, setDetail] = useState<PersonDetail | null>(null);
   const [dialog, setDialog] = useState<ManagementDialog>(null);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState("");
-  const [error, setError] = useState("");
 
   const refresh = useCallback(async () => {
     try {
@@ -42,9 +46,9 @@ export function ManagementScreen({ issue }: { issue: Issue }) {
       setSelectedId(nextId);
       setDetail(nextId ? await loadPersonDetail(nextId) : null);
     } catch (reason) {
-      setError(errorMessage(reason));
+      notify(errorMessage(reason), "error");
     }
-  }, [includeArchived, query, selectedId]);
+  }, [includeArchived, notify, query, selectedId]);
 
   useEffect(() => {
     const timeout = window.setTimeout(refresh, 70);
@@ -56,21 +60,20 @@ export function ManagementScreen({ issue }: { issue: Issue }) {
     try {
       setDetail(await loadPersonDetail(id));
     } catch (reason) {
-      setError(errorMessage(reason));
+      notify(errorMessage(reason), "error");
     }
   }
 
   async function mutate(work: () => Promise<unknown>, success: string) {
     setBusy(true);
-    setError("");
     try {
       await work();
       setDialog(null);
-      setNotice(success);
+      notify(success);
       await refresh();
       return true;
     } catch (reason) {
-      setError(errorMessage(reason));
+      notify(errorMessage(reason), "error");
       return false;
     } finally {
       setBusy(false);
@@ -287,25 +290,6 @@ export function ManagementScreen({ issue }: { issue: Issue }) {
         </div>
       </section>
 
-      {(notice || error) && (
-        <div
-          className={`toast ${error ? "error" : ""}`}
-          role={error ? "alert" : "status"}
-        >
-          <span>{error || notice}</span>
-          <button
-            type="button"
-            aria-label="알림 닫기"
-            onClick={() => {
-              setNotice("");
-              setError("");
-            }}
-          >
-            ×
-          </button>
-        </div>
-      )}
-
       {dialog?.type === "register" && (
         <RegisterDialog
           issue={issue}
@@ -322,7 +306,7 @@ export function ManagementScreen({ issue }: { issue: Issue }) {
           onClose={() => setDialog(null)}
           onDirectRegister={() => setDialog({ type: "register" })}
           onImported={async (message) => {
-            setNotice(message);
+            notify(message);
             await refresh();
           }}
         />

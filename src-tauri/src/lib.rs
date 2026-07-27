@@ -202,6 +202,7 @@ fn load_distribution_desk_command(
     issue_year: i32,
     issue_month: u8,
     query: String,
+    show_all: bool,
 ) -> Result<DistributionDesk, String> {
     let mut repository = open_operational_repository(&app)?;
     let runtime = SystemRuntime;
@@ -210,6 +211,7 @@ fn load_distribution_desk_command(
         &runtime,
         Issue::new(issue_year, issue_month).map_err(|error| error.to_string())?,
         &query,
+        show_all,
     )
     .map_err(|error| error.to_string())
 }
@@ -254,7 +256,9 @@ fn undo_distribution_command(
 ) -> Result<(), String> {
     let mut repository = open_operational_repository(&app)?;
     let runtime = SystemRuntime;
-    undo_last_distribution(
+    let logger = event_logger(&app);
+    logger.info("distribution_cancel_started");
+    let result = undo_last_distribution(
         &mut repository,
         &RuntimeServices {
             clock: &runtime,
@@ -262,7 +266,13 @@ fn undo_distribution_command(
         },
         request,
     )
-    .map_err(|error| error.to_string())
+    .map_err(|error| error.to_string());
+    if result.is_ok() {
+        logger.info("distribution_cancel_completed");
+    } else {
+        logger.error("distribution_cancel_failed");
+    }
+    result
 }
 
 #[tauri::command]
@@ -284,7 +294,7 @@ fn create_draft_command(app: tauri::AppHandle, request: CreateDraftRequest) -> R
 fn create_check_item_command(
     app: tauri::AppHandle,
     request: CreateCheckItemRequest,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let mut repository = open_operational_repository(&app)?;
     let runtime = SystemRuntime;
     let logger = event_logger(&app);
@@ -336,7 +346,7 @@ fn update_check_item_status_command(
 fn create_pinned_note_command(
     app: tauri::AppHandle,
     request: CreatePinnedNoteRequest,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let mut repository = open_operational_repository(&app)?;
     let runtime = SystemRuntime;
     let logger = event_logger(&app);

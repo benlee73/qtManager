@@ -38,6 +38,7 @@ describe("QT Manager desktop flow", () => {
       { timeoutMsg: "간이 등록한 2권 구독 신청자를 찾지 못했습니다." },
     );
 
+    await clickButtonByText("", `${applicant} 메뉴`);
     await clickButtonByText("일부만 배부");
     await setInput("input[name='quantity']", "1");
     await clickButtonByText("일부 배부 기록");
@@ -48,6 +49,11 @@ describe("QT Manager desktop flow", () => {
       { timeoutMsg: "1권 일부 배부가 화면에 반영되지 않았습니다." },
     );
 
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLElement>('[data-testid="person-row"]')
+        ?.click();
+    });
     await dispatchShortcut("Enter");
     await browser.waitUntil(
       async () =>
@@ -56,7 +62,14 @@ describe("QT Manager desktop flow", () => {
       { timeoutMsg: "남은 1권 기본 배부가 완료되지 않았습니다." },
     );
 
-    await dispatchShortcut("z");
+    await clickButtonByText("배부 취소");
+    await waitForText("#dialog-title", "배부를 취소할까요?");
+    await waitForText(".dialog-description", applicant);
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>(".dialog .danger-button")
+        ?.click();
+    });
     await browser.waitUntil(
       async () =>
         (await textOf('[data-testid="person-row"]')).includes("일부 배부") &&
@@ -141,7 +154,8 @@ describe("QT Manager desktop flow", () => {
   });
 
   it("creates linked and general check items, transitions all states, and keeps pinned notes periodless", async () => {
-    await setInput("#quick-item", "가상 일반 확인 필요");
+    const generalItem = `가상 일반 확인 ${Date.now()}`;
+    await setInput("#quick-item", generalItem);
     await waitForEnabled('[data-testid="add-general-check-item"]');
     await browser.execute(() => {
       document
@@ -151,8 +165,15 @@ describe("QT Manager desktop flow", () => {
         ?.click();
     });
     await waitForText(".toast", "일반 확인할 일을 추가했습니다");
-    await waitForText(".check-item-list", "가상 일반 확인 필요");
+    await waitForText(".check-item-list", generalItem);
     await waitForText(".check-item-list", "일반");
+    await clickButtonByText("", "마지막 동작 되돌리기");
+    await browser.waitUntil(
+      async () => !(await textOf(".check-item-list")).includes(generalItem),
+      { timeoutMsg: "확인할 일 추가 되돌리기가 반영되지 않았습니다." },
+    );
+    await clickButtonByText("", "되돌린 동작 다시 실행");
+    await waitForText(".check-item-list", generalItem);
 
     await browser.execute(() => {
       document
@@ -165,11 +186,38 @@ describe("QT Manager desktop flow", () => {
     await waitForText(".check-item-list", "가상 신청자 연결 확인");
     await waitForText(".check-item-list", "연결");
 
-    await clickButtonByText("확인 완료");
-    await waitForText(".check-item-list", "확인 완료");
-    await clickButtonByText("다시 확인");
-    await waitForText(".check-item-list", "확인 필요");
+    const linkedCheckbox =
+      'input[aria-label="가상 신청자 연결 확인 확인 완료"]';
+    await browser.execute((selector) => {
+      document.querySelector<HTMLInputElement>(selector)?.click();
+    }, linkedCheckbox);
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          (selector) =>
+            document.querySelector<HTMLInputElement>(selector)?.checked ===
+            true,
+          linkedCheckbox,
+        ),
+      { timeoutMsg: "확인할 일 체크 완료가 반영되지 않았습니다." },
+    );
+    await browser.execute((selector) => {
+      document.querySelector<HTMLInputElement>(selector)?.click();
+    }, linkedCheckbox);
+    await waitForText(".toast", "다시 확인하도록");
+    expect(
+      await browser.execute(
+        () => document.querySelector(".toast span")?.textContent ?? "",
+      ),
+    ).toContain("다시 확인하도록");
+    await browser.pause(4_200);
+    expect(await textOf(".toast")).not.toContain("다시 확인하도록");
     await clickButtonByText("보관");
+    await clickButtonByText("보관함");
+    await waitForText(".archive-dialog", "가상 신청자 연결 확인");
+    await clickButtonByText("복원");
+    await clickButtonByText("", "닫기");
+    await waitForText(".check-item-list", "가상 신청자 연결 확인");
 
     await clickButtonByText("", "고정 메모 추가");
     await setInput("input[name='title']", "가상 보관 위치");
@@ -181,14 +229,17 @@ describe("QT Manager desktop flow", () => {
     ).toBe(true);
     await clickButtonByText("고정 메모 저장");
     await waitForText(".pinned-list", "가상 보관 위치");
+    await clickButtonByText("", "고정 메모 메뉴");
     await clickButtonByText("고정 해제");
     await waitForText(".pinned-list", "고정 해제됨");
 
+    await clickButtonByText("", "기타 기능");
     await clickButtonByText("현장 개별 구매");
     await setInput("input[name='buyerName']", "가상 구매자");
     await setInput("input[name='quantity']", "1");
     await clickButtonByText("구매·전달 기록");
     await waitForText(".toast", "개별 구매와 전달을 기록했습니다");
+    await clickButtonByText("", "기타 기능");
     await clickButtonByText("최근 구매 취소");
     await waitForText(".toast", "최근 개별 구매를 취소했습니다");
   });
@@ -217,6 +268,84 @@ describe("QT Manager desktop flow", () => {
     expect(quickFocused).toBe("quick-item");
   });
 
+  it("keeps one action menu open, closes it outside, toggles selection and filters the list", async () => {
+    await setInput('[data-testid="people-search"]', "");
+    await clickButtonByText("", "기타 기능");
+    expect(
+      await browser.execute(
+        () => document.querySelectorAll(".menu-popover").length,
+      ),
+    ).toBe(1);
+    const firstPersonMenu = await browser.execute(() => {
+      const button = document.querySelector<HTMLButtonElement>(
+        '[data-testid="person-row"] .menu-trigger',
+      );
+      button?.click();
+      return button?.getAttribute("aria-label") ?? "";
+    });
+    expect(firstPersonMenu).not.toBe("");
+    expect(
+      await browser.execute(
+        () => document.querySelectorAll(".menu-popover").length,
+      ),
+    ).toBe(1);
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLElement>(".table-title")
+        ?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    });
+    expect(
+      await browser.execute(
+        () => document.querySelectorAll(".menu-popover").length,
+      ),
+    ).toBe(0);
+
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLElement>('[data-testid="person-row"]')
+        ?.click();
+    });
+    expect(
+      await browser.execute(() =>
+        document
+          .querySelector('[data-testid="person-row"]')
+          ?.getAttribute("aria-selected"),
+      ),
+    ).toBe("true");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLElement>('[data-testid="person-row"]')
+        ?.click();
+    });
+    expect(
+      await browser.execute(() =>
+        document
+          .querySelector('[data-testid="person-row"]')
+          ?.getAttribute("aria-selected"),
+      ),
+    ).toBe("false");
+
+    await clickButtonByText("전체");
+    expect(
+      await browser.execute(
+        () => document.querySelector('select[aria-label="상태 필터"]') !== null,
+      ),
+    ).toBe(true);
+    await setSelect('select[aria-label="상태 필터"]', "completed");
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() =>
+          [
+            ...document.querySelectorAll<HTMLElement>(
+              '[data-testid="person-row"]',
+            ),
+          ].every((row) => row.textContent?.includes("배부 완료")),
+        ),
+      { timeoutMsg: "배부 완료 필터가 목록에 반영되지 않았습니다." },
+    );
+    await clickButtonByText("남은 배부");
+  });
+
   it("persists theme and enforces the fixed scroll-safe four-stat layout", async () => {
     await browser.execute(() => {
       localStorage.removeItem("qt-manager-theme");
@@ -226,6 +355,14 @@ describe("QT Manager desktop flow", () => {
     expect(
       await browser.execute(() => document.documentElement.dataset.theme),
     ).toBe("dark");
+    expect(await textOf(".info-tooltip [role='tooltip']")).toContain(
+      "2026 교육국 제작",
+    );
+    expect(
+      await browser.execute(
+        () => document.querySelector(".book-logo svg") !== null,
+      ),
+    ).toBe(true);
     mkdirSync("test-results", { recursive: true });
     await browser.saveScreenshot("test-results/ui-dark.png");
     await browser.execute(() => {
@@ -323,6 +460,8 @@ describe("QT Manager desktop flow", () => {
         ?.click();
     });
     await waitForText("h2", "신청자 정보와 전체 이력");
+    mkdirSync("test-results", { recursive: true });
+    await browser.saveScreenshot("test-results/ui-management-light.png");
     const headingFits = await browser.execute(() => {
       const heading = document
         .querySelector<HTMLElement>(".management-heading")!
@@ -412,7 +551,7 @@ describe("QT Manager desktop flow", () => {
     );
     await clickButtonByText("", "도움말 닫기");
     await clickButtonByText("현장 배부");
-    await waitForText(".issue-picker", "현장 배부");
+    await waitForText('[data-testid="selected-issue"]', "월호");
   });
 
   it("previews pasted Google responses, links a duplicate candidate and blocks a repeat", async () => {

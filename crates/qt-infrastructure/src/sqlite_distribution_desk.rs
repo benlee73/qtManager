@@ -125,6 +125,33 @@ impl DistributionDeskRepository for SqliteCoreRepository {
             .map_err(port_error)
     }
 
+    fn latest_reversible_distribution_for_subscription(
+        &self,
+        issue: Issue,
+        subscription_id: &str,
+    ) -> Result<Option<Distribution>, PortError> {
+        self.connection
+            .query_row(
+                "
+                SELECT d.id, d.subscription_id, d.issue_year, d.issue_month, d.quantity,
+                       d.distributed_at, d.note, d.reversal_of, d.created_at, d.updated_at
+                FROM distributions d
+                WHERE d.issue_year = ?1 AND d.issue_month = ?2
+                  AND d.subscription_id = ?3
+                  AND d.reversal_of IS NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM distributions reversal WHERE reversal.reversal_of = d.id
+                  )
+                ORDER BY d.distributed_at DESC, d.rowid DESC
+                LIMIT 1
+                ",
+                params![issue.year, issue.start_month, subscription_id],
+                distribution_from_row,
+            )
+            .optional()
+            .map_err(port_error)
+    }
+
     fn save_draft(
         &mut self,
         person: &Person,
@@ -143,6 +170,26 @@ impl DistributionDeskRepository for SqliteCoreRepository {
                        checked_at
                 FROM check_items
                 WHERE status != 'archived'
+                ORDER BY updated_at DESC, id DESC
+                ",
+            )
+            .map_err(port_error)?;
+        statement
+            .query_map([], check_item_from_row)
+            .map_err(port_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(port_error)
+    }
+
+    fn list_archived_check_items(&self) -> Result<Vec<CheckItem>, PortError> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "
+                SELECT id, person_id, content, status, operator_name, created_at, updated_at,
+                       checked_at
+                FROM check_items
+                WHERE status = 'archived'
                 ORDER BY updated_at DESC, id DESC
                 ",
             )
@@ -202,6 +249,26 @@ impl DistributionDeskRepository for SqliteCoreRepository {
                 FROM pinned_notes
                 WHERE status != 'archived'
                 ORDER BY is_pinned DESC, updated_at DESC, id DESC
+                ",
+            )
+            .map_err(port_error)?;
+        statement
+            .query_map([], pinned_note_from_row)
+            .map_err(port_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(port_error)
+    }
+
+    fn list_archived_pinned_notes(&self) -> Result<Vec<PinnedNote>, PortError> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "
+                SELECT id, title, content, is_pinned, status, operator_name,
+                       created_at, updated_at, archived_at
+                FROM pinned_notes
+                WHERE status = 'archived'
+                ORDER BY updated_at DESC, id DESC
                 ",
             )
             .map_err(port_error)?;
