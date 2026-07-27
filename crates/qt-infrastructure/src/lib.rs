@@ -1,4 +1,5 @@
 mod clipboard_tsv;
+mod legacy_xlsx;
 mod rotating_file_logger;
 mod sqlite_application_import;
 mod sqlite_core_repository;
@@ -10,6 +11,7 @@ mod sqlite_state_transfer;
 mod state_xlsx;
 mod system_runtime;
 
+pub use legacy_xlsx::{LegacyMigrationReport, read_legacy_2026};
 pub use rotating_file_logger::RotatingFileEventLogger;
 pub use sqlite_core_repository::SqliteCoreRepository;
 pub use sqlite_probe_repository::SqliteProbeRepository;
