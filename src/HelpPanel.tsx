@@ -1,3 +1,11 @@
+import { useEffect, useState } from "react";
+
+import {
+  type AppSupportInfo,
+  loadAppSupportInfo,
+  openLogDirectory,
+} from "./support";
+
 type HelpTopic =
   | "quick-start"
   | "distribution"
@@ -5,7 +13,8 @@ type HelpTopic =
   | "purchase"
   | "handover"
   | "shortcuts"
-  | "install";
+  | "install"
+  | "app-info";
 
 const topics: { id: HelpTopic; label: string }[] = [
   { id: "quick-start", label: "빠른 시작" },
@@ -15,6 +24,7 @@ const topics: { id: HelpTopic; label: string }[] = [
   { id: "handover", label: "데이터 인수인계" },
   { id: "shortcuts", label: "단축키" },
   { id: "install", label: "설치 문제" },
+  { id: "app-info", label: "앱 정보" },
 ];
 
 export function HelpPanel({
@@ -24,6 +34,15 @@ export function HelpPanel({
   topic?: HelpTopic;
   onClose: () => void;
 }) {
+  const [support, setSupport] = useState<AppSupportInfo | null>(null);
+  const [supportError, setSupportError] = useState("");
+
+  useEffect(() => {
+    void loadAppSupportInfo()
+      .then(setSupport)
+      .catch(() => setSupportError("앱 경로 정보를 불러오지 못했습니다."));
+  }, []);
+
   return (
     <div className="modal-backdrop help-backdrop" role="presentation">
       <section
@@ -145,7 +164,46 @@ export function HelpPanel({
                 뒤 SmartScreen의 ‘추가 정보 → 실행’을 선택합니다.
               </p>
             </HelpSection>
-            <footer>앱 0.1.0 · 도움말 2026-07-26</footer>
+            <HelpSection id="app-info" title="앱 정보와 문제 보고">
+              <p>
+                맑은샘광천교회 2026 교육국 제작. 문제가 생기면 아래 로그 폴더의
+                파일을 개발 담당자에게 전달하세요. 운영 로그에는 고정 이벤트와
+                시각만 기록하며 이름·전화번호·메모는 기록하지 않습니다.
+              </p>
+              {support ? (
+                <dl className="support-paths" data-testid="support-info">
+                  <div>
+                    <dt>앱 버전</dt>
+                    <dd>{support.appVersion}</dd>
+                  </div>
+                  <div>
+                    <dt>데이터 위치</dt>
+                    <dd title={support.dataDirectory}>
+                      {support.dataDirectory}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>로그 파일</dt>
+                    <dd title={support.logFile}>{support.logFile}</dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="help-note">{supportError || "경로 확인 중…"}</p>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  void openLogDirectory().catch(() =>
+                    setSupportError("로그 폴더를 열지 못했습니다."),
+                  );
+                }}
+              >
+                로그 폴더 열기
+              </button>
+            </HelpSection>
+            <footer>
+              앱 {support?.appVersion ?? "버전 확인 중"} · 도움말 2026-07-27
+            </footer>
           </div>
         </div>
       </section>

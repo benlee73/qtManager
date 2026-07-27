@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, path::PathBuf, process::Command};
 
 use qt_application::{
     AppLogger, ApplicationsPreview, ApplyStateImportRequest, Clock, CreateCheckItemRequest,
@@ -18,7 +18,7 @@ use qt_application::{
 };
 use qt_domain::Issue;
 use qt_infrastructure::{
-    SqliteCoreRepository, SqliteProbeRepository, SqliteStateTransfer, StderrEventLogger,
+    RotatingFileEventLogger, SqliteCoreRepository, SqliteProbeRepository, SqliteStateTransfer,
     SystemRuntime, TsvApplicationClipboardParser, XlsxStateWorkbook,
 };
 use serde::Serialize;
@@ -37,6 +37,64 @@ struct WindowContract {
 struct StateTransferE2ePaths {
     export_path: String,
     corrupt_path: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AppSupportInfo {
+    app_version: &'static str,
+    data_directory: String,
+    log_directory: String,
+    log_file: String,
+}
+
+fn log_directory(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_log_dir()
+        .map_err(|error| format!("앱 로그 경로를 찾지 못했습니다: {error}"))
+}
+
+fn event_logger(app: &tauri::AppHandle) -> RotatingFileEventLogger {
+    let directory =
+        log_directory(app).unwrap_or_else(|_| std::env::temp_dir().join("qt-manager").join("logs"));
+    RotatingFileEventLogger::new(directory.join("qt-manager.log"))
+}
+
+#[tauri::command]
+fn app_support_info_command(app: tauri::AppHandle) -> Result<AppSupportInfo, String> {
+    let data_directory = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("앱 데이터 경로를 찾지 못했습니다: {error}"))?;
+    let log_directory = log_directory(&app)?;
+    let log_file = log_directory.join("qt-manager.log");
+    Ok(AppSupportInfo {
+        app_version: env!("CARGO_PKG_VERSION"),
+        data_directory: data_directory.to_string_lossy().into_owned(),
+        log_directory: log_directory.to_string_lossy().into_owned(),
+        log_file: log_file.to_string_lossy().into_owned(),
+    })
+}
+
+#[tauri::command]
+fn open_log_directory_command(app: tauri::AppHandle) -> Result<(), String> {
+    let directory = log_directory(&app)?;
+    fs::create_dir_all(&directory)
+        .map_err(|error| format!("로그 폴더를 만들지 못했습니다: {error}"))?;
+    #[cfg(target_os = "macos")]
+    let status = Command::new("open").arg(&directory).status();
+    #[cfg(target_os = "windows")]
+    let status = Command::new("explorer").arg(&directory).status();
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let status = Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "지원하지 않는 운영체제",
+    ));
+    status
+        .map_err(|error| format!("로그 폴더를 열지 못했습니다: {error}"))?
+        .success()
+        .then_some(())
+        .ok_or_else(|| "운영체제가 로그 폴더를 열지 못했습니다.".to_owned())
 }
 
 #[tauri::command]
@@ -95,7 +153,7 @@ fn run_phase0_probe(app: tauri::AppHandle) -> Result<Phase0Report, String> {
     let mut repository = SqliteProbeRepository::open(&directory.join("probe.sqlite"))
         .map_err(|error| error.to_string())?;
     let workbook = XlsxStateWorkbook;
-    let logger = StderrEventLogger;
+    let logger = event_logger(&app);
     let mut use_case = RunPhase0Probe::new(&mut repository, &workbook, &logger);
 
     use_case
@@ -115,7 +173,7 @@ fn run_phase1_probe(app: tauri::AppHandle) -> Result<Phase1Report, String> {
 
     let mut repository = SqliteCoreRepository::open(&directory.join("core.sqlite"))
         .map_err(|error| error.to_string())?;
-    let logger = StderrEventLogger;
+    let logger = event_logger(&app);
     let mut use_case = RunPhase1Probe::new(&mut repository, &logger);
     use_case.execute().map_err(|error| error.to_string())
 }
@@ -170,7 +228,8 @@ fn record_distribution_command(
 ) -> Result<(), String> {
     let mut repository = open_operational_repository(&app)?;
     let runtime = SystemRuntime;
-    StderrEventLogger.info("distribution_record_started");
+    let logger = event_logger(&app);
+    logger.info("distribution_record_started");
     let result = record_distribution(
         &mut repository,
         &RuntimeServices {
@@ -181,9 +240,9 @@ fn record_distribution_command(
     )
     .map_err(|error| error.to_string());
     if result.is_ok() {
-        StderrEventLogger.info("distribution_record_completed");
+        logger.info("distribution_record_completed");
     } else {
-        StderrEventLogger.error("distribution_record_failed");
+        logger.error("distribution_record_failed");
     }
     result
 }
@@ -228,7 +287,8 @@ fn create_check_item_command(
 ) -> Result<(), String> {
     let mut repository = open_operational_repository(&app)?;
     let runtime = SystemRuntime;
-    StderrEventLogger.info("check_item_create_started");
+    let logger = event_logger(&app);
+    logger.info("check_item_create_started");
     let result = create_check_item(
         &mut repository,
         &RuntimeServices {
@@ -239,9 +299,9 @@ fn create_check_item_command(
     )
     .map_err(|error| error.to_string());
     if result.is_ok() {
-        StderrEventLogger.info("check_item_create_completed");
+        logger.info("check_item_create_completed");
     } else {
-        StderrEventLogger.error("check_item_create_failed");
+        logger.error("check_item_create_failed");
     }
     result
 }
@@ -253,7 +313,8 @@ fn update_check_item_status_command(
 ) -> Result<(), String> {
     let mut repository = open_operational_repository(&app)?;
     let runtime = SystemRuntime;
-    StderrEventLogger.info("check_item_status_update_started");
+    let logger = event_logger(&app);
+    logger.info("check_item_status_update_started");
     let result = update_check_item_status(
         &mut repository,
         &RuntimeServices {
@@ -264,9 +325,9 @@ fn update_check_item_status_command(
     )
     .map_err(|error| error.to_string());
     if result.is_ok() {
-        StderrEventLogger.info("check_item_status_update_completed");
+        logger.info("check_item_status_update_completed");
     } else {
-        StderrEventLogger.error("check_item_status_update_failed");
+        logger.error("check_item_status_update_failed");
     }
     result
 }
@@ -278,7 +339,8 @@ fn create_pinned_note_command(
 ) -> Result<(), String> {
     let mut repository = open_operational_repository(&app)?;
     let runtime = SystemRuntime;
-    StderrEventLogger.info("pinned_note_create_started");
+    let logger = event_logger(&app);
+    logger.info("pinned_note_create_started");
     let result = create_pinned_note(
         &mut repository,
         &RuntimeServices {
@@ -289,9 +351,9 @@ fn create_pinned_note_command(
     )
     .map_err(|error| error.to_string());
     if result.is_ok() {
-        StderrEventLogger.info("pinned_note_create_completed");
+        logger.info("pinned_note_create_completed");
     } else {
-        StderrEventLogger.error("pinned_note_create_failed");
+        logger.error("pinned_note_create_failed");
     }
     result
 }
@@ -303,7 +365,8 @@ fn update_pinned_note_command(
 ) -> Result<(), String> {
     let mut repository = open_operational_repository(&app)?;
     let runtime = SystemRuntime;
-    StderrEventLogger.info("pinned_note_update_started");
+    let logger = event_logger(&app);
+    logger.info("pinned_note_update_started");
     let result = update_pinned_note(
         &mut repository,
         &RuntimeServices {
@@ -314,9 +377,9 @@ fn update_pinned_note_command(
     )
     .map_err(|error| error.to_string());
     if result.is_ok() {
-        StderrEventLogger.info("pinned_note_update_completed");
+        logger.info("pinned_note_update_completed");
     } else {
-        StderrEventLogger.error("pinned_note_update_failed");
+        logger.error("pinned_note_update_failed");
     }
     result
 }
@@ -404,7 +467,8 @@ fn register_person_command(
 ) -> Result<String, String> {
     let mut repository = open_operational_repository(&app)?;
     let runtime = SystemRuntime;
-    StderrEventLogger.info("person_register_started");
+    let logger = event_logger(&app);
+    logger.info("person_register_started");
     let result = register_person(
         &mut repository,
         &RuntimeServices {
@@ -415,9 +479,9 @@ fn register_person_command(
     )
     .map_err(|error| error.to_string());
     if result.is_ok() {
-        StderrEventLogger.info("person_register_completed");
+        logger.info("person_register_completed");
     } else {
-        StderrEventLogger.error("person_register_failed");
+        logger.error("person_register_failed");
     }
     result
 }
@@ -429,7 +493,8 @@ fn update_person_command(
 ) -> Result<(), String> {
     let mut repository = open_operational_repository(&app)?;
     let runtime = SystemRuntime;
-    StderrEventLogger.info("person_update_started");
+    let logger = event_logger(&app);
+    logger.info("person_update_started");
     let result = update_person(
         &mut repository,
         &RuntimeServices {
@@ -440,9 +505,9 @@ fn update_person_command(
     )
     .map_err(|error| error.to_string());
     if result.is_ok() {
-        StderrEventLogger.info("person_update_completed");
+        logger.info("person_update_completed");
     } else {
-        StderrEventLogger.error("person_update_failed");
+        logger.error("person_update_failed");
     }
     result
 }
@@ -455,7 +520,8 @@ fn set_person_archived_command(
 ) -> Result<(), String> {
     let mut repository = open_operational_repository(&app)?;
     let runtime = SystemRuntime;
-    StderrEventLogger.info("person_archive_state_started");
+    let logger = event_logger(&app);
+    logger.info("person_archive_state_started");
     let result = set_person_archived(
         &mut repository,
         &RuntimeServices {
@@ -467,9 +533,9 @@ fn set_person_archived_command(
     )
     .map_err(|error| error.to_string());
     if result.is_ok() {
-        StderrEventLogger.info("person_archive_state_completed");
+        logger.info("person_archive_state_completed");
     } else {
-        StderrEventLogger.error("person_archive_state_failed");
+        logger.error("person_archive_state_failed");
     }
     result
 }
@@ -481,7 +547,8 @@ fn renew_subscription_command(
 ) -> Result<(), String> {
     let mut repository = open_operational_repository(&app)?;
     let runtime = SystemRuntime;
-    StderrEventLogger.info("subscription_renew_started");
+    let logger = event_logger(&app);
+    logger.info("subscription_renew_started");
     let result = renew_subscription(
         &mut repository,
         &RuntimeServices {
@@ -492,9 +559,9 @@ fn renew_subscription_command(
     )
     .map_err(|error| error.to_string());
     if result.is_ok() {
-        StderrEventLogger.info("subscription_renew_completed");
+        logger.info("subscription_renew_completed");
     } else {
-        StderrEventLogger.error("subscription_renew_failed");
+        logger.error("subscription_renew_failed");
     }
     result
 }
@@ -516,7 +583,8 @@ fn import_applications_command(
 ) -> Result<ImportApplicationsResult, String> {
     let mut repository = open_operational_repository(&app)?;
     let runtime = SystemRuntime;
-    StderrEventLogger.info("google_form_application_import_started");
+    let logger = event_logger(&app);
+    logger.info("google_form_application_import_started");
     let result = import_applications(
         &mut repository,
         &RuntimeServices {
@@ -527,9 +595,9 @@ fn import_applications_command(
     )
     .map_err(|error| error.to_string());
     if result.is_ok() {
-        StderrEventLogger.info("google_form_application_import_completed");
+        logger.info("google_form_application_import_completed");
     } else {
-        StderrEventLogger.error("google_form_application_import_failed");
+        logger.error("google_form_application_import_failed");
     }
     result
 }
@@ -539,10 +607,11 @@ fn export_state_command(app: tauri::AppHandle, path: String) -> Result<StateCoun
     let mut repository = open_operational_repository(&app)?;
     let mut transfer = SqliteStateTransfer::new(&mut repository);
     let runtime = SystemRuntime;
+    let logger = event_logger(&app);
     export_state(
         &mut transfer,
         &XlsxStateWorkbook,
-        &StderrEventLogger,
+        &logger,
         std::path::Path::new(&path),
         env!("CARGO_PKG_VERSION"),
         &runtime.now(),
@@ -555,7 +624,8 @@ fn preview_state_import_command(
     app: tauri::AppHandle,
     path: String,
 ) -> Result<ImportPreview, String> {
-    StderrEventLogger.info("state_import_preview_started");
+    let logger = event_logger(&app);
+    logger.info("state_import_preview_started");
     let mut repository = open_operational_repository(&app)?;
     let mut transfer = SqliteStateTransfer::new(&mut repository);
     let runtime = SystemRuntime;
@@ -567,9 +637,9 @@ fn preview_state_import_command(
     )
     .map_err(|error| error.to_string());
     if result.is_ok() {
-        StderrEventLogger.info("state_import_preview_completed");
+        logger.info("state_import_preview_completed");
     } else {
-        StderrEventLogger.error("state_import_preview_failed");
+        logger.error("state_import_preview_failed");
     }
     result
 }
@@ -601,10 +671,11 @@ fn apply_state_import_command(
     };
     let mut repository = open_operational_repository(&app)?;
     let mut transfer = SqliteStateTransfer::new(&mut repository);
+    let logger = event_logger(&app);
     apply_state_import(
         &mut transfer,
         &XlsxStateWorkbook,
-        &StderrEventLogger,
+        &logger,
         &request,
         restore_id,
         runtime.now(),
@@ -625,13 +696,9 @@ fn undo_state_import_command(app: tauri::AppHandle) -> Result<RestorePointView, 
     let mut repository = open_operational_repository(&app)?;
     let mut transfer = SqliteStateTransfer::new(&mut repository);
     let runtime = SystemRuntime;
-    undo_state_import(
-        &mut transfer,
-        &XlsxStateWorkbook,
-        &StderrEventLogger,
-        &runtime.now(),
-    )
-    .map_err(|error| error.to_string())
+    let logger = event_logger(&app);
+    undo_state_import(&mut transfer, &XlsxStateWorkbook, &logger, &runtime.now())
+        .map_err(|error| error.to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -644,11 +711,30 @@ pub fn run() {
         .plugin(tauri_plugin_wdio::init())
         .plugin(tauri_plugin_wdio_webdriver::init());
 
-    builder
+    let app = builder
+        .setup(|app| {
+            let logger = event_logger(app.handle());
+            logger.info("app_started");
+            logger.info(concat!("app_version_", env!("CARGO_PKG_VERSION")));
+            logger.info("database_migration_started");
+            match open_operational_repository(app.handle()) {
+                Ok(_) => {
+                    logger.info("database_schema_version_3");
+                    logger.info("database_migration_completed");
+                }
+                Err(error) => {
+                    logger.error("database_migration_failed");
+                    return Err(std::io::Error::other(error).into());
+                }
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             run_phase0_probe,
             run_phase1_probe,
             main_window_contract_command,
+            app_support_info_command,
+            open_log_directory_command,
             state_transfer_e2e_paths_command,
             load_distribution_desk_command,
             save_operator_command,
@@ -676,6 +762,11 @@ pub fn run() {
             latest_restore_point_command,
             undo_state_import_command
         ])
-        .run(tauri::generate_context!())
-        .expect("QT Manager 실행에 실패했습니다.");
+        .build(tauri::generate_context!())
+        .expect("QT Manager 빌드에 실패했습니다.");
+    app.run(|handle, event| {
+        if matches!(event, tauri::RunEvent::Exit) {
+            event_logger(handle).info("app_stopped");
+        }
+    });
 }

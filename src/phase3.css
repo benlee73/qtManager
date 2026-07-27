@@ -550,3 +550,26 @@
   color: var(--muted);
   font-size: 0.72rem;
 }
+
+.support-paths {
+  display: grid;
+  gap: 6px;
+}
+
+.support-paths div {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.support-paths dt {
+  color: var(--text-muted);
+}
+
+.support-paths dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

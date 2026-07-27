@@ -1,4 +1,5 @@
 mod clipboard_tsv;
+mod rotating_file_logger;
 mod sqlite_application_import;
 mod sqlite_core_repository;
 mod sqlite_distribution_desk;
@@ -9,6 +10,7 @@ mod sqlite_state_transfer;
 mod state_xlsx;
 mod system_runtime;
 
+pub use rotating_file_logger::RotatingFileEventLogger;
 pub use sqlite_core_repository::SqliteCoreRepository;
 pub use sqlite_probe_repository::SqliteProbeRepository;
 pub use sqlite_state_transfer::SqliteStateTransfer;

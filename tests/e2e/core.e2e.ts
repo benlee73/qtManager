@@ -344,6 +344,11 @@ describe("QT Manager desktop flow", () => {
       '[data-testid="help-people"]',
       "과거 구독을 수정하지 않고",
     );
+    await waitForText('[data-testid="support-info"]', "0.1.0");
+    await waitForText(
+      '[data-testid="help-app-info"]',
+      "이름·전화번호·메모는 기록하지 않습니다",
+    );
     await clickButtonByText("", "도움말 닫기");
     await clickButtonByText("현장 배부");
     await waitForText(".issue-picker", "현장 배부");
