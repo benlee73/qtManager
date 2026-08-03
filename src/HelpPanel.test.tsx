@@ -21,7 +21,10 @@ describe("HelpPanel", () => {
     );
 
     expect(markup).toContain("오늘이 포함된 호");
+    expect(markup).toContain("현장 배부 화면에서 선택한 QT 호");
     expect(markup).toContain("연결된 확인할 일");
     expect(markup).toContain("신청자 메모");
+    expect(markup).toContain("신청자 관리 목록에서는 숨기고");
+    expect(markup).toContain("상세 또는 정보 수정 화면에서 전체 전화번호");
   });
 });
