@@ -534,7 +534,7 @@ fn needs_check_people(
     Ok(ids.into_iter().map(|id| (id, true)).collect())
 }
 
-fn check_item_from_row(row: &Row<'_>) -> rusqlite::Result<CheckItem> {
+pub(crate) fn check_item_from_row(row: &Row<'_>) -> rusqlite::Result<CheckItem> {
     Ok(CheckItem {
         id: row.get(0)?,
         person_id: row.get(1)?,
