@@ -5,6 +5,7 @@ use serde::Serialize;
 use thiserror::Error;
 
 mod application_import;
+mod confirmed_legacy_intake_reconciliation;
 mod legacy_duplicate_reconciliation;
 mod legacy_start_check_cleanup;
 mod phase1;
@@ -20,6 +21,11 @@ pub use application_import::{
     ImportApplicationRowRequest, ImportApplicationsRequest, ImportApplicationsResult,
     ParsedApplicationRow, PreviewApplicationsRequest, import_applications, preview_applications,
     stable_fingerprint,
+};
+pub use confirmed_legacy_intake_reconciliation::{
+    ConfirmedAnnualIntake, ConfirmedLegacyIntakeCorrection,
+    ConfirmedLegacyIntakeReconciliationResult, ConfirmedOneTimeIntake,
+    reconcile_confirmed_legacy_intakes,
 };
 pub use legacy_duplicate_reconciliation::{
     LegacyDuplicateRenewalRequest, LegacyDuplicateRenewalResult, reconcile_legacy_duplicate_renewal,
