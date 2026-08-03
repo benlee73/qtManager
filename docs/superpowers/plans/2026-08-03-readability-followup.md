@@ -287,8 +287,8 @@ Run: `just package`
 
 Run: `git diff --check && git status --short`
 
-- [ ] **Step 5: 문서·테스트 잔여 변경이 있으면 검증 커밋으로 분리한 뒤 원격과의 차이를 확인하고 `main`에 푸시**
+- [x] **Step 5: 문서·테스트 잔여 변경이 있으면 검증 커밋으로 분리한 뒤 원격과의 차이를 확인하고 `main`에 푸시**
 
 Run: `git fetch origin main && git rev-list --left-right --count origin/main...main && git push origin main`
 
-- [ ] **Step 6: Windows 전용 검증 미실행과 로컬 검증 결과를 완료 보고에 구분해 기록**
+- [x] **Step 6: Windows 전용 검증 미실행과 로컬 검증 결과를 완료 보고에 구분해 기록**
