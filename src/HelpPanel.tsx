@@ -21,7 +21,7 @@ const topics: { id: HelpTopic; label: string }[] = [
   { id: "distribution", label: "검색과 배부" },
   { id: "people", label: "신규 신청과 갱신" },
   { id: "purchase", label: "개별 구매" },
-  { id: "handover", label: "데이터 인수인계" },
+  { id: "handover", label: "데이터 백업·복원" },
   { id: "shortcuts", label: "단축키" },
   { id: "install", label: "설치 문제" },
   { id: "app-info", label: "앱 정보" },
@@ -156,9 +156,9 @@ export function HelpPanel({
                 완료 상태를 바꾸지 않습니다.
               </p>
             </HelpSection>
-            <HelpSection id="handover" title="데이터 인수인계와 복구">
+            <HelpSection id="handover" title="데이터 백업·복원">
               <p>
-                신청자 관리의 ‘데이터 인수인계’에서 전체 상태를 XLSX 한 파일로
+                신청자 관리의 ‘데이터 백업·복원’에서 전체 상태를 XLSX 한 파일로
                 내보냅니다. 새 담당자는 파일을 선택한 뒤 현재 데이터를 교체할지
                 병합할지 정합니다. 병합은 같은 ID의 최신 수정값과 양쪽 고유
                 이력을 보존하며, 동일인 후보는 직접 연결 여부를 선택합니다.
@@ -167,7 +167,7 @@ export function HelpPanel({
                 가져오기 직전 상태는 자동 백업되며 앱을 다시 실행해도 ‘가져오기
                 되돌리기’를 사용할 수 있습니다. 최근 자동 백업 10개를
                 보관합니다. XLSX는 암호화되지 않고 이름과 연락처가 포함되므로
-                안전하게 전달·보관하고, 인수인계 후 불필요한 사본을 삭제하세요.
+                안전하게 전달·보관하고, 백업·복원 후 불필요한 사본을 삭제하세요.
               </p>
             </HelpSection>
             <HelpSection id="shortcuts" title="단축키">

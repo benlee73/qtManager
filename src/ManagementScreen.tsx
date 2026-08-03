@@ -100,7 +100,7 @@ export function ManagementScreen({
             type="button"
             onClick={() => setDialog({ type: "handover" })}
           >
-            데이터 인수인계
+            데이터 백업·복원
           </button>
           <button
             className="secondary-button"

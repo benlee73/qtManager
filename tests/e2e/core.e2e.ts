@@ -1098,7 +1098,7 @@ describe("QT Manager desktop flow", () => {
         .querySelector<HTMLButtonElement>('[data-testid="open-handover"]')
         ?.click();
     });
-    await waitForText("#handover-title", "데이터 인수인계");
+    await waitForText("#handover-title", "데이터 백업·복원");
     await waitForText(
       '[data-testid="privacy-warning"]',
       "파일은 암호화되지 않습니다",

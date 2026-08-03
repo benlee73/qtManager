@@ -103,21 +103,21 @@ export function HandoverDialog({
         aria-labelledby="handover-title"
       >
         <div className="dialog-heading">
-          <h2 id="handover-title">데이터 인수인계</h2>
+          <h2 id="handover-title">데이터 백업·복원</h2>
           <button type="button" aria-label="닫기" onClick={onClose}>
             ×
           </button>
         </div>
         <p className="dialog-description">
-          XLSX 한 파일로 신청자, 구독, 배부, 개별 구매, 확인할 일, 고정 메모와
-          변경 이력을 전달합니다.
+          신청자, 구독, 배부와 기록을 XLSX 한 파일로 백업하거나 다른 기기에서
+          복원합니다.
         </p>
 
         <div className="privacy-warning" data-testid="privacy-warning">
           <strong>개인정보 주의</strong>
           <span>
-            파일에는 이름과 연락처가 포함됩니다. 안전하게 전달·보관하고 인수인계
-            후 불필요한 사본은 삭제하세요. 파일은 암호화되지 않습니다.
+            파일에는 이름과 연락처가 포함됩니다. 안전하게 전달·보관하고
+            백업·복원 후 불필요한 사본은 삭제하세요. 파일은 암호화되지 않습니다.
           </span>
         </div>
 
