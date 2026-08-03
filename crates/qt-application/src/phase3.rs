@@ -843,6 +843,18 @@ mod tests {
     }
 
     #[test]
+    fn serializes_subscription_period_states_as_api_values() {
+        for (state, expected) in [
+            (SubscriptionPeriodState::Current, "\"current\""),
+            (SubscriptionPeriodState::Scheduled, "\"scheduled\""),
+            (SubscriptionPeriodState::Past, "\"past\""),
+            (SubscriptionPeriodState::Archived, "\"archived\""),
+        ] {
+            assert_eq!(serde_json::to_string(&state).unwrap(), expected);
+        }
+    }
+
+    #[test]
     fn loads_period_states_and_only_active_linked_check_items() {
         let runtime = FixedRuntime(Cell::new(0));
         let now = runtime.now();

@@ -489,6 +489,15 @@ fn load_people_management_command(
         .map_err(|error| error.to_string())
 }
 
+fn load_person_detail_for_today<C: Clock, T>(
+    runtime: &C,
+    load: impl FnOnce(Issue) -> Result<T, String>,
+) -> Result<T, String> {
+    let reference_issue =
+        issue_containing_date(&runtime.today()).map_err(|error| error.to_string())?;
+    load(reference_issue)
+}
+
 #[tauri::command]
 fn load_person_detail_command(
     app: tauri::AppHandle,
@@ -496,10 +505,10 @@ fn load_person_detail_command(
 ) -> Result<PersonDetail, String> {
     let mut repository = open_operational_repository(&app)?;
     let runtime = SystemRuntime;
-    let reference_issue =
-        issue_containing_date(&runtime.today()).map_err(|error| error.to_string())?;
-    load_person_detail(&mut repository, &person_id, reference_issue)
-        .map_err(|error| error.to_string())
+    load_person_detail_for_today(&runtime, |reference_issue| {
+        load_person_detail(&mut repository, &person_id, reference_issue)
+            .map_err(|error| error.to_string())
+    })
 }
 
 #[tauri::command]
@@ -832,4 +841,28 @@ pub fn run() {
             event_logger(handle).info("app_stopped");
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct FixedToday;
+
+    impl Clock for FixedToday {
+        fn now(&self) -> String {
+            "2026-08-03T10:00:00+09:00".into()
+        }
+
+        fn today(&self) -> String {
+            "2026-08-03".into()
+        }
+    }
+
+    #[test]
+    fn passes_the_issue_containing_runtime_today_to_the_person_detail_query() {
+        let reference_issue = load_person_detail_for_today(&FixedToday, Ok).unwrap();
+
+        assert_eq!(reference_issue, Issue::new(2026, 7).unwrap());
+    }
 }
