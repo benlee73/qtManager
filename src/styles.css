@@ -30,6 +30,7 @@
   --scroll-thumb: #555961;
   --scroll-track: #25272b;
   --scroll-hover: #737781;
+  --rail: #25272b;
   --green-900: var(--text);
   --green-700: var(--accent);
   --green-100: rgb(88 101 242 / 14%);
@@ -61,6 +62,7 @@
   --scroll-thumb: #b9bec8;
   --scroll-track: #ebecef;
   --scroll-hover: #8f96a2;
+  --rail: #f0f1f4;
 }
 
 * {
@@ -179,49 +181,48 @@ p {
   display: grid;
   width: 100%;
   height: 100%;
-  grid-template-rows: 70px minmax(0, 1fr);
+  grid-template-columns: 76px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
   color: var(--text);
   background: var(--canvas);
 }
 
-.topnav {
-  display: flex;
+.app-navigation {
+  position: relative;
+  z-index: 20;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-column: 1;
+  grid-row: 1;
+  grid-template-rows: 76px auto minmax(16px, 1fr) auto;
   align-items: center;
-  padding: 0 18px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
+  overflow: visible;
+  border-right: 1px solid var(--line);
+  background: var(--rail);
 }
 
-.brand {
-  display: flex;
-  width: 230px;
-  align-items: center;
-  gap: 10px;
+.rail-brand {
+  position: relative;
+  display: grid;
+  height: 76px;
+  place-items: center;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .book-logo {
-  width: 42px;
-  height: 42px;
+  width: 46px;
+  height: 46px;
   flex: 0 0 auto;
-  border-radius: 12px;
+  border-radius: 13px;
   object-fit: cover;
 }
 
-.brand b,
-.brand small {
-  display: block;
-  white-space: nowrap;
-}
-
-.brand b {
-  font-size: var(--font-lg);
-}
-
-.brand small {
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: var(--font-xs);
+.rail-brand .info-tooltip {
+  position: absolute;
+  right: 7px;
+  bottom: 6px;
 }
 
 .info-tooltip {
@@ -260,99 +261,125 @@ p {
   font-size: var(--font-xs);
 }
 
+.rail-brand .info-tooltip > span {
+  top: 50%;
+  left: calc(100% + 8px);
+  transform: translateY(-50%);
+}
+
 .info-tooltip:hover > span,
 .info-tooltip:focus-within > span {
   display: block;
 }
 
-.main-menu {
-  display: flex;
-  align-self: stretch;
+.rail-primary,
+.rail-utilities {
+  display: grid;
+  align-content: start;
   gap: 4px;
+  padding: 10px 7px;
 }
 
-.main-menu button {
+.rail-utilities {
+  grid-row: 4;
+  align-self: end;
+  border-top: 1px solid var(--line-soft);
+}
+
+.rail-item {
   position: relative;
-  padding: 0 14px;
+  display: grid;
+  width: 62px;
+  min-height: 58px;
+  place-items: center;
+  align-content: center;
+  gap: 5px;
+  border-radius: 8px;
+  padding: 7px 2px;
   color: var(--muted);
   background: transparent;
-  font-size: 13px;
-  font-weight: 750;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
 }
 
-.main-menu button.active {
+.rail-item svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.rail-item:hover {
   color: var(--text);
+  background: var(--panel-hover);
 }
 
-.main-menu button.active::after {
+.rail-item.active {
+  color: var(--text);
+  background: var(--selected);
+}
+
+.rail-item.active::before {
   position: absolute;
-  right: 14px;
-  bottom: 0;
-  left: 14px;
-  height: 3px;
-  border-radius: 3px 3px 0 0;
+  top: 8px;
+  bottom: 8px;
+  left: -7px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
   background: var(--accent);
   content: "";
 }
 
-.nav-tools {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-left: auto;
-}
-
-.icon-button,
-.theme-button,
-.operator-button {
-  height: 36px;
-  border: 1px solid var(--line);
+.rail-operator {
+  display: grid;
+  width: 62px;
+  min-height: 56px;
+  place-items: center;
+  gap: 2px;
   border-radius: 8px;
-  background: var(--panel-high);
-  font-size: var(--font-sm);
+  padding: 7px 3px 5px;
+  color: var(--muted);
+  background: transparent;
+  text-align: center;
 }
 
-.icon-button {
-  width: 36px;
-  font-size: 14px;
-  font-weight: 800;
-}
-
-.theme-button,
-.operator-button {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 10px;
-}
-
-.theme-button span {
-  color: var(--accent);
-  font-size: 14px;
-}
-
-.operator-button > span {
-  width: 7px;
-  height: 7px;
+.operator-status {
+  width: 8px;
+  height: 8px;
+  margin-bottom: 2px;
+  border: 2px solid var(--rail);
   border-radius: 50%;
   background: var(--green);
 }
 
-.operator-button b {
-  max-width: 100px;
+.rail-operator:hover {
+  background: var(--panel-hover);
+}
+
+.rail-operator b {
+  max-width: 54px;
   overflow: hidden;
-  font-size: var(--font-sm);
+  color: var(--text);
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.operator-button small {
-  color: var(--muted);
+.rail-operator small {
+  color: var(--faint);
+  font-size: 9px;
 }
 
 .desk {
   display: grid;
   min-height: 0;
+  grid-column: 2;
+  grid-row: 1;
   grid-template-rows: 84px minmax(0, 1fr);
   gap: 0;
   padding: 0 18px 16px;
@@ -625,7 +652,9 @@ kbd {
 .table-head,
 .person-row {
   display: grid;
-  grid-template-columns: 42px 116px minmax(124px, 1fr) 112px 70px 122px;
+  grid-template-columns:
+    42px minmax(96px, 1fr) minmax(124px, 1.2fr) minmax(62px, 0.65fr)
+    112px;
   align-items: center;
   gap: 8px;
 }
@@ -721,14 +750,6 @@ kbd {
   color: var(--yellow);
   font-size: var(--font-xs);
   font-weight: 700;
-}
-
-.phone {
-  overflow: hidden;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .subscription b {
@@ -1330,20 +1351,34 @@ kbd {
 
 .management-host {
   min-height: 0;
+  grid-column: 2;
+  grid-row: 1;
   overflow: hidden;
 }
 
 @media (max-width: 950px), (max-height: 680px) {
-  .fixed-app {
-    grid-template-rows: 62px minmax(0, 1fr);
+  .app-navigation {
+    grid-template-rows: 68px auto minmax(8px, 1fr) auto;
   }
 
-  .topnav {
-    padding: 0 12px;
+  .rail-brand {
+    height: 68px;
   }
 
-  .brand {
-    width: 205px;
+  .book-logo {
+    width: 42px;
+    height: 42px;
+  }
+
+  .rail-primary,
+  .rail-utilities {
+    gap: 2px;
+    padding-top: 7px;
+    padding-bottom: 7px;
+  }
+
+  .rail-item {
+    min-height: 52px;
   }
 
   .desk {

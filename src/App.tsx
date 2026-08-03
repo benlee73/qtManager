@@ -1,15 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ActionMenu } from "./ActionMenu";
+import { AppNavigation } from "./AppNavigation";
 import { ArchiveDialog } from "./ArchiveDialog";
 import { HelpPanel } from "./HelpPanel";
-import {
-  BookLogo,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  RedoIcon,
-  UndoIcon,
-} from "./Icons";
+import { ChevronLeftIcon, ChevronRightIcon, RedoIcon, UndoIcon } from "./Icons";
 import { ManagementScreen } from "./ManagementScreen";
 import { NotificationStack } from "./Notifications";
 import { type Phase2Dialog, Phase2DialogContent } from "./Phase2Dialogs";
@@ -272,7 +267,7 @@ export default function App() {
   if (screen === "management") {
     return (
       <div className="fixed-app">
-        <TopNavigation
+        <AppNavigation
           active="management"
           operator={desk?.operatorName}
           theme={theme}
@@ -323,7 +318,7 @@ export default function App() {
 
   return (
     <div className="fixed-app">
-      <TopNavigation
+      <AppNavigation
         active="distribution"
         operator={desk?.operatorName}
         theme={theme}
@@ -506,7 +501,6 @@ export default function App() {
                 sort={sort}
                 onSort={toggleSort}
               />
-              <span>전화번호</span>
               <SortButton
                 label="구독"
                 column="subscription"
@@ -892,83 +886,6 @@ export default function App() {
   );
 }
 
-function TopNavigation({
-  active,
-  operator,
-  theme,
-  onDistribution,
-  onManagement,
-  onTheme,
-  onHelp,
-  onOperator,
-}: {
-  active: "distribution" | "management";
-  operator?: string | null;
-  theme: Theme;
-  onDistribution: () => void;
-  onManagement: () => void;
-  onTheme: () => void;
-  onHelp: () => void;
-  onOperator: () => void;
-}) {
-  return (
-    <nav className="topnav">
-      <div className="brand">
-        <BookLogo />
-        <div>
-          <b>QT Manager</b>
-          <small>
-            맑은샘광천교회 청년부{" "}
-            <span className="info-tooltip">
-              <button type="button" aria-label="제작 정보">
-                i
-              </button>
-              <span role="tooltip">2026 교육국 제작</span>
-            </span>
-          </small>
-        </div>
-      </div>
-      <div className="main-menu">
-        <button
-          className={active === "distribution" ? "active" : ""}
-          type="button"
-          onClick={onDistribution}
-        >
-          현장 배부
-        </button>
-        <button
-          className={active === "management" ? "active" : ""}
-          type="button"
-          data-testid="open-management"
-          onClick={onManagement}
-        >
-          신청자 관리 <small>⌄</small>
-        </button>
-      </div>
-      <div className="nav-tools">
-        <button className="icon-button" type="button" onClick={onHelp}>
-          ?
-        </button>
-        <button
-          className="theme-button"
-          type="button"
-          data-testid="theme-toggle"
-          aria-label="테마 전환"
-          onClick={onTheme}
-        >
-          <span>{theme === "dark" ? "☾" : "☀"}</span>
-          {theme === "dark" ? "다크" : "라이트"}
-        </button>
-        <button className="operator-button" type="button" onClick={onOperator}>
-          <span aria-hidden="true" />
-          <b>{operator ?? "담당자 설정"}</b>
-          <small>⌄</small>
-        </button>
-      </div>
-    </nav>
-  );
-}
-
 function Summary({
   label,
   value,
@@ -1015,6 +932,7 @@ function PersonRow({
     <article
       className={`person-row ${selected ? "selected" : ""} ${distributionClass(person.distributionStatus)}`}
       role="option"
+      aria-label={`${person.cohort ?? "또래 없음"} ${person.name}, ${person.phone ?? "연락처 없음"}, ${person.subscriptionStatus}, ${person.distributionStatus}`}
       aria-selected={selected}
       tabIndex={0}
       onClick={onSelect}
@@ -1030,12 +948,11 @@ function PersonRow({
     >
       <span className="cohort">{person.cohort ?? "--"}</span>
       <div className="person-name">
-        <b title={person.name}>{person.name}</b>
+        <b title={`${person.name} · ${person.phone ?? "연락처 없음"}`}>
+          {person.name}
+        </b>
         {person.hasCheckItem && <small>확인할 일 있음</small>}
       </div>
-      <span className="phone" title={person.phone ?? "연락처 없음"}>
-        {person.phone ?? "연락처 없음"}
-      </span>
       <div
         className={`subscription ${statusClass(person.subscriptionStatus)}`}
         title={person.distributionTargets

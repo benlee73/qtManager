@@ -118,6 +118,41 @@ describe("QT Manager desktop flow", () => {
       expiredPhone.replaceAll("-", ""),
     );
     await waitForText('[data-testid="person-row"]', expiredName);
+    const phoneAccess = await browser.execute((phone) => {
+      const row = document.querySelector<HTMLElement>(
+        '[data-testid="person-row"]',
+      );
+      return {
+        visibleInRow: row?.textContent?.includes(phone) ?? false,
+        accessibleFromRow:
+          row?.getAttribute("aria-label")?.includes(phone) ?? false,
+        phoneHeaderVisible: [
+          ...document.querySelectorAll<HTMLElement>(".table-head > *"),
+        ].some((cell) => cell.textContent?.trim() === "전화번호"),
+      };
+    }, expiredPhone);
+    expect(phoneAccess).toEqual({
+      visibleInRow: false,
+      accessibleFromRow: true,
+      phoneHeaderVisible: false,
+    });
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLElement>('[data-testid="person-row"]')
+        ?.dispatchEvent(
+          new MouseEvent("dblclick", { bubbles: true, cancelable: true }),
+        );
+    });
+    await browser.waitUntil(
+      async () =>
+        (await browser.$("input[name='phone']").getValue()) === expiredPhone,
+      { timeoutMsg: "신청자 수정 화면에서 전체 전화번호를 찾지 못했습니다." },
+    );
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>(".dialog [aria-label='닫기']")
+        ?.click();
+    });
     await invokeTauri("renew_subscription_command", {
       request: {
         personId: expiredId,
@@ -157,7 +192,10 @@ describe("QT Manager desktop flow", () => {
 
   it("creates linked and general check items, transitions all states, and keeps pinned notes periodless", async () => {
     await setSelect('select[aria-label="신청자 필터"]', "all");
-    const generalItem = `가상 일반 확인 ${Date.now()}`;
+    const unique = String(Date.now());
+    const generalItem = `가상 일반 확인 ${unique}`;
+    const linkedItem = `가상 신청자 연결 확인 ${unique}`;
+    const pinnedTitle = `가상 보관 위치 ${unique}`;
     await setInput("#quick-item", generalItem);
     await waitForEnabled('[data-testid="add-general-check-item"]');
     await browser.execute(() => {
@@ -186,13 +224,12 @@ describe("QT Manager desktop flow", () => {
     await waitForText(".menu-popover", "확인할 일 추가");
     await clickButtonByText("확인할 일 추가");
     await waitForText("#dialog-title", "확인할 일 추가");
-    await setInput("textarea[name='content']", "가상 신청자 연결 확인");
+    await setInput("textarea[name='content']", linkedItem);
     await clickButtonByText("확인할 일 저장");
-    await waitForText(".check-item-list", "가상 신청자 연결 확인");
+    await waitForText(".check-item-list", linkedItem);
     await waitForText(".check-item-list", "연결");
 
-    const linkedCheckbox =
-      'input[aria-label="가상 신청자 연결 확인 확인 완료"]';
+    const linkedCheckbox = `input[aria-label="${linkedItem} 확인 완료"]`;
     await browser.execute((selector) => {
       document.querySelector<HTMLInputElement>(selector)?.click();
     }, linkedCheckbox);
@@ -217,25 +254,30 @@ describe("QT Manager desktop flow", () => {
     ).toContain("다시 확인하도록");
     await browser.pause(4_200);
     expect(await textOf(".toast")).not.toContain("다시 확인하도록");
-    await clickButtonByText("보관");
-    await clickButtonByText("보관함");
-    await waitForText(".archive-dialog", "가상 신청자 연결 확인");
-    await clickButtonByText("복원");
-    await clickButtonByText("", "닫기");
-    await waitForText(".check-item-list", "가상 신청자 연결 확인");
-    const deletedCheckItemId = await browser.execute(() => {
+    await browser.execute((content) => {
       const item = [
         ...document.querySelectorAll<HTMLElement>(".check-item"),
-      ].find((candidate) =>
-        candidate.textContent?.includes("가상 신청자 연결 확인"),
-      );
+      ].find((candidate) => candidate.textContent?.includes(content));
+      [...(item?.querySelectorAll<HTMLButtonElement>("button") ?? [])]
+        .find((button) => button.textContent?.trim() === "보관")
+        ?.click();
+    }, linkedItem);
+    await clickButtonByText("보관함");
+    await waitForText(".archive-dialog", linkedItem);
+    await clickButtonByText("복원");
+    await clickButtonByText("", "닫기");
+    await waitForText(".check-item-list", linkedItem);
+    const deletedCheckItemId = await browser.execute((content) => {
+      const item = [
+        ...document.querySelectorAll<HTMLElement>(".check-item"),
+      ].find((candidate) => candidate.textContent?.includes(content));
       item
         ?.querySelector<HTMLButtonElement>(
           'button[aria-label="확인할 일 삭제"]',
         )
         ?.click();
       return item?.dataset.itemId ?? "";
-    });
+    }, linkedItem);
     expect(deletedCheckItemId).not.toBe("");
     await waitForText(".delete-confirm-dialog", "영구 삭제");
     await browser.execute(() => {
@@ -258,7 +300,7 @@ describe("QT Manager desktop flow", () => {
     );
 
     await clickButtonByText("", "고정 메모 추가");
-    await setInput("input[name='title']", "가상 보관 위치");
+    await setInput("input[name='title']", pinnedTitle);
     await setInput("textarea[name='content']", "가상 예배당 뒤편");
     expect(
       await browser.execute(
@@ -266,13 +308,13 @@ describe("QT Manager desktop flow", () => {
       ),
     ).toBe(true);
     await clickButtonByText("고정 메모 저장");
-    await waitForText(".pinned-list", "가상 보관 위치");
-    const deletedPinnedNoteId = await browser.execute(() => {
+    await waitForText(".pinned-list", pinnedTitle);
+    const deletedPinnedNoteId = await browser.execute((title) => {
       const note = [
         ...document.querySelectorAll<HTMLElement>(".pinned-note"),
-      ].find((candidate) => candidate.textContent?.includes("가상 보관 위치"));
+      ].find((candidate) => candidate.textContent?.includes(title));
       return note?.dataset.noteId ?? "";
-    });
+    }, pinnedTitle);
     expect(deletedPinnedNoteId).not.toBe("");
     await clickPinnedNoteMenu(deletedPinnedNoteId);
     await clickButtonByText("고정 해제");
@@ -536,6 +578,12 @@ describe("QT Manager desktop flow", () => {
       const pinnedStyle = getComputedStyle(
         document.querySelector<HTMLElement>(".pinned-list")!,
       );
+      const rail = document
+        .querySelector<HTMLElement>(".app-navigation")!
+        .getBoundingClientRect();
+      const desk = document
+        .querySelector<HTMLElement>(".desk")!
+        .getBoundingClientRect();
       return {
         labels: stats.map((item) => item.querySelector("span")?.textContent),
         sizes,
@@ -552,6 +600,16 @@ describe("QT Manager desktop flow", () => {
         numericStyle: getComputedStyle(
           document.querySelector<HTMLElement>(".summary-grid")!,
         ).fontVariantNumeric,
+        rail: {
+          left: Math.round(rail.left),
+          width: Math.round(rail.width),
+          height: Math.round(rail.height),
+          viewportHeight: window.innerHeight,
+          activeCount: document.querySelectorAll(
+            ".app-navigation [aria-current='page']",
+          ).length,
+        },
+        deskLeft: Math.round(desk.left),
       };
     });
     expect(layout.labels).toEqual(["대상", "완료", "남음", "배부"]);
@@ -561,6 +619,14 @@ describe("QT Manager desktop flow", () => {
     expect(layout.bodyFits).toBe(true);
     expect(layout.internal).toEqual(["auto", "auto", "auto"]);
     expect(layout.numericStyle).toContain("tabular-nums");
+    expect(layout.rail).toEqual({
+      left: 0,
+      width: 76,
+      height: layout.rail.viewportHeight,
+      viewportHeight: layout.rail.viewportHeight,
+      activeCount: 1,
+    });
+    expect(layout.deskLeft).toBe(76);
 
     const windowContract = await browser.execute(async () => {
       const internals = (
@@ -589,18 +655,49 @@ describe("QT Manager desktop flow", () => {
     expect(resized.resizable).toBe(true);
     expect(resized.width).toBeGreaterThanOrEqual(1090);
     expect(resized.height).toBeGreaterThanOrEqual(770);
+    await browser.setWindowSize(1800, 1280);
+    const minimumLayout = await browser.execute(() => {
+      const rail = document
+        .querySelector<HTMLElement>(".app-navigation")!
+        .getBoundingClientRect();
+      return {
+        bodyFits:
+          document.body.scrollWidth === document.body.clientWidth &&
+          document.body.scrollHeight === document.body.clientHeight,
+        railFits: rail.top === 0 && rail.bottom === window.innerHeight,
+        horizontalScroll:
+          document.documentElement.scrollWidth > window.innerWidth,
+      };
+    });
+    expect(minimumLayout).toEqual({
+      bodyFits: true,
+      railFits: true,
+      horizontalScroll: false,
+    });
     await browser.setWindowSize(2000, 1440);
   });
 
   it("registers, edits, renews and archives a person from management", async () => {
-    const applicant = `가상관리${Date.now()}`;
+    const unique = String(Date.now()).slice(-8);
+    const applicant = `가상관리${unique}`;
     const edited = `${applicant}수정`;
+    const registrationPhone = `010-${unique.slice(0, 4)}-${unique.slice(4)}`;
+    const editedPhone = `011-${unique.slice(0, 4)}-${unique.slice(4)}`;
+    const renewalIssue = shiftIssue(await selectedIssue(), 6);
 
     await browser.execute(() => {
       document
         .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
         ?.click();
     });
+    expect(
+      await browser.execute(
+        () =>
+          document
+            .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
+            ?.getAttribute("aria-current") ?? null,
+      ),
+    ).toBe("page");
     await waitForText("h2", "신청자 정보와 전체 이력");
     mkdirSync("test-results", { recursive: true });
     await browser.saveScreenshot("test-results/ui-management-light.png");
@@ -629,15 +726,35 @@ describe("QT Manager desktop flow", () => {
     });
     await setInput("input[name='name']", applicant);
     await setInput("input[name='cohort']", "00");
-    await setInput("input[name='phone']", "010-0000-2468");
+    await setInput("input[name='phone']", registrationPhone);
     await setInput("textarea[name='personNote']", "가상 신청자 메모");
     await setInput("input[name='quantity']", "2");
+    const registrationForm = await browser.execute(() => {
+      const form = document.querySelector<HTMLFormElement>(
+        '[data-testid="register-person-form"]',
+      );
+      return {
+        exists: Boolean(form),
+        valid: form?.checkValidity() ?? false,
+        name:
+          form?.querySelector<HTMLInputElement>("input[name='name']")?.value ??
+          "",
+      };
+    });
+    expect(registrationForm).toEqual({
+      exists: true,
+      valid: true,
+      name: applicant,
+    });
     await browser.execute(() => {
       document
-        .querySelector<HTMLFormElement>('[data-testid="register-person-form"]')
-        ?.requestSubmit();
+        .querySelector<HTMLFormElement>('[data-testid="register-person-form"]')!
+        .requestSubmit();
     });
-    await waitForText(".toast", "연간 구독을 등록했습니다");
+    await browser.waitUntil(async () => (await textOf(".toast")).length > 0, {
+      timeoutMsg: "신청자 등록 결과 알림이 나타나지 않았습니다.",
+    });
+    expect(await textOf(".toast")).toContain("연간 구독을 등록했습니다");
 
     await setInput('[data-testid="management-search"]', applicant);
     await waitForText('[data-testid="management-person"]', applicant);
@@ -651,7 +768,7 @@ describe("QT Manager desktop flow", () => {
 
     await clickButtonByText("정보 수정");
     await setInput("input[name='name']", edited);
-    await setInput("input[name='phone']", "010-0000-8642");
+    await setInput("input[name='phone']", editedPhone);
     await browser.execute(() => {
       document
         .querySelector<HTMLFormElement>('[data-testid="edit-person-form"]')
@@ -665,8 +782,11 @@ describe("QT Manager desktop flow", () => {
         .querySelector<HTMLButtonElement>('[data-testid="open-renew"]')
         ?.click();
     });
-    await setInput("input[name='issueYear']", "2027");
-    await setSelect("select[name='issueMonth']", "7");
+    await setInput("input[name='issueYear']", String(renewalIssue.year));
+    await setSelect(
+      "select[name='issueMonth']",
+      String(renewalIssue.startMonth),
+    );
     await browser.execute(() => {
       document
         .querySelector<HTMLFormElement>('[data-testid="renew-form"]')
@@ -691,9 +811,23 @@ describe("QT Manager desktop flow", () => {
       '[data-testid="help-app-info"]',
       "이름·전화번호·메모는 기록하지 않습니다",
     );
+    await waitForText(
+      '[data-testid="help-distribution"]',
+      "현장 배부 표는 구독과 배부 상태를 넓게 보여주기 위해",
+    );
     await clickButtonByText("", "도움말 닫기");
     await clickButtonByText("현장 배부");
     await waitForText('[data-testid="selected-issue"]', "월호");
+    expect(
+      await browser.execute(
+        () =>
+          document
+            .querySelector<HTMLButtonElement>(
+              ".app-navigation [aria-current='page']",
+            )
+            ?.textContent?.trim() ?? "",
+      ),
+    ).toContain("현장 배부");
   });
 
   it("previews pasted Google responses, links a duplicate candidate and blocks a repeat", async () => {
