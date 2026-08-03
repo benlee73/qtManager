@@ -11,7 +11,9 @@ mod sqlite_state_transfer;
 mod state_xlsx;
 mod system_runtime;
 
-pub use legacy_xlsx::{LegacyMigrationReport, read_legacy_2026};
+pub use legacy_xlsx::{
+    LegacyEvidenceRow, LegacyMigrationReport, read_legacy_2026, read_legacy_evidence_rows,
+};
 pub use rotating_file_logger::RotatingFileEventLogger;
 pub use sqlite_core_repository::SqliteCoreRepository;
 pub use sqlite_probe_repository::SqliteProbeRepository;

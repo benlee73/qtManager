@@ -19,6 +19,74 @@ pub struct LegacyMigrationReport {
     pub issue_rows: Vec<(Issue, usize, usize)>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LegacyEvidenceRow {
+    pub source_reference: String,
+    pub sheet_issue: Issue,
+    pub name: String,
+    pub cohort: Option<String>,
+    pub phone: Option<String>,
+    pub quantity: u32,
+    pub start_issue: Option<Issue>,
+    pub end_issue: Option<Issue>,
+    pub received: bool,
+}
+
+/// Extracts the row-level evidence needed by the one-off reconciliation without
+/// logging or persisting personal values.
+pub fn read_legacy_evidence_rows(path: &Path) -> Result<Vec<LegacyEvidenceRow>, PortError> {
+    let mut workbook: Xlsx<_> = open_workbook(path).map_err(calamine_error)?;
+    let mut evidence = Vec::new();
+    for sheet_name in workbook.sheet_names().to_vec() {
+        let Some(sheet_issue) = issue_from_sheet_name(&sheet_name) else {
+            continue;
+        };
+        let range = workbook
+            .worksheet_range(&sheet_name)
+            .map_err(|error| legacy_error(error.to_string()))?;
+        let Some(header) = range.rows().next() else {
+            continue;
+        };
+        let Some(name_column) = find_header(header, &["이름", "이름 및 또래"]) else {
+            continue;
+        };
+        let receipt_column = find_header(header, &["수령", "수령 여부"]);
+        let phone_column = find_header(header, &["전화번호"]);
+        let start_column = find_header(header, &["구독 시작일"]);
+        let end_column = find_header(header, &["구독 종료일"]);
+        let quantity_column =
+            find_header(header, &["신청 수량", "수량"]).unwrap_or(name_column + 1);
+
+        for (offset, row) in range.rows().skip(1).enumerate() {
+            let raw_identity = text(row.get(name_column));
+            if raw_identity.is_empty() {
+                continue;
+            }
+            let (name, cohort) = split_identity(&raw_identity);
+            if name.is_empty() {
+                continue;
+            }
+            let phone = phone_column
+                .and_then(|column| clean_text(row.get(column)))
+                .filter(|value| normalize_phone(value).len() >= 8);
+            evidence.push(LegacyEvidenceRow {
+                source_reference: format!("2026:{sheet_name}:row-{}", offset + 2),
+                sheet_issue,
+                name,
+                cohort,
+                phone,
+                quantity: positive_integer(row.get(quantity_column)).unwrap_or(1),
+                start_issue: start_column.and_then(|column| issue_from_cell(row.get(column))),
+                end_issue: end_column.and_then(|column| issue_from_cell(row.get(column))),
+                received: receipt_column
+                    .and_then(|column| row.get(column))
+                    .is_some_and(cell_is_checked),
+            });
+        }
+    }
+    Ok(evidence)
+}
+
 /// Reads the one-off 2026 workbook without modifying it. The legacy sheets move
 /// the main table between columns, so columns are located by their Korean
 /// headers instead of fixed coordinates.

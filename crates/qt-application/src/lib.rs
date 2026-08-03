@@ -11,6 +11,7 @@ mod phase1;
 mod phase2;
 mod phase3;
 mod phase4;
+mod verified_legacy_period_reconciliation;
 
 pub use application_import::{
     ApplicationClipboardParser, ApplicationImportBatch, ApplicationImportRecord,
@@ -49,6 +50,11 @@ pub use phase4::{
     RestorePointView, StateCounts, StatePinnedNote, StateSetting, StateSnapshot,
     StateTransferRepository, StateWorkbookMetadata, StateWorkbookV1, apply_state_import,
     export_state, merge_snapshots, preview_state_import, undo_state_import,
+};
+pub use verified_legacy_period_reconciliation::{
+    LegacyPeriodCorrection, LegacyPeriodReconciliationResult, LegacyPeriodShift,
+    LegacyRenewalMerge, LegacySubscriptionExpectation, VerifiedLegacyProfile,
+    reconcile_verified_legacy_periods,
 };
 
 pub trait ProbeRepository {

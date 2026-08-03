@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use calamine::{Reader, Xlsx, open_workbook};
-use qt_infrastructure::read_legacy_2026;
+use qt_domain::Issue;
+use qt_infrastructure::{read_legacy_2026, read_legacy_evidence_rows};
 use rust_xlsxwriter::Workbook;
 
 #[test]
@@ -58,6 +59,47 @@ fn conflicting_start_and_end_dates_remain_explicitly_unverified() {
         item.content == "구독 시작·종료 호 불일치"
             && item.person_id.as_deref() == Some(report.snapshot.people[0].id.as_str())
     }));
+}
+
+#[test]
+fn evidence_rows_preserve_source_reference_period_and_latest_profile_values() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("evidence.xlsx");
+    let mut workbook = Workbook::new();
+    let sheet = workbook.add_worksheet();
+    sheet.set_name("7,8월").unwrap();
+    for (column, header) in [
+        "수령 여부",
+        "이름 및 또래",
+        "신청 수량",
+        "전화번호",
+        "구독 시작일",
+        "구독 종료일",
+    ]
+    .iter()
+    .enumerate()
+    {
+        sheet.write_string(0, column as u16, *header).unwrap();
+    }
+    sheet.write_number(1, 0, 1).unwrap();
+    sheet.write_string(1, 1, "00 가상 신청자").unwrap();
+    sheet.write_number(1, 2, 3).unwrap();
+    sheet.write_string(1, 3, "010-1111-1111").unwrap();
+    sheet.write_string(1, 4, "26.05").unwrap();
+    sheet.write_string(1, 5, "27.03").unwrap();
+    workbook.save(&path).unwrap();
+
+    let rows = read_legacy_evidence_rows(&path).unwrap();
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].source_reference, "2026:7,8월:row-2");
+    assert_eq!(rows[0].name, "가상 신청자");
+    assert_eq!(rows[0].cohort.as_deref(), Some("00"));
+    assert_eq!(rows[0].phone.as_deref(), Some("010-1111-1111"));
+    assert_eq!(rows[0].quantity, 3);
+    assert_eq!(rows[0].start_issue, Issue::new(2026, 5).ok());
+    assert_eq!(rows[0].end_issue, Issue::new(2027, 3).ok());
+    assert!(rows[0].received);
 }
 
 const IMPORTED_AT: &str = "2026-07-27T00:00:00+09:00";
