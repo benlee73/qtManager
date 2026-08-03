@@ -1,0 +1,49 @@
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
+
+import { PersonRow } from "./App";
+import type { DeskPerson } from "./phase2";
+
+const person: DeskPerson = {
+  personId: "person-id",
+  subscriptionId: "subscription-id",
+  distributionTargets: [],
+  name: "가상 신청자",
+  cohort: "00",
+  phone: null,
+  personStatus: "정상",
+  subscriptionStatus: "유효",
+  distributionStatus: "미배부",
+  targetQuantity: 1,
+  distributedQuantity: 0,
+  remainingQuantity: 1,
+  lastIssue: "2026년 11~12월호",
+  endDate: "2026-12-31",
+  isLastIssue: false,
+  hasCheckItem: true,
+  canDistribute: true,
+};
+
+describe("PersonRow", () => {
+  it("shows linked check work as a quiet status dot instead of a repeated line", () => {
+    const markup = renderToStaticMarkup(
+      <PersonRow
+        person={person}
+        selected={false}
+        busy={false}
+        openMenu={null}
+        onOpenMenu={vi.fn()}
+        onSelect={vi.fn()}
+        onDistribute={vi.fn()}
+        onCancelDistribution={vi.fn()}
+        onPartial={vi.fn()}
+        onCheckItem={vi.fn()}
+        onEdit={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain('class="person-check-indicator"');
+    expect(markup).toContain('aria-label="확인할 일 있음"');
+    expect(markup).not.toContain("<small>확인할 일 있음</small>");
+  });
+});

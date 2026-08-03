@@ -958,7 +958,7 @@ function Summary({
   );
 }
 
-function PersonRow({
+export function PersonRow({
   person,
   selected,
   busy,
@@ -1007,10 +1007,16 @@ function PersonRow({
         <b title={`${person.name} · ${person.phone ?? "연락처 없음"}`}>
           {person.name}
         </b>
-        {person.hasCheckItem && <small>확인할 일 있음</small>}
+        {person.hasCheckItem && (
+          <span
+            className="person-check-indicator"
+            aria-label="확인할 일 있음"
+            title="연결된 확인할 일이 있습니다"
+          />
+        )}
       </div>
       <div
-        className={`subscription ${statusClass(person.subscriptionStatus)}`}
+        className={`subscription ${statusClass(person.subscriptionStatus)} ${headline ? "" : "subscription-simple"}`}
         title={person.distributionTargets
           .map(
             (target) =>

@@ -241,6 +241,7 @@ p {
 .rail-info {
   justify-self: center;
   margin-top: 2px;
+  margin-bottom: 4px;
 }
 
 .rail-info.info-tooltip > span {
@@ -265,6 +266,7 @@ p {
 .rail-utilities {
   grid-row: 4;
   align-self: end;
+  padding-bottom: 12px;
   border-top: 1px solid var(--line-soft);
 }
 
@@ -406,13 +408,17 @@ p {
   width: 210px;
   align-items: baseline;
   justify-content: center;
-  gap: 0.18em;
+  gap: 0;
   overflow: hidden;
   font-size: 23px;
   letter-spacing: 0.035em;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+.issue-year-suffix {
+  margin-right: 0.22em;
 }
 
 .issue-year {
@@ -635,7 +641,7 @@ kbd {
 }
 
 .filter-trigger {
-  min-width: 70px;
+  min-width: 96px;
   height: 30px;
   border: 1px solid var(--line);
   border-radius: 7px;
@@ -644,12 +650,6 @@ kbd {
   background: var(--panel-high);
   font-size: var(--font-sm);
   font-weight: 700;
-}
-
-.filter-trigger b {
-  margin-left: 6px;
-  color: var(--accent);
-  font-variant-numeric: tabular-nums;
 }
 
 .filter-popover {
@@ -803,14 +803,23 @@ kbd {
 }
 
 .person-name b {
+  min-width: 0;
   font-size: 13px;
 }
 
-.person-name small {
-  margin-top: 3px;
-  color: var(--yellow);
-  font-size: var(--font-xs);
-  font-weight: 700;
+.person-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.person-check-indicator {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--yellow);
+  box-shadow: 0 0 0 3px var(--orange-soft);
 }
 
 .subscription b {
@@ -825,6 +834,16 @@ kbd {
   font-size: var(--font-xs);
 }
 
+.subscription-simple {
+  display: flex;
+  height: 100%;
+  align-items: center;
+}
+
+.subscription-simple small {
+  margin-top: 0;
+}
+
 .subscription.review b {
   color: var(--yellow);
 }
@@ -834,7 +853,9 @@ kbd {
 }
 
 .distribution-cell b {
+  color: var(--muted);
   font-size: var(--font-sm);
+  font-weight: 650;
 }
 
 .person-row.distribution-partial {
@@ -910,8 +931,8 @@ kbd {
 
 .notes-panel {
   display: grid;
-  grid-template-rows: 32px 120px minmax(0, 1fr) minmax(112px, 0.8fr);
-  gap: 9px;
+  grid-template-rows: 32px 104px minmax(0, 1fr) minmax(112px, 0.8fr);
+  gap: 8px;
   padding: 12px;
 }
 
@@ -940,12 +961,12 @@ kbd {
 
 .count-badge {
   display: grid;
-  width: 25px;
-  height: 25px;
+  width: 23px;
+  height: 23px;
   place-items: center;
   border-radius: 50%;
   color: #fff;
-  background: var(--accent);
+  background: rgb(88 101 242 / 82%);
   font-size: var(--font-sm);
   font-weight: 800;
 }
@@ -953,7 +974,7 @@ kbd {
 .sticky-input {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  padding: 11px;
+  padding: 9px 10px;
   border: 1px solid var(--note-line);
   border-radius: 7px;
   background: var(--note);
@@ -968,7 +989,7 @@ kbd {
   width: 100%;
   min-height: 0;
   border: 0;
-  padding: 8px 0;
+  padding: 5px 0;
   outline: 0;
   color: var(--text);
   background: transparent;
@@ -1013,11 +1034,11 @@ kbd {
 .check-item-list {
   display: grid;
   align-content: start;
-  gap: 6px;
+  gap: 5px;
 }
 
 .check-item {
-  padding: 9px 10px;
+  padding: 7px 9px;
   border-left: 3px solid #858cf0;
   border-radius: 6px;
   background: var(--panel-high);
@@ -1049,6 +1070,7 @@ kbd {
 .check-item p {
   overflow: hidden;
   font-size: var(--font-sm);
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1056,7 +1078,7 @@ kbd {
 .check-item > div {
   justify-content: flex-start;
   gap: 6px;
-  margin-top: 7px;
+  margin-top: 5px;
 }
 
 .check-item small {
@@ -1069,22 +1091,30 @@ kbd {
   white-space: nowrap;
 }
 
-.check-item small b,
-.check-item button {
-  color: var(--accent);
+.check-item small b {
+  color: var(--muted);
+  font-weight: 650;
 }
 
 .check-item button {
   padding: 0;
+  color: var(--muted);
   background: transparent;
   font-size: var(--font-xs);
-  font-weight: 800;
+  font-weight: 700;
   white-space: nowrap;
 }
 
 .check-item-actions {
   display: flex;
   gap: 7px;
+  opacity: 0.68;
+  transition: opacity 120ms ease;
+}
+
+.check-item:hover .check-item-actions,
+.check-item:focus-within .check-item-actions {
+  opacity: 1;
 }
 
 .check-item-actions button:last-child {

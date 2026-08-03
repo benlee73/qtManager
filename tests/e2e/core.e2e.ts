@@ -239,6 +239,13 @@ describe("QT Manager desktop flow", () => {
     await clickButtonByText("확인할 일 저장");
     await waitForText(".check-item-list", linkedItem);
     await waitForText(".check-item-list", "연결");
+    expect(
+      await browser.execute(
+        () =>
+          document.querySelector(".person-check-indicator") !== null &&
+          document.querySelector(".person-name small") === null,
+      ),
+    ).toBe(true);
 
     const linkedCheckbox = `input[aria-label="${linkedItem} 확인 완료"]`;
     await browser.execute((selector) => {
@@ -498,6 +505,14 @@ describe("QT Manager desktop flow", () => {
       ),
     ).toBe(true);
     await setPersonFilterPreset("남은 배부");
+    expect(await textOf(".filter-trigger")).toBe("남은 배부 · 2");
+    expect(
+      await browser.execute(
+        () =>
+          document.querySelector(".filter-trigger")?.getAttribute("title") ??
+          "",
+      ),
+    ).toBe("미배부, 일부 배부");
 
     const sortLabelBefore = await browser.execute(
       () =>
@@ -589,6 +604,7 @@ describe("QT Manager desktop flow", () => {
     expect(
       Math.abs(issueAfter.headingCenter - issueAfter.arrowsCenter),
     ).toBeLessThan(1);
+    expect(issueAfter.gap).toBe("0px");
     await clickButtonByText("", "이전 호");
 
     const compactPanels = await panelWidths();
@@ -664,6 +680,9 @@ describe("QT Manager desktop flow", () => {
       const desk = document
         .querySelector<HTMLElement>(".desk")!
         .getBoundingClientRect();
+      const stickyInput = document
+        .querySelector<HTMLElement>(".sticky-input")!
+        .getBoundingClientRect();
       return {
         labels: stats.map((item) => item.querySelector("span")?.textContent),
         sizes,
@@ -690,6 +709,7 @@ describe("QT Manager desktop flow", () => {
           ).length,
         },
         deskLeft: Math.round(desk.left),
+        stickyInputHeight: Math.round(stickyInput.height),
       };
     });
     expect(layout.labels).toEqual(["대상", "완료", "남음", "배부"]);
@@ -707,6 +727,7 @@ describe("QT Manager desktop flow", () => {
       activeCount: 1,
     });
     expect(layout.deskLeft).toBe(76);
+    expect(layout.stickyInputHeight).toBeLessThanOrEqual(104);
 
     const windowContract = await browser.execute(async () => {
       const internals = (
@@ -1161,6 +1182,9 @@ async function issuePickerGeometry() {
     ].map((button) => button.getBoundingClientRect());
     return {
       startMonth,
+      gap: getComputedStyle(
+        document.querySelector<HTMLElement>(".issue-picker h1")!,
+      ).gap,
       yearSuffixLeft: document
         .querySelector<HTMLElement>(".issue-year-suffix")!
         .getBoundingClientRect().left,

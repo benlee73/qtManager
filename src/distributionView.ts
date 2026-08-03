@@ -9,6 +9,13 @@ export const PERSON_FILTERS = [
 
 export type PersonFilter = (typeof PERSON_FILTERS)[number];
 
+export const PERSON_FILTER_LABELS: Record<PersonFilter, string> = {
+  undistributed: "미배부",
+  partial: "일부 배부",
+  completed: "배부 완료",
+  expired: "구독 만료",
+};
+
 export const DEFAULT_PERSON_FILTERS: PersonFilter[] = [
   "undistributed",
   "partial",
@@ -75,4 +82,20 @@ export function filterLabel(filters: ReadonlySet<PersonFilter>) {
     return "남은 신청자";
   if (filters.size === 0) return "선택한 신청자";
   return "필터 결과";
+}
+
+export function filterTriggerLabel(filters: ReadonlySet<PersonFilter>) {
+  if (
+    filters.size === DEFAULT_PERSON_FILTERS.length &&
+    DEFAULT_PERSON_FILTERS.every((filter) => filters.has(filter))
+  )
+    return "남은 배부 · 2";
+  if (PERSON_FILTERS.every((filter) => filters.has(filter))) return "전체 · 4";
+  return `필터 · ${filters.size}개`;
+}
+
+export function filterSelectionDescription(filters: ReadonlySet<PersonFilter>) {
+  return PERSON_FILTERS.filter((filter) => filters.has(filter))
+    .map((filter) => PERSON_FILTER_LABELS[filter])
+    .join(", ");
 }

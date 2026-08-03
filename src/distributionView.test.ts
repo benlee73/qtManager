@@ -6,6 +6,8 @@ import {
   DEFAULT_PERSON_FILTERS,
   distributionAllocations,
   filterPeople,
+  filterSelectionDescription,
+  filterTriggerLabel,
   issueLabelParts,
   subscriptionHeadline,
 } from "./distributionView";
@@ -57,6 +59,19 @@ describe("distribution list filters", () => {
       ),
     ).toEqual(["유효", "구독 만료"]);
     expect(filterPeople(people, new Set(ALL_PERSON_FILTERS))).toHaveLength(4);
+  });
+
+  it("names the common presets and describes custom multi-selection", () => {
+    expect(filterTriggerLabel(new Set(DEFAULT_PERSON_FILTERS))).toBe(
+      "남은 배부 · 2",
+    );
+    expect(filterTriggerLabel(new Set(ALL_PERSON_FILTERS))).toBe("전체 · 4");
+    expect(filterTriggerLabel(new Set(["completed", "expired"]))).toBe(
+      "필터 · 2개",
+    );
+    expect(filterSelectionDescription(new Set(["completed", "expired"]))).toBe(
+      "배부 완료, 구독 만료",
+    );
   });
 });
 

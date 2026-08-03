@@ -3,15 +3,11 @@ import { useEffect, useRef } from "react";
 import {
   ALL_PERSON_FILTERS,
   DEFAULT_PERSON_FILTERS,
+  filterSelectionDescription,
+  filterTriggerLabel,
+  PERSON_FILTER_LABELS,
   type PersonFilter,
 } from "./distributionView";
-
-const labels: Record<PersonFilter, string> = {
-  undistributed: "미배부",
-  partial: "일부 배부",
-  completed: "배부 완료",
-  expired: "구독 만료",
-};
 
 export function PersonFilterMenu({
   filters,
@@ -60,9 +56,10 @@ export function PersonFilterMenu({
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
+        title={filterSelectionDescription(filters) || "선택한 상태 없음"}
         onClick={() => onOpenChange(!open)}
       >
-        필터 <b>{filters.size}</b>
+        {filterTriggerLabel(filters)}
       </button>
       {open && (
         <div className="filter-popover" role="menu" aria-label="신청자 필터">
@@ -87,7 +84,7 @@ export function PersonFilterMenu({
                 checked={filters.has(filter)}
                 onChange={() => toggle(filter)}
               />
-              <span>{labels[filter]}</span>
+              <span>{PERSON_FILTER_LABELS[filter]}</span>
             </label>
           ))}
         </div>

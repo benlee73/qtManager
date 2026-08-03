@@ -21,5 +21,7 @@ describe("PersonFilterMenu", () => {
     expect(markup).toContain("일부 배부");
     expect(markup).toContain("배부 완료");
     expect(markup).toContain("구독 만료");
+    expect(markup).toContain("남은 배부 · 2");
+    expect(markup).toContain('title="미배부, 일부 배부"');
   });
 });
