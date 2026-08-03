@@ -51,11 +51,11 @@ pub use phase2::{
     save_operator, undo_last_distribution, update_check_item_status, update_pinned_note,
 };
 pub use phase3::{
-    DistributionView, DuplicateCandidate, ManagedPersonRecord, PeopleManagement,
-    PeopleManagementRepository, PersonDetail, PersonSummary, RegisterPersonRequest,
-    RenewSubscriptionRequest, SubscriptionView, UpdatePersonRequest, load_people_management,
-    load_person_detail, preview_duplicates, register_person, renew_subscription,
-    set_person_archived, update_person,
+    DistributionView, DuplicateCandidate, LinkedCheckItemView, ManagedPersonRecord,
+    PeopleManagement, PeopleManagementRepository, PersonDetail, PersonSummary,
+    RegisterPersonRequest, RenewSubscriptionRequest, SubscriptionPeriodState, SubscriptionView,
+    UpdatePersonRequest, issue_containing_date, load_people_management, load_person_detail,
+    preview_duplicates, register_person, renew_subscription, set_person_archived, update_person,
 };
 pub use phase4::{
     ApplyStateImportRequest, ImportMode, ImportPreview, MergePersonConflict, MergePersonResolution,
@@ -182,6 +182,8 @@ pub enum ApplicationError {
     MissingOperator,
     #[error("선택한 QT 신청자 또는 구독을 찾지 못했습니다.")]
     MissingDeskRecord,
+    #[error("현재 날짜 형식이 올바르지 않습니다.")]
+    InvalidCurrentDate,
     #[error("되돌릴 수 있는 최근 배부 기록이 없습니다.")]
     NothingToUndo,
     #[error("취소할 수 있는 최근 현장 개별 구매가 없습니다.")]

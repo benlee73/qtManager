@@ -69,7 +69,8 @@ fn persists_registration_profile_completion_renewal_archive_and_history_across_r
 
     {
         let mut repository = SqliteCoreRepository::open(&path).unwrap();
-        let detail = load_person_detail(&mut repository, &person_id).unwrap();
+        let detail =
+            load_person_detail(&mut repository, &person_id, Issue::new(2026, 7).unwrap()).unwrap();
         assert_eq!(detail.name, "가상관리");
         assert_eq!(detail.subscriptions[0].last_issue, "2027년 5~6월호");
 
@@ -110,7 +111,8 @@ fn persists_registration_profile_completion_renewal_archive_and_history_across_r
     assert_eq!(visible.people.len(), 1);
     assert_eq!(visible.people[0].status, "보관됨");
     assert_eq!(visible.people[0].phone.as_deref(), Some("010-0000-9999"));
-    let detail = load_person_detail(&mut repository, &person_id).unwrap();
+    let detail =
+        load_person_detail(&mut repository, &person_id, Issue::new(2028, 1).unwrap()).unwrap();
     assert_eq!(detail.subscriptions.len(), 2);
     assert_eq!(
         detail.subscriptions[0].start_issue,

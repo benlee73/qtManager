@@ -10,11 +10,12 @@ use qt_application::{
     RunPhase1Probe, RuntimeServices, StateCounts, UndoDistributionRequest, UndoDistributionResult,
     UpdateCheckItemStatusRequest, UpdatePersonRequest, UpdatePinnedNoteRequest, apply_state_import,
     cancel_latest_purchase, create_check_item, create_draft, create_pinned_note, delete_check_item,
-    delete_pinned_note, export_state, import_applications, load_distribution_desk,
-    load_people_management, load_person_detail, preview_applications, preview_duplicates,
-    preview_state_import, record_distribution, record_purchase, register_person,
-    renew_subscription, save_operator, set_person_archived, undo_last_distribution,
-    undo_state_import, update_check_item_status, update_person, update_pinned_note,
+    delete_pinned_note, export_state, import_applications, issue_containing_date,
+    load_distribution_desk, load_people_management, load_person_detail, preview_applications,
+    preview_duplicates, preview_state_import, record_distribution, record_purchase,
+    register_person, renew_subscription, save_operator, set_person_archived,
+    undo_last_distribution, undo_state_import, update_check_item_status, update_person,
+    update_pinned_note,
 };
 use qt_domain::Issue;
 use qt_infrastructure::{
@@ -494,7 +495,11 @@ fn load_person_detail_command(
     person_id: String,
 ) -> Result<PersonDetail, String> {
     let mut repository = open_operational_repository(&app)?;
-    load_person_detail(&mut repository, &person_id).map_err(|error| error.to_string())
+    let runtime = SystemRuntime;
+    let reference_issue =
+        issue_containing_date(&runtime.today()).map_err(|error| error.to_string())?;
+    load_person_detail(&mut repository, &person_id, reference_issue)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
