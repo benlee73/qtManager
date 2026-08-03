@@ -14,6 +14,7 @@ import type { ReversibleAction } from "./actionHistory";
 import { persistTheme, readStoredTheme, type Theme } from "./appearance";
 import {
   DEFAULT_PERSON_FILTERS,
+  checkItemOwnerLabel,
   distributionAllocations,
   filterLabel,
   filterPeople,
@@ -700,9 +701,7 @@ export default function App() {
                   </label>
                   <div>
                     <small>
-                      <b>
-                        {item.personName ? `${item.personName} 연결` : "일반"}
-                      </b>
+                      <b>{checkItemOwnerLabel(item.personName)}</b>
                     </small>
                     <span className="check-item-actions">
                       <button

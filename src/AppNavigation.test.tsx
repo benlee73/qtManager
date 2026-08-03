@@ -32,6 +32,7 @@ describe("AppNavigation", () => {
     expect(markup).toContain("2026 교육국 제작");
     expect(markup).toContain('class="rail-wordmark"');
     expect(markup).toContain("QT<br/>Manager");
+    expect(markup).not.toContain("operator-status");
     expect(markup.indexOf("교육국 담당자")).toBeLessThan(
       markup.indexOf("2026 교육국 제작"),
     );

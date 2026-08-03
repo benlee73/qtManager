@@ -4,7 +4,7 @@
   min-height: 0;
   grid-template-rows: 82px minmax(0, 1fr);
   overflow: hidden;
-  font-size: 13px;
+  font-size: var(--font-md);
   line-height: 1.45;
 }
 
@@ -22,14 +22,14 @@
 
 .management-heading h2 {
   margin-bottom: 0.35rem;
-  font-size: 19px;
+  font-size: 20px;
   letter-spacing: -0.01em;
 }
 
 .management-heading > div > p:last-child {
   margin-bottom: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-sm);
 }
 
 .heading-actions {
@@ -65,7 +65,7 @@
 .archived-toggle {
   margin-top: 0.8rem;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-sm);
 }
 
 .management-counts {
@@ -73,13 +73,13 @@
   justify-content: space-between;
   padding: 1rem 0 0.65rem;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-sm);
   font-weight: 700;
 }
 
 .management-person-list {
   display: grid;
-  gap: 6px;
+  gap: 7px;
   min-height: 0;
   max-height: none;
   height: calc(100% - 104px);
@@ -89,10 +89,10 @@
 .management-person-list > button {
   display: grid;
   grid-template-columns: 2.6rem minmax(0, 1fr);
-  gap: 10px;
+  gap: 11px;
   align-items: center;
   width: 100%;
-  padding: 11px;
+  padding: 12px;
   border: 1px solid transparent;
   border-radius: 0.7rem;
   color: inherit;
@@ -114,14 +114,14 @@
 .management-person-list small {
   margin-top: 0.2rem;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-sm);
   line-height: 1.4;
 }
 
 .management-person-list em {
   grid-column: 2;
   color: var(--green-700);
-  font-size: 11px;
+  font-size: var(--font-xs);
   font-style: normal;
   font-weight: 700;
 }
@@ -176,7 +176,7 @@
 }
 
 .person-note strong {
-  font-size: 12px;
+  font-size: var(--font-sm);
 }
 
 .person-note p {
@@ -189,7 +189,7 @@
 
 .detail-section > h3 {
   margin-bottom: 0.75rem;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .history-list,
@@ -211,13 +211,13 @@
 .history-list small {
   margin: 0.25rem 0 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-sm);
   line-height: 1.45;
 }
 
 .history-list article > span {
   color: var(--green-700);
-  font-size: 12px;
+  font-size: var(--font-sm);
   font-weight: 800;
 }
 
@@ -230,7 +230,7 @@
   grid-template-columns: 1fr 6rem 9rem;
   padding: 0.65rem 0.2rem;
   border-bottom: 1px solid #edf0ea;
-  font-size: 12px;
+  font-size: var(--font-sm);
 }
 
 .distribution-history time {

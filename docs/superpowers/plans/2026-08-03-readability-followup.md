@@ -148,7 +148,7 @@ export function LinkedCheckItems({ items }: { items: CheckItemView[] }) {
 
 Run: `pnpm test && just e2e`
 
-- [ ] **Step 6: 연결 정보 흐름 커밋**
+- [x] **Step 6: 연결 정보 흐름 커밋**
 
 ```bash
 git add crates/qt-application/src/phase2.rs src/phase2.ts src/App.tsx src/Phase3Dialogs.tsx src/styles.css src/App.test.tsx tests/e2e/core.e2e.ts
@@ -172,7 +172,7 @@ git commit -m "feat: 신청자 수정창에 연결 확인 정보 표시 [skip ci
 - CSS 토큰: `--font-xs: 11px`, `--font-sm: 12px`, `--font-md: 13px`, `--font-lg: 16px`, 테마별 `--placeholder`.
 - `operator-status` 요소는 제거한다.
 
-- [ ] **Step 1: 내비게이션에서 상태점이 없고 확인할 일 연결 문구가 이름만 남는 실패 테스트 작성**
+- [x] **Step 1: 내비게이션에서 상태점이 없고 확인할 일 연결 문구가 이름만 남는 실패 테스트 작성**
 
 ```tsx
 expect(markup).not.toContain("operator-status");
@@ -180,11 +180,11 @@ expect(checkItemMarkup).toContain(">가상 신청자<");
 expect(checkItemMarkup).not.toContain("가상 신청자 연결");
 ```
 
-- [ ] **Step 2: Vitest 실패 확인**
+- [x] **Step 2: Vitest 실패 확인**
 
 Run: `pnpm test -- --run src/AppNavigation.test.tsx`
 
-- [ ] **Step 3: 공통 글자 토큰과 관리 화면의 px/rem 혼용 값을 한 단계 상향하고 행·버튼 줄 높이를 최소 보정**
+- [x] **Step 3: 공통 글자 토큰과 관리 화면의 px/rem 혼용 값을 한 단계 상향하고 행·버튼 줄 높이를 최소 보정**
 
 ```css
 :root {
@@ -196,7 +196,7 @@ Run: `pnpm test -- --run src/AppNavigation.test.tsx`
 }
 ```
 
-- [ ] **Step 4: 브랜드 간격 확대, 초록점 제거, placeholder 대비, 얇은 키보드 포커스와 빠른 입력 높이 축소 적용**
+- [x] **Step 4: 브랜드 간격 확대, 초록점 제거, placeholder 대비, 얇은 키보드 포커스와 빠른 입력 높이 축소 적용**
 
 ```css
 .rail-brand {
@@ -211,7 +211,7 @@ Run: `pnpm test -- --run src/AppNavigation.test.tsx`
 }
 ```
 
-- [ ] **Step 5: 도움말·릴리스 노트와 900×640/1000×720 E2E 레이아웃 검증 갱신**
+- [x] **Step 5: 도움말·릴리스 노트와 900×640/1000×720 E2E 레이아웃 검증 갱신**
 
 Run: `pnpm test && just e2e`
 

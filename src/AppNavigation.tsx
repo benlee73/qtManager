@@ -83,7 +83,6 @@ export function AppNavigation({
           aria-label={`${operator ?? "담당자 설정"}, 담당자 변경`}
           onClick={onOperator}
         >
-          <span className="operator-status" aria-hidden="true" />
           <b>{operator ?? "담당자 설정"}</b>
           <small>담당자</small>
         </button>

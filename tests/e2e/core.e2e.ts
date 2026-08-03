@@ -230,6 +230,12 @@ describe("QT Manager desktop flow", () => {
     await clickButtonByText("", "되돌린 동작 다시 실행");
     await waitForText(".check-item-list", generalItem);
 
+    const linkedPersonName = await browser.execute(
+      () =>
+        document
+          .querySelector('[data-testid="person-row"] .person-name b')
+          ?.textContent?.trim() ?? "",
+    );
     await browser.execute(() => {
       document
         .querySelector('[data-testid="person-row"]')
@@ -241,7 +247,14 @@ describe("QT Manager desktop flow", () => {
     await setInput("textarea[name='content']", linkedItem);
     await clickButtonByText("확인할 일 저장");
     await waitForText(".check-item-list", linkedItem);
-    await waitForText(".check-item-list", "연결");
+    expect(
+      await browser.execute((content) => {
+        const item = [
+          ...document.querySelectorAll<HTMLElement>(".check-item"),
+        ].find((candidate) => candidate.textContent?.includes(content));
+        return item?.querySelector("small b")?.textContent?.trim() ?? "";
+      }, linkedItem),
+    ).toBe(linkedPersonName);
     expect(
       await browser.execute(
         () =>
@@ -267,6 +280,15 @@ describe("QT Manager desktop flow", () => {
         ),
       { timeoutMsg: "연결 확인 정보를 본 수정창이 닫히지 않았습니다." },
     );
+    expect(
+      await browser.execute(() => {
+        const row = document.querySelector<HTMLElement>(
+          '[data-testid="person-row"]',
+        );
+        row?.focus();
+        return row ? getComputedStyle(row).outlineWidth : "";
+      }),
+    ).toBe("1px");
 
     const linkedCheckbox = `input[aria-label="${linkedItem} 확인 완료"]`;
     await browser.execute((selector) => {
@@ -704,6 +726,21 @@ describe("QT Manager desktop flow", () => {
       const stickyInput = document
         .querySelector<HTMLElement>(".sticky-input")!
         .getBoundingClientRect();
+      const root = getComputedStyle(document.documentElement);
+      const brand = getComputedStyle(
+        document.querySelector<HTMLElement>(".rail-brand")!,
+      );
+      const placeholderColor = root.getPropertyValue("--placeholder").trim();
+      const hexAlpha = placeholderColor.match(/^#[0-9a-f]{6}([0-9a-f]{2})$/i);
+      const percentAlpha = placeholderColor.match(/\/\s*([0-9.]+)%\)/);
+      const decimalAlpha = placeholderColor.match(/,\s*([0-9.]+)\)$/);
+      const placeholderAlpha = hexAlpha
+        ? Number.parseInt(hexAlpha[1], 16) / 255
+        : percentAlpha
+          ? Number.parseFloat(percentAlpha[1]) / 100
+          : decimalAlpha
+            ? Number.parseFloat(decimalAlpha[1])
+            : 1;
       return {
         labels: stats.map((item) => item.querySelector("span")?.textContent),
         sizes,
@@ -731,6 +768,10 @@ describe("QT Manager desktop flow", () => {
         },
         deskLeft: Math.round(desk.left),
         stickyInputHeight: Math.round(stickyInput.height),
+        fontMedium: root.getPropertyValue("--font-md").trim(),
+        brandGap: Number.parseFloat(brand.rowGap),
+        placeholderAlpha,
+        hasOperatorStatus: document.querySelector(".operator-status") !== null,
       };
     });
     expect(layout.labels).toEqual(["대상", "완료", "남음", "배부"]);
@@ -748,7 +789,11 @@ describe("QT Manager desktop flow", () => {
       activeCount: 1,
     });
     expect(layout.deskLeft).toBe(76);
-    expect(layout.stickyInputHeight).toBeLessThanOrEqual(104);
+    expect(layout.stickyInputHeight).toBeLessThanOrEqual(94);
+    expect(layout.fontMedium).toBe("13px");
+    expect(layout.brandGap).toBeGreaterThanOrEqual(4);
+    expect(layout.placeholderAlpha).toBeLessThanOrEqual(0.65);
+    expect(layout.hasOperatorStatus).toBe(false);
 
     const windowContract = await browser.execute(async () => {
       const internals = (

@@ -31,14 +31,15 @@
   --scroll-track: #25272b;
   --scroll-hover: #737781;
   --rail: #25272b;
+  --placeholder: rgb(124 130 140 / 62%);
   --green-900: var(--text);
   --green-700: var(--accent);
   --green-100: rgb(88 101 242 / 14%);
   --orange-soft: rgb(201 147 38 / 12%);
-  --font-xs: 10px;
-  --font-sm: 11px;
-  --font-md: 12px;
-  --font-lg: 15px;
+  --font-xs: 11px;
+  --font-sm: 12px;
+  --font-md: 13px;
+  --font-lg: 16px;
   color: var(--text);
   background: var(--canvas);
   color-scheme: dark;
@@ -64,6 +65,7 @@
   --scroll-track: #ebecef;
   --scroll-hover: #8f96a2;
   --rail: #f0f1f4;
+  --placeholder: rgb(111 119 130 / 62%);
   color-scheme: light;
 }
 
@@ -131,10 +133,19 @@ button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
-.person-row:focus-visible,
 summary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+.person-row:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--placeholder);
 }
 
 h1,
@@ -177,7 +188,7 @@ p {
   height: 76px;
   place-items: center;
   align-content: center;
-  gap: 1px;
+  gap: 5px;
   border-bottom: 1px solid var(--line-soft);
 }
 
@@ -195,7 +206,7 @@ p {
 
 .rail-wordmark {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.055em;
   line-height: 1.02;
@@ -282,7 +293,7 @@ p {
   padding: 7px 2px;
   color: var(--muted);
   background: transparent;
-  font-size: 10px;
+  font-size: var(--font-xs);
   font-weight: 700;
   line-height: 1.2;
   text-align: center;
@@ -332,15 +343,6 @@ p {
   text-align: center;
 }
 
-.operator-status {
-  width: 8px;
-  height: 8px;
-  margin-bottom: 2px;
-  border: 2px solid var(--rail);
-  border-radius: 50%;
-  background: var(--green);
-}
-
 .rail-operator:hover {
   background: var(--panel-hover);
 }
@@ -349,14 +351,14 @@ p {
   max-width: 54px;
   overflow: hidden;
   color: var(--text);
-  font-size: 10px;
+  font-size: var(--font-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .rail-operator small {
   color: var(--faint);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .desk {
@@ -464,7 +466,7 @@ p {
 
 .summary-grid b {
   margin-top: 2px;
-  font-size: 15px;
+  font-size: var(--font-lg);
   line-height: 17px;
   white-space: nowrap;
 }
@@ -547,7 +549,7 @@ p {
 }
 
 .search-box input::placeholder {
-  color: var(--faint);
+  color: var(--placeholder);
 }
 
 kbd {
@@ -622,7 +624,7 @@ kbd {
 }
 
 .table-title h2 {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .table-title h2 b {
@@ -764,7 +766,7 @@ kbd {
 }
 
 .person-row {
-  min-height: 64px;
+  min-height: 66px;
   padding: 7px 11px;
   border-bottom: 1px solid var(--line-soft);
   font-size: var(--font-md);
@@ -804,7 +806,7 @@ kbd {
 
 .person-name b {
   min-width: 0;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .person-name {
@@ -926,12 +928,12 @@ kbd {
   gap: 6px;
   color: var(--muted);
   text-align: center;
-  font-size: 12px;
+  font-size: var(--font-md);
 }
 
 .notes-panel {
   display: grid;
-  grid-template-rows: 32px 104px minmax(0, 1fr) minmax(112px, 0.8fr);
+  grid-template-rows: 32px 94px minmax(0, 1fr) minmax(112px, 0.8fr);
   gap: 8px;
   padding: 12px;
 }
@@ -949,7 +951,7 @@ kbd {
 }
 
 .notes-panel > header h2 {
-  font-size: 16px;
+  font-size: 17px;
 }
 
 .archive-button {
@@ -974,7 +976,7 @@ kbd {
 .sticky-input {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  padding: 9px 10px;
+  padding: 8px 10px 6px;
   border: 1px solid var(--note-line);
   border-radius: 7px;
   background: var(--note);
@@ -998,7 +1000,7 @@ kbd {
 }
 
 .sticky-input textarea::placeholder {
-  color: var(--faint);
+  color: var(--placeholder);
 }
 
 .sticky-input > div,
@@ -1130,7 +1132,7 @@ kbd {
 }
 
 .pinned-heading h3 {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .pinned-heading button {
@@ -1374,7 +1376,7 @@ kbd {
 }
 
 .dialog-heading h2 {
-  font-size: 16px;
+  font-size: 17px;
 }
 
 .dialog-heading button {
