@@ -9,6 +9,7 @@ import {
   filterSelectionDescription,
   filterTriggerLabel,
   issueLabelParts,
+  subscriptionPeriodText,
   subscriptionHeadline,
 } from "./distributionView";
 
@@ -92,6 +93,33 @@ describe("distribution row presentation", () => {
       startMonth: "7",
       endMonth: "8",
     });
+  });
+
+  it("describes expiry by QT issue and uses the earliest issue for multiple subscriptions", () => {
+    const single = { ...person("미배부"), lastIssue: "2027년 3~4월호" };
+    expect(subscriptionPeriodText(single)).toBe("2027년 3~4월호까지");
+
+    single.distributionTargets = [
+      {
+        subscriptionId: "first",
+        startIssue: "2026년 5~6월호",
+        lastIssue: "2027년 3~4월호",
+        endDate: "2027-04-30",
+        targetQuantity: 1,
+        distributedQuantity: 0,
+        remainingQuantity: 1,
+      },
+      {
+        subscriptionId: "second",
+        startIssue: "2026년 7~8월호",
+        lastIssue: "2027년 5~6월호",
+        endDate: "2027-06-30",
+        targetQuantity: 1,
+        distributedQuantity: 0,
+        remainingQuantity: 1,
+      },
+    ];
+    expect(subscriptionPeriodText(single)).toBe("빠른 종료 2027년 3~4월호");
   });
 });
 

@@ -20,6 +20,7 @@ import {
   issueLabelParts,
   type PersonFilter,
   subscriptionHeadline,
+  subscriptionPeriodText,
 } from "./distributionView";
 import {
   type DeskPerson,
@@ -1025,13 +1026,7 @@ export function PersonRow({
           .join("\n")}
       >
         {headline && <b>{headline}</b>}
-        <small>
-          {person.distributionTargets.length > 1
-            ? `빠른 종료 ${person.distributionTargets[0]?.endDate}`
-            : person.endDate
-              ? `${person.endDate}${person.subscriptionStatus === "구독 만료" ? " 종료" : "까지"}`
-              : "등록된 구독 없음"}
-        </small>
+        <small>{subscriptionPeriodText(person)}</small>
       </div>
       <div className="distribution-cell">
         <b>{person.distributionStatus}</b>

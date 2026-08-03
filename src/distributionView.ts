@@ -45,6 +45,14 @@ export function subscriptionHeadline(person: DeskPerson): string | null {
   return person.subscriptionStatus;
 }
 
+export function subscriptionPeriodText(person: DeskPerson): string {
+  if (person.distributionTargets.length > 1) {
+    const earliest = person.distributionTargets[0]?.lastIssue;
+    return earliest ? `빠른 종료 ${earliest}` : "등록된 구독 없음";
+  }
+  return person.lastIssue ? `${person.lastIssue}까지` : "등록된 구독 없음";
+}
+
 export function distributionAllocations(
   person: DeskPerson,
   quantity = person.remainingQuantity,

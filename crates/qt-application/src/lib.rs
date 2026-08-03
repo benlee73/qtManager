@@ -5,6 +5,7 @@ use serde::Serialize;
 use thiserror::Error;
 
 mod application_import;
+mod legacy_duplicate_reconciliation;
 mod legacy_start_check_cleanup;
 mod phase1;
 mod phase2;
@@ -18,6 +19,9 @@ pub use application_import::{
     ImportApplicationRowRequest, ImportApplicationsRequest, ImportApplicationsResult,
     ParsedApplicationRow, PreviewApplicationsRequest, import_applications, preview_applications,
     stable_fingerprint,
+};
+pub use legacy_duplicate_reconciliation::{
+    LegacyDuplicateRenewalRequest, LegacyDuplicateRenewalResult, reconcile_legacy_duplicate_renewal,
 };
 pub use legacy_start_check_cleanup::{
     LegacyStartCheckCleanupPlan, LegacyStartCheckSkipReason, SkippedLegacyStartCheck,
@@ -182,6 +186,8 @@ pub enum ApplicationError {
     UnresolvedPersonConflicts,
     #[error("가져오기를 되돌릴 복원 지점이 없습니다.")]
     NoStateImportToUndo,
+    #[error("원본과 현재 데이터가 안전한 자동 통합 조건을 만족하지 않습니다.")]
+    UnsafeLegacyReconciliation,
 }
 
 #[derive(Debug, Error)]

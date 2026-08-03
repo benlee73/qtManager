@@ -46,4 +46,25 @@ describe("PersonRow", () => {
     expect(markup).toContain('aria-label="확인할 일 있음"');
     expect(markup).not.toContain("<small>확인할 일 있음</small>");
   });
+
+  it("shows the last QT issue instead of a calendar end date", () => {
+    const markup = renderToStaticMarkup(
+      <PersonRow
+        person={person}
+        selected={false}
+        busy={false}
+        openMenu={null}
+        onOpenMenu={vi.fn()}
+        onSelect={vi.fn()}
+        onDistribute={vi.fn()}
+        onCancelDistribution={vi.fn()}
+        onPartial={vi.fn()}
+        onCheckItem={vi.fn()}
+        onEdit={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain("2026년 11~12월호까지");
+    expect(markup).not.toContain("2026-12-31까지");
+  });
 });

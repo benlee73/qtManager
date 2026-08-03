@@ -198,7 +198,10 @@ describe("QT Manager desktop flow", () => {
     });
     await setInput('[data-testid="people-search"]', lastName);
     await waitForText('[data-testid="person-row"]', "이번 호 마지막");
-    await waitForText('[data-testid="person-row"]', "까지");
+    await waitForText(
+      '[data-testid="person-row"]',
+      `${selected.year}년 ${selected.startMonth}~${selected.startMonth + 1}월호까지`,
+    );
   });
 
   it("creates linked and general check items, transitions all states, and keeps pinned notes periodless", async () => {
