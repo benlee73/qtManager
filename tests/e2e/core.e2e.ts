@@ -934,6 +934,24 @@ describe("QT Manager desktop flow", () => {
         confirmOverlap: false,
       },
     });
+    const detailFixture = await invokeTauri<{
+      subscriptions: { id: string; periodState: string }[];
+    }>("load_person_detail_command", { personId: detailPersonId });
+    const currentSubscriptionId = detailFixture.subscriptions.find(
+      (subscription) => subscription.periodState === "current",
+    )?.id;
+    if (!currentSubscriptionId) {
+      throw new Error("관리 상세 배부 fixture의 현재 구독을 찾지 못했습니다.");
+    }
+    await invokeTauri("record_distribution_command", {
+      request: {
+        issueYear: currentIssue.year,
+        issueMonth: currentIssue.startMonth,
+        subscriptionId: currentSubscriptionId,
+        quantity: 1,
+        note: null,
+      },
+    });
     await invokeTauri("create_check_item_command", {
       request: { personId: detailPersonId, content: linkedCheck },
     });
@@ -1046,6 +1064,9 @@ describe("QT Manager desktop flow", () => {
         const panelLine = getComputedStyle(
           document.querySelector<HTMLElement>(".management-grid")!,
         ).borderTopColor;
+        const distributionRows = [
+          ...detail.querySelectorAll<HTMLElement>(".distribution-history-row"),
+        ];
         return {
           rowCount: rows.length,
           rowHeights: rowRects.map((row) => Math.round(row.height)),
@@ -1066,6 +1087,10 @@ describe("QT Manager desktop flow", () => {
               '[data-testid="distribution-history-header"] strong',
             ),
           ].map((header) => header.textContent?.trim() ?? ""),
+          distributionRowCount: distributionRows.length,
+          distributionRowLineMatchesPanel: distributionRows.every(
+            (row) => getComputedStyle(row).borderBottomColor === panelLine,
+          ),
           distributionLineMatchesPanel: [
             ...detail.querySelectorAll<HTMLElement>(
               ".distribution-history-header, .distribution-history-row",
@@ -1102,6 +1127,8 @@ describe("QT Manager desktop flow", () => {
       "처리",
       "처리 시각",
     ]);
+    expect(managementContract.distributionRowCount).toBe(1);
+    expect(managementContract.distributionRowLineMatchesPanel).toBe(true);
     expect(managementContract.distributionLineMatchesPanel).toBe(true);
     expect(managementContract.actionContracts).toEqual([
       {
@@ -1214,6 +1241,8 @@ describe("QT Manager desktop flow", () => {
       personNoteVisible: true,
       linkedCheckVisible: true,
       distributionHeaders: ["배부 호", "처리", "처리 시각"],
+      distributionRowCount: 1,
+      distributionRowLineMatchesPanel: true,
       listHasFixturePhone: false,
       detailHasFixturePhone: true,
       distributionLineMatchesPanel: true,
@@ -2088,6 +2117,9 @@ async function prepareManagementCapture(
           ".distribution-history-header, .distribution-history-row",
         ),
       ];
+      const distributionRows = [
+        ...detail.querySelectorAll<HTMLElement>(".distribution-history-row"),
+      ];
       const documentNodes = [
         document.documentElement,
         document.body,
@@ -2133,6 +2165,12 @@ async function prepareManagementCapture(
             '[data-testid="distribution-history-header"] strong',
           ),
         ].map((header) => header.textContent?.trim() ?? ""),
+        distributionRowCount: distributionRows.length,
+        distributionRowLineMatchesPanel:
+          distributionRows.length > 0 &&
+          distributionRows.every(
+            (row) => getComputedStyle(row).borderBottomColor === panelLine,
+          ),
         listHasFixturePhone: [fixture.phone, fixture.comparisonPhone].some(
           (fixturePhone) => list.textContent?.includes(fixturePhone),
         ),
