@@ -13,6 +13,7 @@ coverage/
 test-results/
 playwright-report/
 .pnpm-store/
+.worktrees/
 src-tauri/gen/
 
 *.db
