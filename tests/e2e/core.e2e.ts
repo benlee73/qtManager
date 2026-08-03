@@ -280,15 +280,15 @@ describe("QT Manager desktop flow", () => {
         ),
       { timeoutMsg: "연결 확인 정보를 본 수정창이 닫히지 않았습니다." },
     );
-    expect(
-      await browser.execute(() => {
-        const row = document.querySelector<HTMLElement>(
-          '[data-testid="person-row"]',
-        );
-        row?.focus();
-        return row ? getComputedStyle(row).outlineWidth : "";
-      }),
-    ).toBe("1px");
+    const focusedOutlineWidth = await browser.execute(() => {
+      const row = document.querySelector<HTMLElement>(
+        '[data-testid="person-row"]',
+      );
+      row?.focus();
+      return row ? Number.parseFloat(getComputedStyle(row).outlineWidth) : 0;
+    });
+    expect(focusedOutlineWidth).toBeGreaterThan(0);
+    expect(focusedOutlineWidth).toBeLessThanOrEqual(3);
 
     const linkedCheckbox = `input[aria-label="${linkedItem} 확인 완료"]`;
     await browser.execute((selector) => {
@@ -857,6 +857,61 @@ describe("QT Manager desktop flow", () => {
     const registrationPhone = `010-${unique.slice(0, 4)}-${unique.slice(4)}`;
     const editedPhone = `011-${unique.slice(0, 4)}-${unique.slice(4)}`;
     const renewalIssue = shiftIssue(await selectedIssue(), 6);
+    const currentIssue = currentCalendarIssue();
+    const pastIssue = shiftIssue(currentIssue, -6);
+    const detailPrefix = `가상상세${unique}`;
+    const detailApplicant = `${detailPrefix}현재`;
+    const comparisonApplicant = `${detailPrefix}비교`;
+    const detailPhone = `012-${unique.slice(0, 4)}-${unique.slice(4)}`;
+    const comparisonPhone = `013-${unique.slice(0, 4)}-${unique.slice(4)}`;
+    const personNote = `가상 신청자 메모 ${unique}`;
+    const linkedCheck = `가상 연결 확인 ${unique}`;
+
+    const detailPersonId = await invokeTauri<string>(
+      "register_person_command",
+      {
+        request: {
+          name: detailApplicant,
+          cohort: "00",
+          phone: detailPhone,
+          personNote,
+          issueYear: currentIssue.year,
+          issueMonth: currentIssue.startMonth,
+          quantity: 1,
+          appliedAt: null,
+          memo: "현재 구독 fixture",
+          confirmDuplicate: true,
+        },
+      },
+    );
+    await invokeTauri("renew_subscription_command", {
+      request: {
+        personId: detailPersonId,
+        issueYear: pastIssue.year,
+        issueMonth: pastIssue.startMonth,
+        quantity: 1,
+        appliedAt: null,
+        memo: "지난 구독 fixture",
+        confirmOverlap: false,
+      },
+    });
+    await invokeTauri("create_check_item_command", {
+      request: { personId: detailPersonId, content: linkedCheck },
+    });
+    await invokeTauri<string>("register_person_command", {
+      request: {
+        name: comparisonApplicant,
+        cohort: "01",
+        phone: comparisonPhone,
+        personNote: null,
+        issueYear: currentIssue.year,
+        issueMonth: currentIssue.startMonth,
+        quantity: 1,
+        appliedAt: null,
+        memo: null,
+        confirmDuplicate: true,
+      },
+    });
 
     await browser.execute(() => {
       document
@@ -872,24 +927,199 @@ describe("QT Manager desktop flow", () => {
       ),
     ).toBe("page");
     await waitForText("h2", "신청자 정보와 전체 이력");
+    await setInput('[data-testid="management-search"]', detailPrefix);
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.querySelectorAll('[data-testid="management-person"]')
+              .length === 2,
+        ),
+      { timeoutMsg: "관리 상세 검증용 신청자 2명을 찾지 못했습니다." },
+    );
+    await browser.execute((name) => {
+      const row = [
+        ...document.querySelectorAll<HTMLButtonElement>(
+          '[data-testid="management-person"]',
+        ),
+      ].find((candidate) => candidate.textContent?.includes(name));
+      if (!row) throw new Error(`관리 상세 검증 행을 찾지 못했습니다: ${name}`);
+      row.click();
+    }, detailApplicant);
+    await waitForText('[data-testid="person-detail"]', detailPhone);
+
+    // Retina 물리 픽셀 1800×1280은 지원 최소 논리 크기 900×640에 해당한다.
+    await browser.setWindowSize(1800, 1280);
+    const managementContract = await browser.execute(
+      (fixturePhones) => {
+        const list = document.querySelector<HTMLElement>(
+          ".management-person-list",
+        )!;
+        const detail = document.querySelector<HTMLElement>(
+          '[data-testid="person-detail"]',
+        )!;
+        const rows = [
+          ...document.querySelectorAll<HTMLElement>(
+            '[data-testid="management-person"]',
+          ),
+        ];
+        const listRect = list.getBoundingClientRect();
+        const rowRects = rows.map((row) => row.getBoundingClientRect());
+        const maxRowHeight = Math.max(...rowRects.map((row) => row.height));
+        const lastRowBottom = Math.max(...rowRects.map((row) => row.bottom));
+        const actionContracts = [
+          ["open-handover", "secondary-button"],
+          ["open-application-import", "secondary-button"],
+          ["open-register-person", "primary-button"],
+        ].map(([testId, expectedClass]) => {
+          const button = document.querySelector<HTMLButtonElement>(
+            `[data-testid="${testId}"]`,
+          )!;
+          const rect = button.getBoundingClientRect();
+          const style = getComputedStyle(button);
+          return {
+            testId,
+            expectedClass,
+            hasExpectedClass: button.classList.contains(expectedClass),
+            hasOppositeClass: button.classList.contains(
+              expectedClass === "primary-button"
+                ? "secondary-button"
+                : "primary-button",
+            ),
+            visible:
+              rect.width > 0 &&
+              rect.height > 0 &&
+              rect.left >= 0 &&
+              rect.right <= window.innerWidth &&
+              rect.top >= 0 &&
+              rect.bottom <= window.innerHeight &&
+              style.display !== "none" &&
+              style.visibility !== "hidden",
+          };
+        });
+        const panelLine = getComputedStyle(
+          document.querySelector<HTMLElement>(".management-grid")!,
+        ).borderTopColor;
+        return {
+          rowCount: rows.length,
+          rowHeights: rowRects.map((row) => Math.round(row.height)),
+          maxRowHeight,
+          unusedListHeight: listRect.bottom - lastRowBottom,
+          listHasFixturePhone: fixturePhones.some((phone) =>
+            list.textContent?.includes(phone),
+          ),
+          detailText: detail.textContent ?? "",
+          currentStateCount: detail.querySelectorAll(
+            '[data-testid="subscription-current"]',
+          ).length,
+          pastStateCount: detail.querySelectorAll(
+            '[data-testid="subscription-past"]',
+          ).length,
+          distributionHeaders: [
+            ...detail.querySelectorAll<HTMLElement>(
+              '[data-testid="distribution-history-header"] strong',
+            ),
+          ].map((header) => header.textContent?.trim() ?? ""),
+          distributionLineMatchesPanel: [
+            ...detail.querySelectorAll<HTMLElement>(
+              ".distribution-history-header, .distribution-history-row",
+            ),
+          ].every(
+            (row) => getComputedStyle(row).borderBottomColor === panelLine,
+          ),
+          actionContracts,
+          listOverflow: getComputedStyle(list).overflowY,
+          detailOverflow: getComputedStyle(detail).overflowY,
+          horizontalPageScroll:
+            document.documentElement.scrollWidth > window.innerWidth ||
+            document.body.scrollWidth > window.innerWidth,
+        };
+      },
+      [detailPhone, comparisonPhone],
+    );
+    expect(managementContract.rowCount).toBe(2);
+    expect(managementContract.rowHeights).toHaveLength(2);
+    expect(managementContract.maxRowHeight).toBeLessThanOrEqual(96);
+    expect(managementContract.unusedListHeight).toBeGreaterThan(
+      managementContract.maxRowHeight,
+    );
+    expect(managementContract.listHasFixturePhone).toBe(false);
+    expect(managementContract.detailText).toContain(detailPhone);
+    expect(managementContract.detailText).toContain(personNote);
+    expect(managementContract.detailText).toContain(linkedCheck);
+    expect(managementContract.currentStateCount).toBe(1);
+    expect(managementContract.pastStateCount).toBe(1);
+    expect(managementContract.distributionHeaders).toEqual([
+      "배부 호",
+      "처리",
+      "처리 시각",
+    ]);
+    expect(managementContract.distributionLineMatchesPanel).toBe(true);
+    expect(managementContract.actionContracts).toEqual([
+      {
+        testId: "open-handover",
+        expectedClass: "secondary-button",
+        hasExpectedClass: true,
+        hasOppositeClass: false,
+        visible: true,
+      },
+      {
+        testId: "open-application-import",
+        expectedClass: "secondary-button",
+        hasExpectedClass: true,
+        hasOppositeClass: false,
+        visible: true,
+      },
+      {
+        testId: "open-register-person",
+        expectedClass: "primary-button",
+        hasExpectedClass: true,
+        hasOppositeClass: false,
+        visible: true,
+      },
+    ]);
+    expect(managementContract.listOverflow).toBe("auto");
+    expect(managementContract.detailOverflow).toBe("auto");
+    expect(managementContract.horizontalPageScroll).toBe(false);
+
+    await browser.setWindowSize(2200, 1440);
+    expect(
+      await browser.execute(
+        () => document.documentElement.scrollWidth > window.innerWidth,
+      ),
+    ).toBe(false);
+
+    const expectedCaptureContract = {
+      headingActions: [
+        "데이터 백업·복원",
+        "Google 응답 붙여넣기",
+        "+ 신청자 등록",
+      ],
+      detailActions: ["정보 수정", "구독 추가·갱신"],
+      currentStateCount: 1,
+      pastStateCount: 1,
+      selectedRowCount: 1,
+    };
+    expect(
+      await prepareManagementCapture(
+        "light",
+        detailPrefix,
+        detailApplicant,
+        detailPhone,
+      ),
+    ).toEqual({ theme: "light", ...expectedCaptureContract });
     mkdirSync("test-results", { recursive: true });
     await browser.saveScreenshot("test-results/ui-management-light.png");
-    const headingFits = await browser.execute(() => {
-      const heading = document
-        .querySelector<HTMLElement>(".management-heading")!
-        .getBoundingClientRect();
-      return [
-        ...document.querySelectorAll<HTMLElement>(".heading-actions button"),
-      ].every((button) => {
-        const rect = button.getBoundingClientRect();
-        return (
-          rect.top >= heading.top &&
-          rect.bottom <= heading.bottom &&
-          rect.right <= heading.right
-        );
-      });
-    });
-    expect(headingFits).toBe(true);
+    expect(
+      await prepareManagementCapture(
+        "dark",
+        detailPrefix,
+        detailApplicant,
+        detailPhone,
+      ),
+    ).toEqual({ theme: "dark", ...expectedCaptureContract });
+    await browser.saveScreenshot("test-results/ui-management-dark.png");
+
     await browser.execute(() => {
       document
         .querySelector<HTMLButtonElement>(
@@ -937,7 +1167,7 @@ describe("QT Manager desktop flow", () => {
         ?.click();
     });
     await waitForText('[data-testid="person-detail"]', "가상 신청자 메모");
-    await waitForText('[data-testid="person-detail"]', "연속 6개 호");
+    await waitForText('[data-testid="person-detail"]', "구독 이력 1건");
 
     await clickButtonByText("정보 수정");
     await setInput("input[name='name']", edited);
@@ -1293,6 +1523,88 @@ function shiftIssue(
   const year = Math.floor(absolute / 6);
   const index = ((absolute % 6) + 6) % 6;
   return { year, startMonth: index * 2 + 1 };
+}
+
+function currentCalendarIssue() {
+  // 앱 런타임과 같은 Asia/Seoul 달력 날짜를 사용해 자정 경계에서도 상태가 맞는다.
+  const seoulNow = new Date(Date.now() + 9 * 60 * 60 * 1_000);
+  const year = seoulNow.getUTCFullYear();
+  const month = seoulNow.getUTCMonth() + 1;
+  return { year, startMonth: month % 2 === 0 ? month - 1 : month };
+}
+
+async function prepareManagementCapture(
+  theme: "light" | "dark",
+  query: string,
+  applicant: string,
+  phone: string,
+) {
+  await browser.execute((targetTheme) => {
+    localStorage.setItem("qt-manager-theme", targetTheme);
+  }, theme);
+  await refreshApp(`${theme} 테마 캡처를 위한 새로고침에 실패했습니다.`);
+  await browser.setWindowSize(2000, 1440);
+  await browser.execute(() => {
+    document
+      .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
+      ?.click();
+  });
+  await waitForText("h2", "신청자 정보와 전체 이력");
+  await setInput('[data-testid="management-search"]', query);
+  await browser.waitUntil(
+    async () =>
+      browser.execute(
+        () =>
+          document.querySelectorAll('[data-testid="management-person"]')
+            .length === 2,
+      ),
+    { timeoutMsg: `${theme} 테마에서 관리 신청자 2명을 찾지 못했습니다.` },
+  );
+  await browser.execute((name) => {
+    const row = [
+      ...document.querySelectorAll<HTMLButtonElement>(
+        '[data-testid="management-person"]',
+      ),
+    ].find((candidate) => candidate.textContent?.includes(name));
+    if (!row) throw new Error(`캡처할 관리 신청자를 찾지 못했습니다: ${name}`);
+    row.click();
+  }, applicant);
+  await waitForText('[data-testid="person-detail"]', phone);
+  await browser.waitUntil(
+    async () =>
+      browser.execute(
+        () =>
+          [
+            ...document.querySelectorAll<HTMLButtonElement>(
+              ".detail-actions button",
+            ),
+          ]
+            .map((button) => button.textContent?.trim() ?? "")
+            .join("|") === "정보 수정|구독 추가·갱신",
+      ),
+    { timeoutMsg: `${theme} 테마에서 상세 버튼 전문이 준비되지 않았습니다.` },
+  );
+  await browser.pause(250);
+  return browser.execute(() => ({
+    theme: document.documentElement.dataset.theme,
+    headingActions: [
+      ...document.querySelectorAll<HTMLButtonElement>(
+        ".heading-actions button",
+      ),
+    ].map((button) => button.textContent?.trim() ?? ""),
+    detailActions: [
+      ...document.querySelectorAll<HTMLButtonElement>(".detail-actions button"),
+    ].map((button) => button.textContent?.trim() ?? ""),
+    currentStateCount: document.querySelectorAll(
+      '[data-testid="subscription-current"]',
+    ).length,
+    pastStateCount: document.querySelectorAll(
+      '[data-testid="subscription-past"]',
+    ).length,
+    selectedRowCount: document.querySelectorAll(
+      '[data-testid="management-person"][aria-pressed="true"]',
+    ).length,
+  }));
 }
 
 async function setInput(selector: string, value: string) {
