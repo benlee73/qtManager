@@ -322,6 +322,7 @@ export function ManagementScreen({
       {dialog?.type === "edit" && (
         <EditDialog
           person={dialog.person}
+          checkItems={[]}
           busy={busy}
           onClose={() => setDialog(null)}
           onSaved={(work, input) =>

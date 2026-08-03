@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 
-import type { Issue } from "./phase2";
+import type { CheckItemView, Issue } from "./phase2";
 import {
   type DuplicateCandidate,
   type PersonDetail,
@@ -78,11 +78,13 @@ export function RegisterDialog({
 
 export function EditDialog({
   person,
+  checkItems,
   busy,
   onClose,
   onSaved,
 }: {
   person: PersonDetail;
+  checkItems: CheckItemView[];
   busy: boolean;
   onClose: () => void;
   onSaved: (
@@ -122,6 +124,7 @@ export function EditDialog({
             저장하면 간이 등록 상태가 정식 등록으로 바뀝니다.
           </p>
         )}
+        <LinkedCheckItems items={checkItems} />
         <PersonFields person={person} />
         <DuplicateWarning
           candidates={candidates}
@@ -133,6 +136,26 @@ export function EditDialog({
         </SubmitButton>
       </form>
     </FormDialog>
+  );
+}
+
+export function LinkedCheckItems({ items }: { items: CheckItemView[] }) {
+  if (items.length === 0) return null;
+  return (
+    <section className="linked-check-items" aria-label="연결된 확인할 일">
+      <h3>연결된 확인할 일</h3>
+      <div>
+        {items.map((item) => (
+          <article
+            className={item.status === "확인 완료" ? "checked" : ""}
+            key={item.id}
+          >
+            <span>{item.status}</span>
+            <p>{item.summary}</p>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 

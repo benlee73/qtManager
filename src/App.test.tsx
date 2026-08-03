@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 
+import { LinkedCheckItems } from "./Phase3Dialogs";
 import { persistTheme, readStoredTheme } from "./appearance";
 import type { Phase0Report } from "./phase0";
 import type { Phase1Report } from "./phase1";
@@ -77,5 +79,29 @@ describe("appearance preference", () => {
     expect(readStoredTheme(storage)).toBe("dark");
     persistTheme("light", storage);
     expect(readStoredTheme(storage)).toBe("light");
+  });
+});
+
+describe("linked check items", () => {
+  it("shows the full linked content and its current state in the person dialog", () => {
+    const markup = renderToStaticMarkup(
+      <LinkedCheckItems
+        items={[
+          {
+            id: "check-1",
+            personId: "person-1",
+            summary: "익명 권별 구독 기간 확인 전문",
+            operatorName: "가상 담당자",
+            updatedAt: "2026-08-03T00:00:00+09:00",
+            status: "확인 필요",
+            personName: "가상 신청자",
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("연결된 확인할 일");
+    expect(markup).toContain("익명 권별 구독 기간 확인 전문");
+    expect(markup).toContain("확인 필요");
   });
 });

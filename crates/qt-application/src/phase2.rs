@@ -317,7 +317,7 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
             .and_then(|id| person_names.get(id))
             .cloned(),
         person_id: item.person_id,
-        summary: summarize(&item.content, 48),
+        summary: item.content,
         operator_name: item.operator_name,
         updated_at: item.updated_at,
         status: check_item_status_label(item.status).into(),
@@ -1020,16 +1020,6 @@ fn normalize_phone(value: &str) -> String {
         .collect::<String>()
 }
 
-fn summarize(value: &str, max_chars: usize) -> String {
-    let mut chars = value.chars();
-    let summary = chars.by_ref().take(max_chars).collect::<String>();
-    if chars.next().is_some() {
-        format!("{summary}…")
-    } else {
-        summary
-    }
-}
-
 fn subscription_status(status: SubscriptionStatus) -> &'static str {
     match status {
         SubscriptionStatus::Scheduled => "예정",
@@ -1642,6 +1632,39 @@ mod tests {
         delete_pinned_note(&mut repository, &services, &note_id).unwrap();
         assert!(repository.check_items.is_empty());
         assert!(repository.pinned_notes.is_empty());
+    }
+
+    #[test]
+    fn check_item_view_keeps_full_content_for_detail_surfaces() {
+        let content = "권별 구독 기간과 신청 수량을 담당자가 당사자에게 확인해야 하며 첫째 권과 둘째 권의 시작 호가 서로 다른지도 함께 확인해야 하는 익명 확인 내용 전문";
+        let mut repository = MemoryRepository {
+            operator: Some("담당자".into()),
+            ..Default::default()
+        };
+        let services = RuntimeServices {
+            clock: &FixedClock,
+            ids: &SequenceIds(Cell::new(0)),
+        };
+        create_check_item(
+            &mut repository,
+            &services,
+            CreateCheckItemRequest {
+                person_id: None,
+                content: content.into(),
+            },
+        )
+        .unwrap();
+
+        let desk = load_distribution_desk(
+            &mut repository,
+            &FixedClock,
+            Issue::new(2026, 7).unwrap(),
+            "",
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(desk.check_items[0].summary, content);
     }
 
     #[test]

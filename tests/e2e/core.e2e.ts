@@ -250,6 +250,24 @@ describe("QT Manager desktop flow", () => {
       ),
     ).toBe(true);
 
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLElement>('[data-testid="person-row"]')
+        ?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    });
+    await waitForText(".linked-check-items", linkedItem);
+    await waitForText(".linked-check-items", "확인 필요");
+    await browser.execute(() =>
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
+    );
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () => document.querySelector(".linked-check-items") === null,
+        ),
+      { timeoutMsg: "연결 확인 정보를 본 수정창이 닫히지 않았습니다." },
+    );
+
     const linkedCheckbox = `input[aria-label="${linkedItem} 확인 완료"]`;
     await browser.execute((selector) => {
       document.querySelector<HTMLInputElement>(selector)?.click();

@@ -82,10 +82,10 @@ git commit -m "fix: 검색과 무관하게 전체 배부 통계 유지 [skip ci]
 
 **Interfaces:**
 
-- Produces: `CheckItemView.content: string`은 줄임표 없는 전문이다.
+- Produces: `CheckItemView.summary: string`은 데이터 단계에서 자르지 않은 전문이며 우측 카드에서만 CSS로 줄임표 처리한다.
 - Produces: `EditDialog`의 `checkItems: CheckItemView[]` prop은 선택 신청자의 미보관 연결 항목만 받는다.
 
-- [ ] **Step 1: 확인할 일 전문 직렬화와 수정창 표시 실패 테스트 작성**
+- [x] **Step 1: 확인할 일 전문 직렬화와 수정창 표시 실패 테스트 작성**
 
 ```tsx
 const markup = renderToStaticMarkup(
@@ -95,7 +95,6 @@ const markup = renderToStaticMarkup(
         id: "check-1",
         personId: "person-1",
         summary: "익명 권별 기간 확인",
-        content: "익명 권별 기간 확인 전문",
         operatorName: "가상 담당자",
         updatedAt: "2026-08-03T00:00:00+09:00",
         status: "확인 필요",
@@ -108,11 +107,11 @@ expect(markup).toContain("익명 권별 기간 확인 전문");
 expect(markup).toContain("확인 필요");
 ```
 
-- [ ] **Step 2: Vitest와 Rust 계약 테스트의 실패 확인**
+- [x] **Step 2: Vitest와 Rust 계약 테스트의 실패 확인**
 
 Run: `pnpm test -- --run src/App.test.tsx && cargo test -p qt-application check_item_view_keeps_full_content`
 
-- [ ] **Step 3: `CheckItemView`에 전문을 추가하고 `App`에서 선택 신청자의 연결 항목을 수정창에 전달**
+- [x] **Step 3: `CheckItemView`가 전문을 유지하고 `App`에서 선택 신청자의 연결 항목을 수정창에 전달**
 
 ```tsx
 <EditDialog
@@ -126,7 +125,7 @@ Run: `pnpm test -- --run src/App.test.tsx && cargo test -p qt-application check_
 />
 ```
 
-- [ ] **Step 4: 수정창 상단에 읽기 전용 `연결된 확인할 일` 목록과 상태 배지 구현**
+- [x] **Step 4: 수정창 상단에 읽기 전용 `연결된 확인할 일` 목록과 상태 배지 구현**
 
 ```tsx
 export function LinkedCheckItems({ items }: { items: CheckItemView[] }) {
@@ -137,7 +136,7 @@ export function LinkedCheckItems({ items }: { items: CheckItemView[] }) {
       {items.map((item) => (
         <article key={item.id}>
           <span>{item.status}</span>
-          <p>{item.content}</p>
+          <p>{item.summary}</p>
         </article>
       ))}
     </section>
@@ -145,7 +144,7 @@ export function LinkedCheckItems({ items }: { items: CheckItemView[] }) {
 }
 ```
 
-- [ ] **Step 5: 더블클릭 → 전문 확인 → Escape 닫기 E2E 추가 후 관련 검사 실행**
+- [x] **Step 5: 더블클릭 → 전문 확인 → Escape 닫기 E2E 추가 후 관련 검사 실행**
 
 Run: `pnpm test && just e2e`
 

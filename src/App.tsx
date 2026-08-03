@@ -888,6 +888,9 @@ export default function App() {
       {editPerson && (
         <EditDialog
           person={editPerson}
+          checkItems={(desk?.checkItems ?? []).filter(
+            (item) => item.personId === editPerson.id,
+          )}
           busy={busy}
           onClose={() => setEditPerson(null)}
           onSaved={(work, input) =>
