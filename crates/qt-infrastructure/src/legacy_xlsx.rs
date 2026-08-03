@@ -105,13 +105,25 @@ pub fn read_legacy_2026(
                     merge_person_note(&mut report.snapshot.people[person_index], &note);
                 }
                 let quantity = positive_integer(row.get(quantity_column)).unwrap_or(1);
-                let parsed_start = start_column
+                let start_from_cell =
+                    start_column.and_then(|column| issue_from_cell(row.get(column)));
+                let start_from_end = end_column
                     .and_then(|column| issue_from_cell(row.get(column)))
-                    .or_else(|| {
-                        end_column
-                            .and_then(|column| issue_from_cell(row.get(column)))
-                            .map(|end| move_issue(end, -5))
-                    });
+                    .map(|end| move_issue(end, -5));
+                if start_from_cell.is_some()
+                    && start_from_end.is_some()
+                    && start_from_cell != start_from_end
+                {
+                    report.warnings += 1;
+                    add_warning_note(
+                        &mut report.snapshot,
+                        &person_id,
+                        operator_name,
+                        now,
+                        "구독 시작·종료 호 불일치",
+                    );
+                }
+                let parsed_start = start_from_cell.or(start_from_end);
                 let existing_start = report
                     .snapshot
                     .subscriptions

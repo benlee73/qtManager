@@ -5,6 +5,7 @@ use serde::Serialize;
 use thiserror::Error;
 
 mod application_import;
+mod legacy_start_check_cleanup;
 mod phase1;
 mod phase2;
 mod phase3;
@@ -17,6 +18,10 @@ pub use application_import::{
     ImportApplicationRowRequest, ImportApplicationsRequest, ImportApplicationsResult,
     ParsedApplicationRow, PreviewApplicationsRequest, import_applications, preview_applications,
     stable_fingerprint,
+};
+pub use legacy_start_check_cleanup::{
+    LegacyStartCheckCleanupPlan, LegacyStartCheckSkipReason, SkippedLegacyStartCheck,
+    apply_legacy_start_check_cleanup, plan_legacy_start_check_cleanup,
 };
 pub use phase1::{CoreRepository, MigrationReport, Phase1Report, RunPhase1Probe};
 pub use phase2::{
