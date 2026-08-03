@@ -1,11 +1,17 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolve } from "node:path";
 
 const execFileAsync = promisify(execFile);
+const nativeVisualEnabled = process.env.QT_MANAGER_NATIVE_VISUAL === "1";
+const nativeCommandTimeoutMs = 5_000;
 
 describe("QT Manager desktop flow", () => {
+  before(async () => {
+    if (nativeVisualEnabled) await assertNativeVisualPreflight();
+  });
+
   it("registers an on-site applicant, partially distributes, completes and undoes", async () => {
     await browser.waitUntil(
       async () =>
@@ -299,7 +305,7 @@ describe("QT Manager desktop flow", () => {
     });
     expect(mouseFocus).toEqual({ focusVisible: false, thickFocusLine: false });
 
-    if (process.platform === "darwin") {
+    if (nativeVisualEnabled) {
       expect(await activateMacOsQtManager()).toBe("qt-manager");
       expect(await focusPreviousElementBeforePersonRow()).toBe(true);
       await sendMacOsOptionTab();
@@ -1225,12 +1231,12 @@ describe("QT Manager desktop flow", () => {
       ),
     ).toEqual({ theme: "light", ...expectedCaptureContract });
     mkdirSync("test-results", { recursive: true });
-    if (process.platform === "darwin") {
+    await browser.saveScreenshot("test-results/ui-management-light.png");
+    if (nativeVisualEnabled) {
       await captureMacOsCompositor(
         "test-results/ui-management-light-compositor.png",
       );
     }
-    await browser.saveScreenshot("test-results/ui-management-light.png");
     expect(
       await prepareManagementCapture(
         "dark",
@@ -1242,12 +1248,12 @@ describe("QT Manager desktop flow", () => {
         linkedCheck,
       ),
     ).toEqual({ theme: "dark", ...expectedCaptureContract });
-    if (process.platform === "darwin") {
+    await browser.saveScreenshot("test-results/ui-management-dark.png");
+    if (nativeVisualEnabled) {
       await captureMacOsCompositor(
         "test-results/ui-management-dark-compositor.png",
       );
     }
-    await browser.saveScreenshot("test-results/ui-management-dark.png");
 
     await browser.execute(() => {
       document
@@ -1663,54 +1669,137 @@ function currentCalendarIssue() {
 }
 
 async function sendMacOsOptionTab() {
-  await execFileAsync("/usr/bin/osascript", [
-    "-e",
-    'tell application "System Events" to key code 48 using option down',
-  ]);
+  await execNativeCommand(
+    "/usr/bin/osascript",
+    ["-e", 'tell application "System Events" to key code 48 using option down'],
+    "macOS Option+Tab 입력",
+  );
 }
 
 async function activateMacOsQtManager() {
-  const { stdout: rawPid } = await execFileAsync("/usr/bin/pgrep", [
-    "-n",
-    "-x",
-    "qt-manager",
-  ]);
-  const pid = Number.parseInt(rawPid.trim(), 10);
-  if (!Number.isSafeInteger(pid)) {
-    throw new Error(`qt-manager PID를 확인하지 못했습니다: ${rawPid}`);
-  }
-  const { stdout } = await execFileAsync("/usr/bin/osascript", [
-    "-e",
-    `tell application "System Events"
+  const pid = await getMacOsQtManagerPid();
+  const { stdout } = await execNativeCommand(
+    "/usr/bin/osascript",
+    [
+      "-e",
+      `tell application "System Events"
       set targetProcess to first application process whose unix id is ${pid}
       set frontmost of targetProcess to true
       delay 0.2
       return name of targetProcess
     end tell`,
-  ]);
+    ],
+    "QT Manager 창 전면화",
+  );
   return stdout.trim();
+}
+
+async function getMacOsQtManagerPid() {
+  const { stdout: rawPid } = await execNativeCommand(
+    "/usr/bin/pgrep",
+    ["-n", "-x", "qt-manager"],
+    "QT Manager process 조회",
+  );
+  const pid = Number.parseInt(rawPid.trim(), 10);
+  if (!Number.isSafeInteger(pid)) {
+    throw new Error(`qt-manager PID를 확인하지 못했습니다: ${rawPid}`);
+  }
+  return pid;
 }
 
 async function captureMacOsCompositor(path: string) {
   await activateMacOsQtManager();
-  await execFileAsync("/usr/bin/osascript", [
-    "-e",
-    `tell application "System Events"
-      tell first application process whose name is "qt-manager"
-        set originalPosition to position of window 1
-        set position of window 1 to {(item 1 of originalPosition) + 1, item 2 of originalPosition}
-        delay 0.1
-        set position of window 1 to originalPosition
-        delay 0.2
-      end tell
-    end tell`,
-  ]);
-  await execFileAsync("/usr/sbin/screencapture", [
-    "-x",
-    "-T",
-    "1",
-    resolve(path),
-  ]);
+  const windowId = await getMacOsQtManagerWindowId();
+  await execNativeCommand(
+    "/usr/sbin/screencapture",
+    ["-x", "-o", "-T", "1", "-l", String(windowId), resolve(path)],
+    "QT Manager 단일 창 캡처",
+  );
+}
+
+async function getMacOsQtManagerWindowId() {
+  const pid = await getMacOsQtManagerPid();
+  const { stdout } = await execNativeCommand(
+    "/usr/bin/osascript",
+    [
+      "-l",
+      "JavaScript",
+      "-e",
+      `ObjC.import("CoreGraphics");
+      const windowListRef = $.CGWindowListCopyWindowInfo(
+        $.kCGWindowListOptionOnScreenOnly,
+        $.kCGNullWindowID,
+      );
+      const windows = ObjC.castRefToObject(windowListRef);
+      let windowId = null;
+      for (let index = 0; index < windows.count; index += 1) {
+        const info = ObjC.deepUnwrap(windows.objectAtIndex(index));
+        if (
+          info.kCGWindowOwnerPID === ${pid} &&
+          info.kCGWindowLayer === 0 &&
+          info.kCGWindowSharingState !== 0
+        ) {
+          windowId = info.kCGWindowNumber;
+          break;
+        }
+      }
+      windowId === null ? "" : String(windowId);`,
+    ],
+    "QT Manager 창 ID 조회",
+  );
+  const windowId = Number.parseInt(stdout.trim(), 10);
+  if (!Number.isSafeInteger(windowId) || windowId <= 0) {
+    throw new Error(`QT Manager 창 ID를 확인하지 못했습니다: ${stdout}`);
+  }
+  return windowId;
+}
+
+async function assertNativeVisualPreflight() {
+  if (process.platform !== "darwin") {
+    throw new Error(
+      "QT_MANAGER_NATIVE_VISUAL=1 검수는 macOS에서만 실행할 수 있습니다.",
+    );
+  }
+  const { stdout } = await execNativeCommand(
+    "/usr/bin/osascript",
+    ["-e", 'tell application "System Events" to return UI elements enabled'],
+    "macOS 접근성 권한 사전 확인",
+  );
+  if (stdout.trim() !== "true") {
+    throw new Error(
+      "macOS 접근성 권한이 없습니다. System Settings > Privacy & Security > Accessibility에서 현재 터미널을 허용하세요.",
+    );
+  }
+  mkdirSync("test-results", { recursive: true });
+  const probePath = resolve("test-results/.native-screen-recording-probe.png");
+  try {
+    await execNativeCommand(
+      "/usr/sbin/screencapture",
+      ["-x", "-R", "0,0,1,1", probePath],
+      "macOS 화면 기록 권한 사전 확인",
+    );
+  } finally {
+    if (existsSync(probePath)) unlinkSync(probePath);
+  }
+}
+
+async function execNativeCommand(
+  command: string,
+  args: string[],
+  purpose: string,
+) {
+  try {
+    return await execFileAsync(command, args, {
+      timeout: nativeCommandTimeoutMs,
+      killSignal: "SIGKILL",
+    });
+  } catch (reason) {
+    const detail =
+      reason instanceof Error ? reason.message : String(reason ?? "unknown");
+    throw new Error(
+      `${purpose}에 실패했습니다. macOS 권한 또는 실행 환경을 확인하세요: ${detail}`,
+    );
+  }
 }
 
 async function focusPreviousElementBeforePersonRow() {
