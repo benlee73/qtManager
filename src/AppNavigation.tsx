@@ -32,11 +32,7 @@ export function AppNavigation({
     <nav className="app-navigation" aria-label="주요 메뉴">
       <div className="rail-brand">
         <BookLogo />
-        <b className="rail-wordmark" aria-label="QT Manager">
-          QT
-          <br />
-          Manager
-        </b>
+        <b className="rail-wordmark">큐티매니저</b>
       </div>
 
       <div className="rail-primary">

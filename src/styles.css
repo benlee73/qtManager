@@ -175,7 +175,7 @@ p {
   min-height: 0;
   grid-column: 1;
   grid-row: 1;
-  grid-template-rows: 76px auto minmax(16px, 1fr) auto;
+  grid-template-rows: 84px auto minmax(16px, 1fr) auto;
   align-items: center;
   overflow: visible;
   border-right: 1px solid var(--line);
@@ -185,7 +185,7 @@ p {
 .rail-brand {
   position: relative;
   display: grid;
-  height: 76px;
+  height: 84px;
   place-items: center;
   align-content: center;
   gap: 5px;
@@ -208,9 +208,10 @@ p {
   color: var(--muted);
   font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.055em;
-  line-height: 1.02;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
   text-align: center;
+  white-space: nowrap;
 }
 
 .info-tooltip {
@@ -1500,11 +1501,11 @@ kbd {
 
 @media (max-width: 950px), (max-height: 680px) {
   .app-navigation {
-    grid-template-rows: 68px auto minmax(8px, 1fr) auto;
+    grid-template-rows: 76px auto minmax(8px, 1fr) auto;
   }
 
   .rail-brand {
-    height: 68px;
+    height: 76px;
   }
 
   .book-logo {

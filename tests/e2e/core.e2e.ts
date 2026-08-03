@@ -618,6 +618,11 @@ describe("QT Manager desktop flow", () => {
       return {
         wordmark:
           document.querySelector(".rail-wordmark")?.textContent?.trim() ?? "",
+        height: Math.round(
+          document
+            .querySelector<HTMLElement>(".rail-brand")!
+            .getBoundingClientRect().height,
+        ),
         infoAfterOperator: Boolean(
           operator.compareDocumentPosition(info) &
           Node.DOCUMENT_POSITION_FOLLOWING,
@@ -627,7 +632,8 @@ describe("QT Manager desktop flow", () => {
         ).clipPath,
       };
     });
-    expect(brand.wordmark).toBe("QTManager");
+    expect(brand.wordmark).toBe("큐티매니저");
+    expect(brand.height).toBeGreaterThanOrEqual(84);
     expect(brand.infoAfterOperator).toBe(true);
     expect(brand.logoClip).not.toBe("none");
 
