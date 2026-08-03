@@ -268,20 +268,17 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
     show_all: bool,
 ) -> Result<DistributionDesk, ApplicationError> {
     repository.migrate()?;
-    let records = repository.list_desk_records(query, selected_issue)?;
-    let mut people = records
+    let all_records = repository.list_desk_records("", selected_issue)?;
+    let all_people = all_records
         .into_iter()
         .map(|record| desk_person(record, selected_issue))
         .collect::<Result<Vec<_>, _>>()?;
-    people.sort_by(|left, right| {
-        (!left.can_distribute)
-            .cmp(&(!right.can_distribute))
-            .then((left.remaining_quantity == 0).cmp(&(right.remaining_quantity == 0)))
-            .then(left.name.cmp(&right.name))
-    });
-
+    let person_names = all_people
+        .iter()
+        .map(|person| (person.person_id.clone(), person.name.clone()))
+        .collect::<std::collections::HashMap<_, _>>();
     let mut totals = DeskTotals::default();
-    for person in &people {
+    for person in &all_people {
         if person.subscription_status == "유효" {
             totals.target_people += 1;
             totals.target_quantity += person.target_quantity;
@@ -294,10 +291,21 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
             }
         }
     }
-    let person_names = people
-        .iter()
-        .map(|person| (person.person_id.clone(), person.name.clone()))
-        .collect::<std::collections::HashMap<_, _>>();
+    let mut people = if query.trim().is_empty() {
+        all_people
+    } else {
+        repository
+            .list_desk_records(query, selected_issue)?
+            .into_iter()
+            .map(|record| desk_person(record, selected_issue))
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    people.sort_by(|left, right| {
+        (!left.can_distribute)
+            .cmp(&(!right.can_distribute))
+            .then((left.remaining_quantity == 0).cmp(&(right.remaining_quantity == 0)))
+            .then(left.name.cmp(&right.name))
+    });
     if query.trim().is_empty() && !show_all {
         people.retain(|person| person.can_distribute && person.remaining_quantity > 0);
     }
@@ -1119,10 +1127,25 @@ mod tests {
         }
         fn list_desk_records(
             &self,
-            _query: &str,
+            query: &str,
             _issue: Issue,
         ) -> Result<Vec<DeskRecord>, PortError> {
-            let mut records = self.records.clone();
+            let normalized = qt_domain::normalize_search_text(query);
+            let mut records = self
+                .records
+                .iter()
+                .filter(|record| {
+                    normalized.is_empty()
+                        || qt_domain::normalize_search_text(&record.person.name)
+                            .contains(&normalized)
+                        || record
+                            .person
+                            .cohort
+                            .as_ref()
+                            .is_some_and(|value| value.contains(&normalized))
+                })
+                .cloned()
+                .collect::<Vec<_>>();
             for record in &mut records {
                 record.distributions.extend(self.distributions.clone());
             }
@@ -1326,6 +1349,39 @@ mod tests {
         assert_eq!(desk.totals.remaining_people, 1);
         assert_eq!(desk.totals.target_quantity, 2);
         assert_eq!(desk.people[0].phone.as_deref(), Some("010-1234-5678"));
+    }
+
+    #[test]
+    fn totals_ignore_search_and_keep_the_selected_issue_whole() {
+        let first = record(1);
+        let mut second = record(2);
+        second.person.id = "person-2".into();
+        second.person.name = "다른 신청자".into();
+        second.person.cohort = Some("00".into());
+        second.person.phone = None;
+        second.person.normalized_phone = None;
+        second.subscriptions[0].id = "subscription-2".into();
+        second.subscriptions[0].person_id = second.person.id.clone();
+        let mut repository = MemoryRepository {
+            operator: Some("담당자".into()),
+            records: vec![first, second],
+            ..Default::default()
+        };
+
+        let desk = load_distribution_desk(
+            &mut repository,
+            &FixedClock,
+            Issue::new(2026, 7).unwrap(),
+            "가상",
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(desk.people.len(), 1);
+        assert_eq!(desk.people[0].name, "가상 신청자");
+        assert_eq!(desk.totals.target_people, 2);
+        assert_eq!(desk.totals.remaining_people, 2);
+        assert_eq!(desk.totals.target_quantity, 3);
     }
 
     #[test]

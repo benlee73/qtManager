@@ -32,7 +32,7 @@
 - Consumes: `DistributionDeskRepository::list_desk_records(query, issue)`
 - Produces: `DistributionDesk.totals`는 빈 검색 전체 레코드로 계산하고 `people`만 검색 결과를 사용한다.
 
-- [ ] **Step 1: 검색 결과는 한 명이어도 전체 대상 두 명의 통계를 유지하는 실패 테스트 작성**
+- [x] **Step 1: 검색 결과는 한 명이어도 전체 대상 두 명의 통계를 유지하는 실패 테스트 작성**
 
 ```rust
 let searched = load_distribution_desk(&mut repository, &clock, issue, "가상가", true)?;
@@ -40,11 +40,11 @@ assert_eq!(searched.people.len(), 1);
 assert_eq!(searched.totals.target_people, 2);
 ```
 
-- [ ] **Step 2: 테스트를 실행해 현재 통계가 검색 결과 1명으로 줄어 실패하는지 확인**
+- [x] **Step 2: 테스트를 실행해 현재 통계가 검색 결과 1명으로 줄어 실패하는지 확인**
 
 Run: `cargo test -p qt-application totals_ignore_search -- --exact`
 
-- [ ] **Step 3: 빈 검색 전체 레코드에서 `all_people`, `person_names`, `DeskTotals`를 만들고 검색 결과는 목록에만 적용**
+- [x] **Step 3: 빈 검색 전체 레코드에서 `all_people`, `person_names`, `DeskTotals`를 만들고 검색 결과는 목록에만 적용**
 
 ```rust
 let all_records = repository.list_desk_records("", selected_issue)?;
@@ -57,7 +57,7 @@ let people = if query.trim().is_empty() {
 };
 ```
 
-- [ ] **Step 4: 애플리케이션·SQLite 통합 테스트 실행**
+- [x] **Step 4: 애플리케이션·SQLite 통합 테스트 실행**
 
 Run: `cargo test -p qt-application totals_ignore_search && cargo test -p qt-infrastructure --test distribution_desk`
 
