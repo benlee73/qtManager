@@ -226,17 +226,17 @@ git commit -m "style: 현장 화면 글자와 정보 밀도 개선 [skip ci]"
 
 **Files:**
 
-- Modify: `src-tauri/icons/app-icon.svg`
+- Add: `src-tauri/icons/app-icon-source.png`
 - Modify: `src/assets/qt-manager-icon.png`
 - Modify: `src-tauri/icons/*` generated desktop icon assets
 - Test: `scripts/check_project.py`
 
 **Interfaces:**
 
-- 원본 SVG는 512×512 투명 캔버스 안에 흰 외곽선·그림자 없는 인디고 둥근 본체와 QT·성경책을 둔다.
+- 원본 PNG는 투명 캔버스 안에 흰 외곽선·그림자 없는 인디고 둥근 본체와 QT·성경책을 둔다.
 - 모든 Tauri 아이콘과 좌측 레일 PNG는 같은 원본에서 생성한다.
 
-- [ ] **Step 1: 모서리 alpha=0, 본체 경계의 흰 픽셀 부재, 본체 점유율 기준을 검사하는 실패 검증 추가**
+- [x] **Step 1: 모서리 alpha=0, 본체 경계의 흰 픽셀 부재, 본체 점유율 기준을 검사하는 실패 검증 추가**
 
 ```python
 assert corner_alpha == 0
@@ -244,17 +244,17 @@ assert colored_bounds_ratio >= 0.88
 assert outside_white_pixel_count == 0
 ```
 
-- [ ] **Step 2: 프로젝트 검사 실패 확인**
+- [x] **Step 2: 프로젝트 검사 실패 확인**
 
 Run: `python scripts/check_project.py`
 
-- [ ] **Step 3: 기존 아이콘을 시각 기준으로 편집하고 투명 외곽·큰 본체 SVG/PNG 생성**
+- [x] **Step 3: 기존 아이콘을 시각 기준으로 편집하고 투명 외곽·큰 본체 PNG 생성**
 
-- [ ] **Step 4: Tauri 아이콘 생성 명령으로 macOS·Windows·레일 자산을 같은 원본에서 재생성**
+- [x] **Step 4: Tauri 아이콘 생성 명령으로 macOS·Windows·레일 자산을 같은 원본에서 재생성**
 
-Run: `pnpm tauri icon src-tauri/icons/app-icon.svg`
+Run: `pnpm tauri icon src-tauri/icons/app-icon-source.png`
 
-- [ ] **Step 5: alpha·점유율 검사와 macOS 앱 패키징 후 Dock/앱 화면을 실제 확인**
+- [x] **Step 5: alpha·점유율 검사와 macOS 앱 패키징 후 Dock/앱 화면을 실제 확인**
 
 Run: `python scripts/check_project.py && just package`
 

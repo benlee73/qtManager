@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 import json
+import struct
+import zlib
 from pathlib import Path
 import tomllib
 
@@ -48,6 +50,7 @@ def main() -> None:
             raise AssertionError(f"GitHub 토큰 형태 문자열 발견: {path.relative_to(ROOT)}")
 
     verify_release_metadata()
+    verify_icon_transparency()
     verify_offline_runtime()
     verify_log_privacy_boundary()
 
@@ -79,6 +82,95 @@ def verify_release_metadata() -> None:
     icons = tauri["bundle"].get("icon", [])
     if not {"icons/icon.icns", "icons/icon.ico"}.issubset(icons):
         raise AssertionError("macOS와 Windows 앱 아이콘이 패키지에 설정되지 않았습니다.")
+
+
+def verify_icon_transparency() -> None:
+    width, height, pixels = read_rgba_png(ROOT / "src-tauri/icons/icon.png")
+    corners = [pixels[0], pixels[width - 1], pixels[-width], pixels[-1]]
+    if any(alpha != 0 for *_, alpha in corners):
+        raise AssertionError("앱 아이콘 모서리는 완전히 투명해야 합니다.")
+
+    visible = [
+        (index % width, index // width, pixel)
+        for index, pixel in enumerate(pixels)
+        if pixel[3] > 32
+    ]
+    xs = [x for x, _, _ in visible]
+    ys = [y for _, y, _ in visible]
+    width_ratio = (max(xs) - min(xs) + 1) / width
+    height_ratio = (max(ys) - min(ys) + 1) / height
+    if min(width_ratio, height_ratio) < 0.88:
+        raise AssertionError("앱 아이콘 본체가 캔버스에 비해 너무 작습니다.")
+
+    edge_limit = round(min(width, height) * 0.05)
+    outside_white = [
+        pixel
+        for x, y, pixel in visible
+        if (x < edge_limit or x >= width - edge_limit or y < edge_limit or y >= height - edge_limit)
+        and min(pixel[:3]) >= 235
+    ]
+    if outside_white:
+        raise AssertionError("앱 아이콘 외곽에 밝은 테두리나 후광이 남아 있습니다.")
+
+
+def read_rgba_png(path: Path) -> tuple[int, int, list[tuple[int, int, int, int]]]:
+    data = path.read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise AssertionError(f"PNG 형식이 아닙니다: {path.relative_to(ROOT)}")
+
+    position = 8
+    compressed = bytearray()
+    width = height = 0
+    while position < len(data):
+        length = struct.unpack(">I", data[position : position + 4])[0]
+        chunk_type = data[position + 4 : position + 8]
+        payload = data[position + 8 : position + 8 + length]
+        position += 12 + length
+        if chunk_type == b"IHDR":
+            width, height, bit_depth, color_type = struct.unpack(">IIBB", payload[:10])
+            if (bit_depth, color_type) != (8, 6):
+                raise AssertionError("검증할 앱 아이콘은 8비트 RGBA PNG여야 합니다.")
+        elif chunk_type == b"IDAT":
+            compressed.extend(payload)
+        elif chunk_type == b"IEND":
+            break
+
+    row_bytes = width * 4
+    raw = zlib.decompress(bytes(compressed))
+    rows: list[bytearray] = []
+    offset = 0
+    for _ in range(height):
+        filter_type = raw[offset]
+        current = bytearray(raw[offset + 1 : offset + 1 + row_bytes])
+        previous = rows[-1] if rows else bytearray(row_bytes)
+        for index in range(row_bytes):
+            left = current[index - 4] if index >= 4 else 0
+            above = previous[index]
+            upper_left = previous[index - 4] if index >= 4 else 0
+            if filter_type == 1:
+                current[index] = (current[index] + left) & 0xFF
+            elif filter_type == 2:
+                current[index] = (current[index] + above) & 0xFF
+            elif filter_type == 3:
+                current[index] = (current[index] + ((left + above) // 2)) & 0xFF
+            elif filter_type == 4:
+                estimate = left + above - upper_left
+                nearest = min(
+                    (left, above, upper_left),
+                    key=lambda value: abs(estimate - value),
+                )
+                current[index] = (current[index] + nearest) & 0xFF
+            elif filter_type != 0:
+                raise AssertionError(f"지원하지 않는 PNG 필터입니다: {filter_type}")
+        rows.append(current)
+        offset += row_bytes + 1
+
+    pixels = [
+        tuple(row[index : index + 4])
+        for row in rows
+        for index in range(0, row_bytes, 4)
+    ]
+    return width, height, pixels
 
 
 def verify_offline_runtime() -> None:
