@@ -19,6 +19,19 @@ export type PersonSummary = {
   latestLastIssue: string | null;
 };
 
+export type SubscriptionPeriodState =
+  | "current"
+  | "scheduled"
+  | "past"
+  | "archived";
+
+export type LinkedCheckItem = {
+  id: string;
+  summary: string;
+  status: "확인 필요" | "확인 완료" | "보관";
+  updatedAt: string;
+};
+
 export type PersonDetail = {
   id: string;
   name: string;
@@ -35,6 +48,7 @@ export type PersonDetail = {
     source: string;
     memo: string | null;
     archived: boolean;
+    periodState: SubscriptionPeriodState;
   }[];
   distributions: {
     issue: string;
@@ -42,6 +56,7 @@ export type PersonDetail = {
     distributedAt: string;
     reversed: boolean;
   }[];
+  checkItems: LinkedCheckItem[];
 };
 
 export type DuplicateCandidate = {
