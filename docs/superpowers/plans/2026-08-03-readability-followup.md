@@ -61,7 +61,7 @@ let people = if query.trim().is_empty() {
 
 Run: `cargo test -p qt-application totals_ignore_search && cargo test -p qt-infrastructure --test distribution_desk`
 
-- [ ] **Step 5: 통계 계약 변경 커밋**
+- [x] **Step 5: 통계 계약 변경 커밋**
 
 ```bash
 git add crates/qt-application/src/phase2.rs crates/qt-infrastructure/tests/distribution_desk.rs
@@ -215,7 +215,7 @@ Run: `pnpm test -- --run src/AppNavigation.test.tsx`
 
 Run: `pnpm test && just e2e`
 
-- [ ] **Step 6: 가독성 UI 커밋**
+- [x] **Step 6: 가독성 UI 커밋**
 
 ```bash
 git add src/AppNavigation.tsx src/styles.css src/phase3.css src/AppNavigation.test.tsx src/HelpPanel.tsx docs/RELEASE_NOTES_0.1.0.md tests/e2e/core.e2e.ts
@@ -258,7 +258,7 @@ Run: `pnpm tauri icon src-tauri/icons/app-icon-source.png`
 
 Run: `python scripts/check_project.py && just package`
 
-- [ ] **Step 6: 아이콘 자산 커밋**
+- [x] **Step 6: 아이콘 자산 커밋**
 
 ```bash
 git add src-tauri/icons src/assets/qt-manager-icon.png scripts/check_project.py
@@ -273,17 +273,17 @@ git commit -m "style: 앱 아이콘 외곽과 크기 정비 [skip ci]"
 - Verify: `docs/RELEASE_NOTES_0.1.0.md`
 - Preserve untracked: `current-phase3.png`, `design-previews/`
 
-- [ ] **Step 1: 라이트·다크, 900×640·1000×720 및 확장 창을 실제 캡처해 글자·간격·내부 스크롤을 비교**
+- [x] **Step 1: 라이트·다크, 900×640·1000×720 및 확장 창을 실제 캡처해 글자·간격·내부 스크롤을 비교**
 
-- [ ] **Step 2: 전체 검사와 macOS 실제 Tauri E2E 실행**
+- [x] **Step 2: 전체 검사와 macOS 실제 Tauri E2E 실행**
 
 Run: `just check && just e2e`
 
-- [ ] **Step 3: macOS 앱과 DMG를 패키징하고 `/Applications/QT Manager.app`을 갱신**
+- [x] **Step 3: macOS 앱과 DMG를 패키징하고 `/Applications/QT Manager.app`을 갱신**
 
 Run: `just package`
 
-- [ ] **Step 4: 개인정보 문자열과 의도하지 않은 파일 포함 여부 확인**
+- [x] **Step 4: 개인정보 문자열과 의도하지 않은 파일 포함 여부 확인**
 
 Run: `git diff --check && git status --short`
 
