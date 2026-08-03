@@ -179,18 +179,28 @@ fn run_phase1_probe(app: tauri::AppHandle) -> Result<Phase1Report, String> {
     use_case.execute().map_err(|error| error.to_string())
 }
 
-fn open_operational_repository(app: &tauri::AppHandle) -> Result<SqliteCoreRepository, String> {
+fn operational_data_directory(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     #[cfg(feature = "e2e")]
-    let directory = app
-        .path()
-        .app_cache_dir()
-        .map_err(|error| format!("테스트 데이터 경로를 찾지 못했습니다: {error}"))?
-        .join("phase2-e2e");
+    {
+        app.path()
+            .app_cache_dir()
+            .map_err(|error| format!("테스트 데이터 경로를 찾지 못했습니다: {error}"))
+            .map(|directory| directory.join("phase2-e2e"))
+    }
     #[cfg(not(feature = "e2e"))]
-    let directory = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("앱 데이터 경로를 찾지 못했습니다: {error}"))?;
+    {
+        app.path()
+            .app_data_dir()
+            .map_err(|error| format!("앱 데이터 경로를 찾지 못했습니다: {error}"))
+    }
+}
+
+fn restore_points_directory(data_directory: PathBuf) -> PathBuf {
+    data_directory.join("restore-points")
+}
+
+fn open_operational_repository(app: &tauri::AppHandle) -> Result<SqliteCoreRepository, String> {
+    let directory = operational_data_directory(app)?;
     fs::create_dir_all(&directory)
         .map_err(|error| format!("앱 데이터 폴더를 만들지 못했습니다: {error}"))?;
     SqliteCoreRepository::open(&directory.join("qt-manager.sqlite"))
@@ -722,11 +732,7 @@ fn apply_state_import_command(
     mode: ImportMode,
     person_resolutions: Vec<MergePersonResolution>,
 ) -> Result<StateCounts, String> {
-    let backups = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("앱 데이터 경로를 찾지 못했습니다: {error}"))?
-        .join("restore-points");
+    let backups = restore_points_directory(operational_data_directory(&app)?);
     fs::create_dir_all(&backups)
         .map_err(|error| format!("자동 백업 폴더를 만들지 못했습니다: {error}"))?;
     let runtime = SystemRuntime;
@@ -864,5 +870,17 @@ mod tests {
         let reference_issue = load_person_detail_for_today(&FixedToday, Ok).unwrap();
 
         assert_eq!(reference_issue, Issue::new(2026, 7).unwrap());
+    }
+
+    #[test]
+    fn keeps_e2e_restore_points_beneath_the_e2e_operational_storage() {
+        let e2e_storage = PathBuf::from("cache").join("phase2-e2e");
+
+        assert_eq!(
+            restore_points_directory(e2e_storage),
+            PathBuf::from("cache")
+                .join("phase2-e2e")
+                .join("restore-points")
+        );
     }
 }

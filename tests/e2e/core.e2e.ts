@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 const execFileAsync = promisify(execFile);
 const nativeVisualEnabled = process.env.QT_MANAGER_NATIVE_VISUAL === "1";
@@ -1531,10 +1531,14 @@ describe("QT Manager desktop flow", () => {
     });
     expect(management.people).toHaveLength(0);
 
-    const restore = await invokeTauri<{ sourceFileName: string }>(
-      "latest_restore_point_command",
-    );
+    const restore = await invokeTauri<{
+      sourceFileName: string;
+      snapshotPath: string;
+    }>("latest_restore_point_command");
     expect(restore.sourceFileName).toBe("handover.xlsx");
+    expect(dirname(restore.snapshotPath)).toBe(
+      join(dirname(dirname(paths.exportPath)), "phase2-e2e", "restore-points"),
+    );
     await invokeTauri("undo_state_import_command");
     management = await invokeTauri("load_people_management_command", {
       query: unique,
