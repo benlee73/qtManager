@@ -194,9 +194,8 @@ export function ManagementScreen({
         <HandoverDialog onClose={() => setDialog(null)} onChanged={refresh} />
       )}
       {dialog?.type === "edit" && (
-        <EditDialog
+        <ManagementEditDialog
           person={dialog.person}
-          checkItems={[]}
           busy={busy}
           onClose={() => setDialog(null)}
           onSaved={(work, input) =>
@@ -237,6 +236,31 @@ export function ManagementScreen({
         />
       )}
     </main>
+  );
+}
+
+export function ManagementEditDialog({
+  person,
+  busy,
+  onClose,
+  onSaved,
+}: {
+  person: PersonDetail;
+  busy: boolean;
+  onClose: () => void;
+  onSaved: (
+    work: () => Promise<unknown>,
+    input: PersonInput,
+  ) => Promise<boolean>;
+}) {
+  return (
+    <EditDialog
+      person={person}
+      checkItems={person.checkItems}
+      busy={busy}
+      onClose={onClose}
+      onSaved={onSaved}
+    />
   );
 }
 

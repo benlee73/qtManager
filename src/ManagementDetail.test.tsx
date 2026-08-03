@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { ManagementPersonList, PersonDetailPanel } from "./ManagementDetail";
-import { ManagementScreen } from "./ManagementScreen";
+import { ManagementEditDialog, ManagementScreen } from "./ManagementScreen";
 import type { PersonDetail, PersonSummary } from "./phase3";
 
 const people: PersonSummary[] = [
@@ -194,5 +194,24 @@ describe("ManagementScreen heading actions", () => {
     expect(markup).toContain("Google 응답 붙여넣기");
     expect(markup).toContain("+ 신청자 등록");
     expect(markup).not.toContain("+ QT 신청자 정식 등록");
+  });
+});
+
+describe("ManagementEditDialog", () => {
+  it("keeps the selected person's linked check content and state visible", () => {
+    const markup = renderToStaticMarkup(
+      <ManagementEditDialog
+        person={detail}
+        busy={false}
+        onClose={vi.fn()}
+        onSaved={vi.fn(async () => true)}
+      />,
+    );
+
+    expect(markup).toContain('aria-label="연결된 확인할 일"');
+    expect(markup).toContain("다음 배부 때 수량 확인");
+    expect(markup).toContain("확인 필요");
+    expect(markup).toContain("연락처 확인 완료");
+    expect(markup).toContain("확인 완료");
   });
 });
