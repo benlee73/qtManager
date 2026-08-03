@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { EditDialog, RegisterDialog, RenewDialog } from "./Phase3Dialogs";
 import { ApplicationImportDialog } from "./ApplicationImportDialog";
 import { HandoverDialog } from "./HandoverDialog";
 import { ManagementPersonList, PersonDetailPanel } from "./ManagementDetail";
+import {
+  createManagementLoader,
+  type ManagementSelection,
+} from "./managementLoader";
 import type { ReversibleAction } from "./actionHistory";
 import type { Issue } from "./phase2";
 import {
@@ -36,39 +40,38 @@ export function ManagementScreen({
   const [query, setQuery] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
   const [management, setManagement] = useState<PeopleManagement | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<PersonDetail | null>(null);
+  const [selection, setSelection] = useState<ManagementSelection>({
+    selectedId: null,
+    detail: null,
+  });
   const [dialog, setDialog] = useState<ManagementDialog>(null);
   const [busy, setBusy] = useState(false);
+  const notifyRef = useRef(notify);
+  notifyRef.current = notify;
+  const loaderRef = useRef<ReturnType<typeof createManagementLoader> | null>(
+    null,
+  );
+  if (!loaderRef.current) {
+    loaderRef.current = createManagementLoader({
+      loadManagement,
+      loadDetail: loadPersonDetail,
+      onManagement: setManagement,
+      onSelection: setSelection,
+      onError: (reason) => notifyRef.current(errorMessage(reason), "error"),
+    });
+  }
+  const loader = loaderRef.current;
 
   const refresh = useCallback(async () => {
-    try {
-      const next = await loadManagement(query, includeArchived);
-      setManagement(next);
-      const nextId =
-        selectedId && next.people.some((person) => person.id === selectedId)
-          ? selectedId
-          : (next.people[0]?.id ?? null);
-      setSelectedId(nextId);
-      setDetail(nextId ? await loadPersonDetail(nextId) : null);
-    } catch (reason) {
-      notify(errorMessage(reason), "error");
-    }
-  }, [includeArchived, notify, query, selectedId]);
+    await loader.refresh(query, includeArchived);
+  }, [includeArchived, loader, query]);
 
   useEffect(() => {
     const timeout = window.setTimeout(refresh, 70);
     return () => window.clearTimeout(timeout);
   }, [refresh]);
 
-  async function selectPerson(id: string) {
-    setSelectedId(id);
-    try {
-      setDetail(await loadPersonDetail(id));
-    } catch (reason) {
-      notify(errorMessage(reason), "error");
-    }
-  }
+  useEffect(() => () => loader.cancelPending(), [loader]);
 
   async function mutate(work: () => Promise<unknown>, success: string) {
     setBusy(true);
@@ -129,7 +132,10 @@ export function ManagementScreen({
             <input
               data-testid="management-search"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                loader.invalidate();
+                setQuery(event.target.value);
+              }}
               placeholder="이름, 또래, 전화번호 검색"
               aria-label="관리할 QT 신청자 검색"
             />
@@ -138,7 +144,10 @@ export function ManagementScreen({
             <input
               type="checkbox"
               checked={includeArchived}
-              onChange={(event) => setIncludeArchived(event.target.checked)}
+              onChange={(event) => {
+                loader.invalidate();
+                setIncludeArchived(event.target.checked);
+              }}
             />
             보관된 신청자도 보기
           </label>
@@ -148,13 +157,13 @@ export function ManagementScreen({
           </div>
           <ManagementPersonList
             people={management?.people ?? []}
-            selectedId={selectedId}
-            onSelect={(id) => void selectPerson(id)}
+            selectedId={selection.selectedId}
+            onSelect={(id) => void loader.select(id)}
           />
         </div>
 
         <PersonDetailPanel
-          detail={detail}
+          detail={selection.detail}
           busy={busy}
           onEdit={(person) => setDialog({ type: "edit", person })}
           onRenew={(person) => setDialog({ type: "renew", person })}
