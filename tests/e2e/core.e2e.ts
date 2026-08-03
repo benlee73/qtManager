@@ -1,4 +1,9 @@
 import { mkdirSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { resolve } from "node:path";
+
+const execFileAsync = promisify(execFile);
 
 describe("QT Manager desktop flow", () => {
   it("registers an on-site applicant, partially distributes, completes and undoes", async () => {
@@ -294,24 +299,29 @@ describe("QT Manager desktop flow", () => {
     });
     expect(mouseFocus).toEqual({ focusVisible: false, thickFocusLine: false });
 
-    const focusRule = await browser.execute(() => {
-      const rules = [...document.styleSheets].flatMap((sheet) => [
-        ...sheet.cssRules,
-      ]);
-      const rule = rules.find(
-        (candidate): candidate is CSSStyleRule =>
-          candidate instanceof CSSStyleRule &&
-          candidate.selectorText === ".person-row:focus-visible",
+    if (process.platform === "darwin") {
+      expect(await activateMacOsQtManager()).toBe("qt-manager");
+      expect(await focusPreviousElementBeforePersonRow()).toBe(true);
+      await sendMacOsOptionTab();
+      await browser.waitUntil(
+        async () => (await personRowFocusContract()).active,
+        { timeoutMsg: "macOS Option+Tab이 신청자 행으로 이동하지 않았습니다." },
       );
-      return {
-        outline: rule?.style.outline ?? "",
-        offset: rule?.style.outlineOffset ?? "",
-      };
-    });
-    expect(focusRule).toEqual({
-      outline: "1px solid var(--accent)",
-      offset: "-1px",
-    });
+      const keyboardFocus = await personRowFocusContract();
+      expect(keyboardFocus).toEqual({
+        active: true,
+        focusVisible: true,
+        width: "1px",
+        offset: "-1px",
+        style: "solid",
+        colorMatchesAccent: true,
+      });
+    } else {
+      expect(await personRowFocusRule()).toEqual({
+        outline: "1px solid var(--accent)",
+        offset: "-1px",
+      });
+    }
 
     const linkedCheckbox = `input[aria-label="${linkedItem} 확인 완료"]`;
     await browser.execute((selector) => {
@@ -1215,6 +1225,11 @@ describe("QT Manager desktop flow", () => {
       ),
     ).toEqual({ theme: "light", ...expectedCaptureContract });
     mkdirSync("test-results", { recursive: true });
+    if (process.platform === "darwin") {
+      await captureMacOsCompositor(
+        "test-results/ui-management-light-compositor.png",
+      );
+    }
     await browser.saveScreenshot("test-results/ui-management-light.png");
     expect(
       await prepareManagementCapture(
@@ -1227,6 +1242,11 @@ describe("QT Manager desktop flow", () => {
         linkedCheck,
       ),
     ).toEqual({ theme: "dark", ...expectedCaptureContract });
+    if (process.platform === "darwin") {
+      await captureMacOsCompositor(
+        "test-results/ui-management-dark-compositor.png",
+      );
+    }
     await browser.saveScreenshot("test-results/ui-management-dark.png");
 
     await browser.execute(() => {
@@ -1640,6 +1660,117 @@ function currentCalendarIssue() {
   const year = seoulNow.getUTCFullYear();
   const month = seoulNow.getUTCMonth() + 1;
   return { year, startMonth: month % 2 === 0 ? month - 1 : month };
+}
+
+async function sendMacOsOptionTab() {
+  await execFileAsync("/usr/bin/osascript", [
+    "-e",
+    'tell application "System Events" to key code 48 using option down',
+  ]);
+}
+
+async function activateMacOsQtManager() {
+  const { stdout: rawPid } = await execFileAsync("/usr/bin/pgrep", [
+    "-n",
+    "-x",
+    "qt-manager",
+  ]);
+  const pid = Number.parseInt(rawPid.trim(), 10);
+  if (!Number.isSafeInteger(pid)) {
+    throw new Error(`qt-manager PID를 확인하지 못했습니다: ${rawPid}`);
+  }
+  const { stdout } = await execFileAsync("/usr/bin/osascript", [
+    "-e",
+    `tell application "System Events"
+      set targetProcess to first application process whose unix id is ${pid}
+      set frontmost of targetProcess to true
+      delay 0.2
+      return name of targetProcess
+    end tell`,
+  ]);
+  return stdout.trim();
+}
+
+async function captureMacOsCompositor(path: string) {
+  await activateMacOsQtManager();
+  await execFileAsync("/usr/bin/osascript", [
+    "-e",
+    `tell application "System Events"
+      tell first application process whose name is "qt-manager"
+        set originalPosition to position of window 1
+        set position of window 1 to {(item 1 of originalPosition) + 1, item 2 of originalPosition}
+        delay 0.1
+        set position of window 1 to originalPosition
+        delay 0.2
+      end tell
+    end tell`,
+  ]);
+  await execFileAsync("/usr/sbin/screencapture", [
+    "-x",
+    "-T",
+    "1",
+    resolve(path),
+  ]);
+}
+
+async function focusPreviousElementBeforePersonRow() {
+  return browser.execute(() => {
+    const row = document.querySelector<HTMLElement>(
+      '[data-testid="person-row"]',
+    );
+    const tabbable = [
+      ...document.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ].filter(
+      (element) =>
+        element.getClientRects().length > 0 &&
+        getComputedStyle(element).visibility !== "hidden",
+    );
+    const rowIndex = row ? tabbable.indexOf(row) : -1;
+    const previous = rowIndex > 0 ? tabbable[rowIndex - 1] : null;
+    previous?.focus();
+    return previous !== null && document.activeElement === previous;
+  });
+}
+
+async function personRowFocusContract() {
+  return browser.execute(() => {
+    const row = document.querySelector<HTMLElement>(
+      '[data-testid="person-row"]',
+    );
+    const style = row ? getComputedStyle(row) : null;
+    const accentProbe = document.createElement("span");
+    accentProbe.style.color = "var(--accent)";
+    document.body.append(accentProbe);
+    const accent = getComputedStyle(accentProbe).color;
+    accentProbe.remove();
+    return {
+      active: document.activeElement === row,
+      focusVisible: row?.matches(":focus-visible") ?? false,
+      width: style?.outlineWidth ?? "",
+      offset: style?.outlineOffset ?? "",
+      style: style?.outlineStyle ?? "",
+      colorMatchesAccent: style?.outlineColor === accent,
+    };
+  });
+}
+
+async function personRowFocusRule() {
+  return browser.execute(() => {
+    const rules = [...document.styleSheets].flatMap((sheet) => [
+      ...sheet.cssRules,
+    ]);
+    const rule = rules.find(
+      (candidate): candidate is CSSStyleRule =>
+        candidate instanceof CSSStyleRule &&
+        candidate.selectorText === ".person-row:focus-visible",
+    );
+    return {
+      outline: rule?.style.outline ?? "",
+      offset: rule?.style.outlineOffset ?? "",
+    };
+  });
 }
 
 async function selectManagementPerson(name: string) {
