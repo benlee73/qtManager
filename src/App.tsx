@@ -7,10 +7,20 @@ import { HelpPanel } from "./HelpPanel";
 import { ChevronLeftIcon, ChevronRightIcon, RedoIcon, UndoIcon } from "./Icons";
 import { ManagementScreen } from "./ManagementScreen";
 import { NotificationStack } from "./Notifications";
+import { PersonFilterMenu } from "./PersonFilterMenu";
 import { type Phase2Dialog, Phase2DialogContent } from "./Phase2Dialogs";
 import { EditDialog } from "./Phase3Dialogs";
 import type { ReversibleAction } from "./actionHistory";
 import { persistTheme, readStoredTheme, type Theme } from "./appearance";
+import {
+  DEFAULT_PERSON_FILTERS,
+  distributionAllocations,
+  filterLabel,
+  filterPeople,
+  issueLabelParts,
+  type PersonFilter,
+  subscriptionHeadline,
+} from "./distributionView";
 import {
   type DeskPerson,
   type DistributionDesk,
@@ -19,16 +29,22 @@ import {
   createCheckItem,
   deleteCheckItem,
   deletePinnedNote,
-  distributePerson,
+  distributeAllocations,
   isTextEntryTarget,
   loadDesk,
   moveIssue,
   recommendedIssue,
   undoDistribution,
+  undoDistributionAllocations,
   updateCheckItemStatus,
   updatePinnedNote,
 } from "./phase2";
-import { type PersonDetail, loadPersonDetail } from "./phase3";
+import {
+  type PersonDetail,
+  type PersonInput,
+  loadPersonDetail,
+  updatePerson,
+} from "./phase3";
 import { useNotifications } from "./useNotifications";
 
 export default function App() {
@@ -41,7 +57,9 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [desk, setDesk] = useState<DistributionDesk | null>(null);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
-  const [listFilter, setListFilter] = useState("remaining");
+  const [listFilters, setListFilters] = useState<PersonFilter[]>(() => [
+    ...DEFAULT_PERSON_FILTERS,
+  ]);
   const [sort, setSort] = useState<{
     key: "cohort" | "name" | "subscription" | "distribution";
     direction: "asc" | "desc";
@@ -116,10 +134,22 @@ export default function App() {
     const action = undoStack.at(-1);
     if (!action) {
       if (desk?.canUndoDistribution) {
-        await mutate(
-          () => undoDistribution(issue),
-          "최근 배부를 되돌렸습니다.",
-        );
+        let allocation: Awaited<ReturnType<typeof undoDistribution>> | null =
+          null;
+        const saved = await mutate(async () => {
+          allocation = await undoDistribution(issue);
+        }, "최근 배부를 되돌렸습니다.");
+        if (saved && allocation) {
+          const allocations = [allocation];
+          setRedoStack((current) => [
+            ...current,
+            {
+              description: "최근 배부",
+              undo: () => undoDistributionAllocations(issue, allocations),
+              redo: () => distributeAllocations(issue, allocations),
+            },
+          ]);
+        }
       }
       return;
     }
@@ -142,18 +172,7 @@ export default function App() {
 
   const visiblePeople = useMemo(() => {
     if (!desk) return [];
-    const filtered = desk.people.filter((person) => {
-      if (listFilter === "all") return true;
-      if (listFilter === "remaining")
-        return person.canDistribute && person.remainingQuantity > 0;
-      if (listFilter === "undistributed")
-        return person.distributionStatus === "미배부";
-      if (listFilter === "partial")
-        return person.distributionStatus === "일부 배부";
-      if (listFilter === "completed")
-        return person.distributionStatus === "배부 완료";
-      return person.subscriptionStatus === "구독 만료";
-    });
+    const filtered = filterPeople(desk.people, new Set(listFilters));
     if (!sort) return filtered;
     const direction = sort.direction === "asc" ? 1 : -1;
     const value = (person: DeskPerson) => {
@@ -170,7 +189,9 @@ export default function App() {
           sensitivity: "base",
         }) * direction,
     );
-  }, [desk, listFilter, sort]);
+  }, [desk, listFilters, sort]);
+
+  const selectedIssueParts = issueLabelParts(issue);
 
   const openPersonEdit = useCallback(
     async (personId: string) => {
@@ -202,12 +223,20 @@ export default function App() {
   const defaultDistribution = useCallback(
     async (person: DeskPerson) => {
       if (!person.canDistribute) return;
-      await mutate(
-        () => distributePerson(issue, person),
+      const allocations = distributionAllocations(person);
+      const saved = await mutate(
+        () => distributeAllocations(issue, allocations),
         `${person.name} · ${person.remainingQuantity}권 배부했습니다.`,
       );
+      if (saved) {
+        recordAction({
+          description: `${person.name} 배부`,
+          undo: () => undoDistributionAllocations(issue, allocations),
+          redo: () => distributeAllocations(issue, allocations),
+        });
+      }
     },
-    [issue, mutate],
+    [issue, mutate, recordAction],
   );
 
   useEffect(() => {
@@ -278,7 +307,11 @@ export default function App() {
           onOperator={() => setDialog({ type: "operator" })}
         />
         <div className="management-host">
-          <ManagementScreen issue={issue} notify={notify} />
+          <ManagementScreen
+            issue={issue}
+            notify={notify}
+            recordAction={recordAction}
+          />
         </div>
         <NotificationStack notifications={notifications} onDismiss={dismiss} />
         {helpOpen && (
@@ -352,9 +385,18 @@ export default function App() {
               >
                 <ChevronLeftIcon />
               </button>
-              <h1 data-testid="selected-issue">
-                {desk?.selectedIssue.label ??
-                  `${issue.year}년 ${issue.startMonth}~${issue.startMonth + 1}월호`}
+              <h1
+                data-testid="selected-issue"
+                aria-label={`${issue.year}년 ${issue.startMonth}~${issue.startMonth + 1}월호`}
+              >
+                <span className="issue-year">{selectedIssueParts.year}</span>
+                <span className="issue-year-suffix">년</span>
+                <span className="issue-months">
+                  <span>{selectedIssueParts.startMonth}</span>
+                  <span>~</span>
+                  <span>{selectedIssueParts.endMonth}</span>
+                </span>
+                <span className="issue-month-suffix">월호</span>
               </h1>
               <button
                 type="button"
@@ -467,25 +509,18 @@ export default function App() {
             </div>
             <div className="table-title">
               <h2>
-                {query ? "검색 결과" : filterLabel(listFilter)}{" "}
+                {query ? "검색 결과" : filterLabel(new Set(listFilters))}{" "}
                 <b>{visiblePeople.length}</b>
               </h2>
               <div className="list-filters">
-                <label className="filter-control">
-                  <span>필터</span>
-                  <select
-                    aria-label="신청자 필터"
-                    value={listFilter}
-                    onChange={(event) => setListFilter(event.target.value)}
-                  >
-                    <option value="remaining">남은 배부</option>
-                    <option value="all">전체</option>
-                    <option value="undistributed">미배부</option>
-                    <option value="partial">일부 배부</option>
-                    <option value="completed">배부 완료</option>
-                    <option value="expired">구독 만료</option>
-                  </select>
-                </label>
+                <PersonFilterMenu
+                  filters={new Set(listFilters)}
+                  open={openMenu === "person-filter"}
+                  onChange={setListFilters}
+                  onOpenChange={(open) =>
+                    setOpenMenu(open ? "person-filter" : null)
+                  }
+                />
               </div>
             </div>
             <div className="table-head">
@@ -607,7 +642,6 @@ export default function App() {
                 placeholder="확인할 내용을 입력하세요…"
               />
               <div>
-                <small>일반 확인할 일로 저장</small>
                 <button
                   type="submit"
                   data-testid="add-general-check-item"
@@ -855,9 +889,30 @@ export default function App() {
           person={editPerson}
           busy={busy}
           onClose={() => setEditPerson(null)}
-          onSaved={(work) =>
+          onSaved={(work, input) =>
             mutate(work, "QT 신청자 정보를 수정했습니다.").then((saved) => {
-              if (saved) setEditPerson(null);
+              if (saved) {
+                const previous: PersonInput = {
+                  name: editPerson.name,
+                  cohort: editPerson.cohort ?? "",
+                  phone: editPerson.phone ?? "",
+                  personNote: editPerson.personNote ?? "",
+                };
+                recordAction({
+                  description: `${editPerson.name} 정보 수정`,
+                  undo: () =>
+                    updatePerson(editPerson.id, {
+                      ...previous,
+                      confirmDuplicate: true,
+                    }),
+                  redo: () =>
+                    updatePerson(editPerson.id, {
+                      ...input,
+                      confirmDuplicate: true,
+                    }),
+                });
+                setEditPerson(null);
+              }
               return saved;
             })
           }
@@ -928,6 +983,7 @@ function PersonRow({
   onCheckItem: () => void;
   onEdit: () => void;
 }) {
+  const headline = subscriptionHeadline(person);
   return (
     <article
       className={`person-row ${selected ? "selected" : ""} ${distributionClass(person.distributionStatus)}`}
@@ -962,13 +1018,7 @@ function PersonRow({
           )
           .join("\n")}
       >
-        <b>
-          {person.distributionTargets.length > 1
-            ? `${person.distributionTargets.length}개 구독`
-            : person.isLastIssue
-              ? "이번 호 마지막"
-              : person.subscriptionStatus}
-        </b>
+        {headline && <b>{headline}</b>}
         <small>
           {person.distributionTargets.length > 1
             ? `빠른 종료 ${person.distributionTargets[0]?.endDate}`
@@ -1114,15 +1164,6 @@ function DeleteConfirmDialog({
       </section>
     </div>
   );
-}
-
-function filterLabel(filter: string) {
-  if (filter === "remaining") return "남은 신청자";
-  if (filter === "all") return "전체 신청자";
-  if (filter === "undistributed") return "미배부 신청자";
-  if (filter === "partial") return "일부 배부 신청자";
-  if (filter === "completed") return "배부 완료 신청자";
-  return "구독 만료 신청자";
 }
 
 function distributionRank(status: string) {

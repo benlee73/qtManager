@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import type { Issue } from "./phase2";
 import {
@@ -85,7 +85,10 @@ export function EditDialog({
   person: PersonDetail;
   busy: boolean;
   onClose: () => void;
-  onSaved: (work: () => Promise<unknown>) => Promise<boolean>;
+  onSaved: (
+    work: () => Promise<unknown>,
+    input: PersonInput,
+  ) => Promise<boolean>;
 }) {
   const [candidates, setCandidates] = useState<DuplicateCandidate[]>([]);
   const [checked, setChecked] = useState(false);
@@ -99,8 +102,9 @@ export function EditDialog({
         return;
       }
     }
-    await onSaved(() =>
-      updatePerson(person.id, { ...input, confirmDuplicate: checked }),
+    await onSaved(
+      () => updatePerson(person.id, { ...input, confirmDuplicate: checked }),
+      input,
     );
   }
 
@@ -340,6 +344,14 @@ function FormDialog({
   children: ReactNode;
   onClose: () => void;
 }) {
+  useEffect(() => {
+    const closeWithEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeWithEscape);
+    return () => window.removeEventListener("keydown", closeWithEscape);
+  }, [onClose]);
+
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section

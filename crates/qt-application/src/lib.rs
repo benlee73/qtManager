@@ -23,10 +23,10 @@ pub use phase2::{
     CheckItemView, Clock, CreateCheckItemRequest, CreateDraftRequest, CreatePinnedNoteRequest,
     DeskRecord, DistributionDesk, DistributionDeskRepository, IdGenerator, PinnedNoteView,
     RecordDistributionRequest, RecordPurchaseRequest, RuntimeServices, UndoDistributionRequest,
-    UpdateCheckItemStatusRequest, UpdatePinnedNoteRequest, cancel_latest_purchase,
-    create_check_item, create_draft, create_pinned_note, delete_check_item, delete_pinned_note,
-    load_distribution_desk, record_distribution, record_purchase, save_operator,
-    undo_last_distribution, update_check_item_status, update_pinned_note,
+    UndoDistributionResult, UpdateCheckItemStatusRequest, UpdatePinnedNoteRequest,
+    cancel_latest_purchase, create_check_item, create_draft, create_pinned_note, delete_check_item,
+    delete_pinned_note, load_distribution_desk, record_distribution, record_purchase,
+    save_operator, undo_last_distribution, update_check_item_status, update_pinned_note,
 };
 pub use phase3::{
     DistributionView, DuplicateCandidate, ManagedPersonRecord, PeopleManagement,

@@ -5,6 +5,11 @@ export type Issue = {
   startMonth: number;
 };
 
+export type DistributionAllocation = {
+  subscriptionId: string;
+  quantity: number;
+};
+
 export type IssueView = Issue & {
   label: string;
 };
@@ -51,14 +56,32 @@ export async function distributePerson(
   }
 }
 
+export async function distributeAllocations(
+  issue: Issue,
+  allocations: DistributionAllocation[],
+) {
+  for (const allocation of allocations)
+    await distribute(issue, allocation.subscriptionId, allocation.quantity);
+}
+
+export async function undoDistributionAllocations(
+  issue: Issue,
+  allocations: DistributionAllocation[],
+) {
+  for (const allocation of [...allocations].reverse())
+    await undoDistribution(issue, allocation.subscriptionId);
+}
+
 export async function cancelPersonDistribution(
   issue: Issue,
   person: DeskPerson,
 ) {
+  const cancelled: DistributionAllocation[] = [];
   for (const target of person.distributionTargets) {
     if (target.distributedQuantity > 0)
-      await undoDistribution(issue, target.subscriptionId);
+      cancelled.push(await undoDistribution(issue, target.subscriptionId));
   }
+  return cancelled;
 }
 
 export type CheckItemView = {
@@ -156,7 +179,7 @@ export function distribute(
 }
 
 export function undoDistribution(issue: Issue, subscriptionId?: string) {
-  return invoke<void>("undo_distribution_command", {
+  return invoke<DistributionAllocation>("undo_distribution_command", {
     request: {
       issueYear: issue.year,
       issueMonth: issue.startMonth,

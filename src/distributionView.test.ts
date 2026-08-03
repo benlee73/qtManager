@@ -1,0 +1,113 @@
+import { describe, expect, it } from "vitest";
+
+import type { DeskPerson } from "./phase2";
+import {
+  ALL_PERSON_FILTERS,
+  DEFAULT_PERSON_FILTERS,
+  distributionAllocations,
+  filterPeople,
+  issueLabelParts,
+  subscriptionHeadline,
+} from "./distributionView";
+
+function person(
+  distributionStatus: string,
+  subscriptionStatus = "유효",
+): DeskPerson {
+  return {
+    personId: `${subscriptionStatus}-${distributionStatus}`,
+    subscriptionId: "subscription-id",
+    distributionTargets: [],
+    name: "테스트 신청자",
+    cohort: "00",
+    phone: null,
+    personStatus: "정상",
+    subscriptionStatus,
+    distributionStatus,
+    targetQuantity: 1,
+    distributedQuantity: distributionStatus === "배부 완료" ? 1 : 0,
+    remainingQuantity: distributionStatus === "배부 완료" ? 0 : 1,
+    lastIssue: null,
+    endDate: "2026-12-31",
+    isLastIssue: false,
+    hasCheckItem: false,
+    canDistribute: subscriptionStatus !== "구독 만료",
+  };
+}
+
+describe("distribution list filters", () => {
+  const people = [
+    person("미배부"),
+    person("일부 배부"),
+    person("배부 완료"),
+    person("미배부", "구독 만료"),
+  ];
+
+  it("defaults to the two remaining distribution states", () => {
+    expect(DEFAULT_PERSON_FILTERS).toEqual(["undistributed", "partial"]);
+    expect(filterPeople(people, new Set(DEFAULT_PERSON_FILTERS))).toHaveLength(
+      2,
+    );
+  });
+
+  it("combines selected categories and classifies expired people only once", () => {
+    expect(
+      filterPeople(people, new Set(["completed", "expired"])).map(
+        (candidate) => candidate.subscriptionStatus,
+      ),
+    ).toEqual(["유효", "구독 만료"]);
+    expect(filterPeople(people, new Set(ALL_PERSON_FILTERS))).toHaveLength(4);
+  });
+});
+
+describe("distribution row presentation", () => {
+  it("omits the normal valid headline but preserves exceptional states", () => {
+    expect(subscriptionHeadline(person("미배부"))).toBeNull();
+    expect(subscriptionHeadline(person("미배부", "구독 만료"))).toBe(
+      "구독 만료",
+    );
+    expect(
+      subscriptionHeadline({ ...person("미배부"), isLastIssue: true }),
+    ).toBe("이번 호 마지막");
+  });
+
+  it("splits an issue label into stable numeric slots", () => {
+    expect(issueLabelParts({ year: 2026, startMonth: 7 })).toEqual({
+      year: "2026",
+      startMonth: "7",
+      endMonth: "8",
+    });
+  });
+});
+
+describe("reversible distribution allocation", () => {
+  it("records the exact amount allocated to each subscription", () => {
+    const candidate = person("일부 배부");
+    candidate.remainingQuantity = 3;
+    candidate.distributionTargets = [
+      {
+        subscriptionId: "first",
+        startIssue: "2026년 1~2월호",
+        lastIssue: "2026년 11~12월호",
+        endDate: "2026-12-31",
+        targetQuantity: 2,
+        distributedQuantity: 1,
+        remainingQuantity: 1,
+      },
+      {
+        subscriptionId: "second",
+        startIssue: "2026년 7~8월호",
+        lastIssue: "2027년 5~6월호",
+        endDate: "2027-06-30",
+        targetQuantity: 2,
+        distributedQuantity: 0,
+        remainingQuantity: 2,
+      },
+    ];
+
+    expect(distributionAllocations(candidate, 2)).toEqual([
+      { subscriptionId: "first", quantity: 1 },
+      { subscriptionId: "second", quantity: 1 },
+    ]);
+  });
+});

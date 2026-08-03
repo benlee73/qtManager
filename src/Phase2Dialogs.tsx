@@ -1,16 +1,20 @@
 import type { ReactNode } from "react";
 
 import type { ReversibleAction } from "./actionHistory";
+import { distributionAllocations } from "./distributionView";
 import {
   type DeskPerson,
+  type DistributionAllocation,
   type Issue,
+  cancelLatestPurchase,
   cancelPersonDistribution,
   createCheckItem,
   createDraft,
   createPinnedNote,
-  distributePerson,
+  distributeAllocations,
   recordPurchase,
   setOperator,
+  undoDistributionAllocations,
   updateCheckItemStatus,
   updatePinnedNote,
 } from "./phase2";
@@ -206,15 +210,23 @@ export function Phase2DialogContent({
           onSubmit={(event) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
+            const input = {
+              buyerName: String(data.get("buyerName") ?? ""),
+              quantity: Number(data.get("quantity")),
+              note: String(data.get("note") ?? ""),
+            };
             void mutate(
-              () =>
-                recordPurchase(issue, {
-                  buyerName: String(data.get("buyerName") ?? ""),
-                  quantity: Number(data.get("quantity")),
-                  note: String(data.get("note") ?? ""),
-                }),
+              () => recordPurchase(issue, input),
               "개별 구매와 전달을 기록했습니다.",
-            );
+            ).then((saved) => {
+              if (saved) {
+                recordAction({
+                  description: "현장 개별 구매",
+                  undo: () => cancelLatestPurchase(issue),
+                  redo: () => recordPurchase(issue, input),
+                });
+              }
+            });
           }}
         >
           <p className="dialog-description">
@@ -256,12 +268,25 @@ export function Phase2DialogContent({
             className="danger-button"
             type="button"
             disabled={busy}
-            onClick={() =>
-              void mutate(
-                () => cancelPersonDistribution(issue, dialog.person),
-                `${dialog.person.name}님의 최근 배부를 취소했습니다.`,
-              )
-            }
+            onClick={() => {
+              let cancelled: DistributionAllocation[] = [];
+              void mutate(async () => {
+                cancelled = await cancelPersonDistribution(
+                  issue,
+                  dialog.person,
+                );
+              }, `${dialog.person.name}님의 최근 배부를 취소했습니다.`).then(
+                (saved) => {
+                  if (saved && cancelled.length > 0) {
+                    recordAction({
+                      description: `${dialog.person.name} 배부 취소`,
+                      undo: () => distributeAllocations(issue, cancelled),
+                      redo: () => undoDistributionAllocations(issue, cancelled),
+                    });
+                  }
+                },
+              );
+            }}
           >
             배부 취소
           </button>
@@ -275,15 +300,20 @@ export function Phase2DialogContent({
         onSubmit={(event) => {
           event.preventDefault();
           const data = new FormData(event.currentTarget);
+          const quantity = Number(data.get("quantity"));
+          const allocations = distributionAllocations(dialog.person, quantity);
           void mutate(
-            () =>
-              distributePerson(
-                issue,
-                dialog.person,
-                Number(data.get("quantity")),
-              ),
+            () => distributeAllocations(issue, allocations),
             `${dialog.person.name} · 일부 배부를 기록했습니다.`,
-          );
+          ).then((saved) => {
+            if (saved) {
+              recordAction({
+                description: `${dialog.person.name} 일부 배부`,
+                undo: () => undoDistributionAllocations(issue, allocations),
+                redo: () => distributeAllocations(issue, allocations),
+              });
+            }
+          });
         }}
       >
         <p className="dialog-description">

@@ -48,7 +48,7 @@ describe("QT Manager desktop flow", () => {
         (await textOf('[data-testid="person-row"]')).includes("1 / 2권"),
       { timeoutMsg: "1권 일부 배부가 화면에 반영되지 않았습니다." },
     );
-    await setSelect('select[aria-label="신청자 필터"]', "all");
+    await setPersonFilterPreset("전체");
 
     await browser.execute(() => {
       document
@@ -77,10 +77,14 @@ describe("QT Manager desktop flow", () => {
         (await textOf('[data-testid="person-row"]')).includes("1 / 2권"),
       { timeoutMsg: "최근 배부 되돌리기가 반영되지 않았습니다." },
     );
+    await clickButtonByText("", "마지막 동작 되돌리기");
+    await waitForText('[data-testid="person-row"]', "배부 완료");
+    await clickButtonByText("", "되돌린 동작 다시 실행");
+    await waitForText('[data-testid="person-row"]', "일부 배부");
   });
 
   it("searches by cohort and phone, blocks an expired subscription, renews it, and marks a last issue", async () => {
-    await setSelect('select[aria-label="신청자 필터"]', "all");
+    await setPersonFilterPreset("전체");
     const selected = await selectedIssue();
     const expiredStart = shiftIssue(selected, -6);
     const lastIssueStart = shiftIssue(selected, -5);
@@ -148,11 +152,17 @@ describe("QT Manager desktop flow", () => {
         (await browser.$("input[name='phone']").getValue()) === expiredPhone,
       { timeoutMsg: "신청자 수정 화면에서 전체 전화번호를 찾지 못했습니다." },
     );
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLButtonElement>(".dialog [aria-label='닫기']")
-        ?.click();
-    });
+    await browser.execute(() =>
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
+    );
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.querySelector('[data-testid="edit-person-form"]') === null,
+        ),
+      { timeoutMsg: "Escape로 신청자 수정 창이 닫히지 않았습니다." },
+    );
     await invokeTauri("renew_subscription_command", {
       request: {
         personId: expiredId,
@@ -167,6 +177,7 @@ describe("QT Manager desktop flow", () => {
     await setInput('[data-testid="people-search"]', "");
     await setInput('[data-testid="people-search"]', expiredName);
     await waitForText('[data-testid="person-row"]', "1권 배부");
+    expect(await textOf('[data-testid="person-row"]')).not.toContain("유효");
     await clickButtonByText("1권 배부");
     await waitForText('[data-testid="person-row"]', "배부 완료");
 
@@ -191,7 +202,7 @@ describe("QT Manager desktop flow", () => {
   });
 
   it("creates linked and general check items, transitions all states, and keeps pinned notes periodless", async () => {
-    await setSelect('select[aria-label="신청자 필터"]', "all");
+    await setPersonFilterPreset("전체");
     const unique = String(Date.now());
     const generalItem = `가상 일반 확인 ${unique}`;
     const linkedItem = `가상 신청자 연결 확인 ${unique}`;
@@ -380,7 +391,7 @@ describe("QT Manager desktop flow", () => {
   });
 
   it("keeps one action menu open, closes it outside, toggles selection and filters the list", async () => {
-    await setSelect('select[aria-label="신청자 필터"]', "all");
+    await setPersonFilterPreset("전체");
     await setInput('[data-testid="people-search"]', "");
     await clickButtonByText("", "기타 기능");
     expect(
@@ -456,7 +467,7 @@ describe("QT Manager desktop flow", () => {
         ?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
     });
 
-    await setSelect('select[aria-label="신청자 필터"]', "completed");
+    await setPersonFilters(["배부 완료", "구독 만료"]);
     await browser.waitUntil(
       async () =>
         browser.execute(() =>
@@ -464,7 +475,11 @@ describe("QT Manager desktop flow", () => {
             ...document.querySelectorAll<HTMLElement>(
               '[data-testid="person-row"]',
             ),
-          ].every((row) => row.textContent?.includes("배부 완료")),
+          ].every(
+            (row) =>
+              row.textContent?.includes("배부 완료") ||
+              row.textContent?.includes("구독 만료"),
+          ),
         ),
       { timeoutMsg: "배부 완료 필터가 목록에 반영되지 않았습니다." },
     );
@@ -475,10 +490,14 @@ describe("QT Manager desktop flow", () => {
           ...document.querySelectorAll<HTMLElement>(
             '[data-testid="person-row"]',
           ),
-        ].every((row) => row.textContent?.includes("배부 완료")),
+        ].every(
+          (row) =>
+            row.textContent?.includes("배부 완료") ||
+            row.textContent?.includes("구독 만료"),
+        ),
       ),
     ).toBe(true);
-    await setSelect('select[aria-label="신청자 필터"]', "remaining");
+    await setPersonFilterPreset("남은 배부");
 
     const sortLabelBefore = await browser.execute(
       () =>
@@ -522,6 +541,11 @@ describe("QT Manager desktop flow", () => {
         .getPropertyValue("--scroll-thumb")
         .trim(),
     );
+    const darkScrollbarStyle = await browser.execute(
+      () =>
+        getComputedStyle(document.querySelector<HTMLElement>(".person-list")!)
+          .scrollbarColor,
+    );
     expect(await textOf(".info-tooltip [role='tooltip']")).toContain(
       "2026 교육국 제작",
     );
@@ -530,6 +554,49 @@ describe("QT Manager desktop flow", () => {
         () => document.querySelector("img.book-logo") !== null,
       ),
     ).toBe(true);
+    const brand = await browser.execute(() => {
+      const operator = document.querySelector(".rail-operator")!;
+      const info = document.querySelector(".rail-info")!;
+      return {
+        wordmark:
+          document.querySelector(".rail-wordmark")?.textContent?.trim() ?? "",
+        infoAfterOperator: Boolean(
+          operator.compareDocumentPosition(info) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+        ),
+        logoClip: getComputedStyle(
+          document.querySelector<HTMLElement>(".book-logo")!,
+        ).clipPath,
+      };
+    });
+    expect(brand.wordmark).toBe("QTManager");
+    expect(brand.infoAfterOperator).toBe(true);
+    expect(brand.logoClip).not.toBe("none");
+
+    const issueBefore = await issuePickerGeometry();
+    await clickButtonByText("", "다음 호");
+    await browser.waitUntil(
+      async () => (await selectedIssue()).startMonth !== issueBefore.startMonth,
+      { timeoutMsg: "다음 호로 이동하지 않았습니다." },
+    );
+    const issueAfter = await issuePickerGeometry();
+    expect(
+      Math.abs(issueAfter.yearSuffixLeft - issueBefore.yearSuffixLeft),
+    ).toBeLessThan(1);
+    expect(
+      Math.abs(issueAfter.monthSuffixLeft - issueBefore.monthSuffixLeft),
+    ).toBeLessThan(1);
+    expect(
+      Math.abs(issueAfter.headingCenter - issueAfter.arrowsCenter),
+    ).toBeLessThan(1);
+    await clickButtonByText("", "이전 호");
+
+    const compactPanels = await panelWidths();
+    await browser.setWindowSize(2400, 1440);
+    const widePanels = await panelWidths();
+    expect(widePanels.people).toBeGreaterThan(compactPanels.people);
+    expect(widePanels.notes).toBeGreaterThan(compactPanels.notes);
+    await browser.setWindowSize(2000, 1440);
     mkdirSync("test-results", { recursive: true });
     await browser.saveScreenshot("test-results/ui-dark.png");
     await browser.execute(() => {
@@ -546,6 +613,19 @@ describe("QT Manager desktop flow", () => {
         .trim(),
     );
     expect(lightScrollbar).not.toBe(darkScrollbar);
+    const lightScrollbarStyle = await browser.execute(
+      () =>
+        getComputedStyle(document.querySelector<HTMLElement>(".person-list")!)
+          .scrollbarColor,
+    );
+    expect(lightScrollbarStyle).not.toBe(darkScrollbarStyle);
+    expect(
+      await browser.execute(
+        () =>
+          getComputedStyle(document.querySelector<HTMLElement>(".book-logo")!)
+            .clipPath,
+      ),
+    ).toBe("none");
     await setInput('[data-testid="people-search"]', "일치하지않는가상검색");
     await waitForText(
       '[data-testid="empty-list"]',
@@ -1065,9 +1145,48 @@ async function refreshApp(timeoutMsg: string) {
 
 async function selectedIssue() {
   const label = await textOf('[data-testid="selected-issue"]');
-  const match = label.match(/(\d{4})년\s+(\d{1,2})~/);
+  const match = label.match(/(\d{4})년\s*(\d{1,2})~/);
   if (!match) throw new Error(`선택 호를 해석하지 못했습니다: ${label}`);
   return { year: Number(match[1]), startMonth: Number(match[2]) };
+}
+
+async function issuePickerGeometry() {
+  const issue = await selectedIssue();
+  return browser.execute((startMonth) => {
+    const heading = document
+      .querySelector<HTMLElement>(".issue-picker h1")!
+      .getBoundingClientRect();
+    const buttons = [
+      ...document.querySelectorAll<HTMLElement>(".issue-picker button"),
+    ].map((button) => button.getBoundingClientRect());
+    return {
+      startMonth,
+      yearSuffixLeft: document
+        .querySelector<HTMLElement>(".issue-year-suffix")!
+        .getBoundingClientRect().left,
+      monthSuffixLeft: document
+        .querySelector<HTMLElement>(".issue-month-suffix")!
+        .getBoundingClientRect().left,
+      headingCenter: heading.left + heading.width / 2,
+      arrowsCenter:
+        (buttons[0].left +
+          buttons[0].width / 2 +
+          buttons[1].left +
+          buttons[1].width / 2) /
+        2,
+    };
+  }, issue.startMonth);
+}
+
+async function panelWidths() {
+  return browser.execute(() => ({
+    people: document
+      .querySelector<HTMLElement>(".distribution-table")!
+      .getBoundingClientRect().width,
+    notes: document
+      .querySelector<HTMLElement>(".notes-panel")!
+      .getBoundingClientRect().width,
+  }));
 }
 
 function shiftIssue(
@@ -1118,6 +1237,59 @@ async function setSelect(selector: string, value: string) {
     },
     selector,
     value,
+  );
+}
+
+async function setPersonFilterPreset(label: "남은 배부" | "전체") {
+  await openPersonFilter();
+  await browser.execute((expected) => {
+    const button = [
+      ...document.querySelectorAll<HTMLButtonElement>(".filter-presets button"),
+    ].find((candidate) => candidate.textContent?.trim() === expected);
+    if (!button)
+      throw new Error(`필터 빠른 선택을 찾지 못했습니다: ${expected}`);
+    button.click();
+  }, label);
+  await closePersonFilter();
+}
+
+async function setPersonFilters(labels: string[]) {
+  await openPersonFilter();
+  await browser.execute((selectedLabels) => {
+    for (const label of document.querySelectorAll<HTMLLabelElement>(
+      ".filter-popover > label",
+    )) {
+      const input = label.querySelector<HTMLInputElement>("input");
+      const shouldCheck = selectedLabels.includes(
+        label.textContent?.trim() ?? "",
+      );
+      if (input && input.checked !== shouldCheck) input.click();
+    }
+  }, labels);
+  await closePersonFilter();
+}
+
+async function openPersonFilter() {
+  await browser.execute(() => {
+    const trigger =
+      document.querySelector<HTMLButtonElement>(".filter-trigger");
+    if (trigger?.getAttribute("aria-expanded") !== "true") trigger?.click();
+  });
+  await browser.waitUntil(
+    async () =>
+      browser.execute(() => document.querySelector(".filter-popover") !== null),
+    { timeoutMsg: "신청자 필터가 열리지 않았습니다." },
+  );
+}
+
+async function closePersonFilter() {
+  await browser.execute(() =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
+  );
+  await browser.waitUntil(
+    async () =>
+      browser.execute(() => document.querySelector(".filter-popover") === null),
+    { timeoutMsg: "신청자 필터가 닫히지 않았습니다." },
   );
 }
 

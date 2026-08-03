@@ -3,13 +3,16 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { EditDialog, RegisterDialog, RenewDialog } from "./Phase3Dialogs";
 import { ApplicationImportDialog } from "./ApplicationImportDialog";
 import { HandoverDialog } from "./HandoverDialog";
+import type { ReversibleAction } from "./actionHistory";
 import type { Issue } from "./phase2";
 import {
   type PeopleManagement,
   type PersonDetail,
+  type PersonInput,
   loadManagement,
   loadPersonDetail,
   setPersonArchived,
+  updatePerson,
 } from "./phase3";
 
 type ManagementDialog =
@@ -23,9 +26,11 @@ type ManagementDialog =
 export function ManagementScreen({
   issue,
   notify,
+  recordAction,
 }: {
   issue: Issue;
   notify: (message: string, kind?: "success" | "error") => void;
+  recordAction: (action: ReversibleAction) => void;
 }) {
   const [query, setQuery] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
@@ -319,7 +324,32 @@ export function ManagementScreen({
           person={dialog.person}
           busy={busy}
           onClose={() => setDialog(null)}
-          onSaved={(work) => mutate(work, "QT 신청자 정보를 수정했습니다.")}
+          onSaved={(work, input) =>
+            mutate(work, "QT 신청자 정보를 수정했습니다.").then((saved) => {
+              if (saved) {
+                const previous: PersonInput = {
+                  name: dialog.person.name,
+                  cohort: dialog.person.cohort ?? "",
+                  phone: dialog.person.phone ?? "",
+                  personNote: dialog.person.personNote ?? "",
+                };
+                recordAction({
+                  description: `${dialog.person.name} 정보 수정`,
+                  undo: () =>
+                    updatePerson(dialog.person.id, {
+                      ...previous,
+                      confirmDuplicate: true,
+                    }),
+                  redo: () =>
+                    updatePerson(dialog.person.id, {
+                      ...input,
+                      confirmDuplicate: true,
+                    }),
+                });
+              }
+              return saved;
+            })
+          }
         />
       )}
       {dialog?.type === "renew" && (

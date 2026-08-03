@@ -32,12 +32,11 @@ export function AppNavigation({
     <nav className="app-navigation" aria-label="주요 메뉴">
       <div className="rail-brand">
         <BookLogo />
-        <span className="info-tooltip">
-          <button type="button" aria-label="제작 정보">
-            i
-          </button>
-          <span role="tooltip">2026 교육국 제작</span>
-        </span>
+        <b className="rail-wordmark" aria-label="QT Manager">
+          QT
+          <br />
+          Manager
+        </b>
       </div>
 
       <div className="rail-primary">
@@ -88,6 +87,12 @@ export function AppNavigation({
           <b>{operator ?? "담당자 설정"}</b>
           <small>담당자</small>
         </button>
+        <span className="info-tooltip rail-info">
+          <button type="button" aria-label="제작 정보">
+            i
+          </button>
+          <span role="tooltip">2026 교육국 제작</span>
+        </span>
       </div>
     </nav>
   );

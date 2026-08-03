@@ -201,6 +201,13 @@ pub struct UndoDistributionRequest {
     pub subscription_id: Option<String>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UndoDistributionResult {
+    pub subscription_id: String,
+    pub quantity: u32,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateDraftRequest {
@@ -519,7 +526,7 @@ pub fn undo_last_distribution<R, C, I>(
     repository: &mut R,
     services: &RuntimeServices<'_, C, I>,
     request: UndoDistributionRequest,
-) -> Result<(), ApplicationError>
+) -> Result<UndoDistributionResult, ApplicationError>
 where
     R: DistributionDeskRepository,
     C: Clock,
@@ -534,6 +541,10 @@ where
     }
     .ok_or(ApplicationError::NothingToUndo)?;
     let now = services.clock.now();
+    let result = UndoDistributionResult {
+        subscription_id: original.subscription_id.clone(),
+        quantity: original.quantity,
+    };
     let reversal = Distribution {
         id: services.ids.next_id(),
         subscription_id: original.subscription_id,
@@ -555,7 +566,7 @@ where
         &format!("{}권 배부 되돌리기", reversal.quantity),
     );
     repository.save_distribution(&reversal, &change)?;
-    Ok(())
+    Ok(result)
 }
 
 pub fn save_operator<R: DistributionDeskRepository, C: Clock>(
@@ -1442,7 +1453,7 @@ mod tests {
         .unwrap();
         assert_eq!(complete.people[0].distribution_status, "배부 완료");
 
-        undo_last_distribution(
+        let undone = undo_last_distribution(
             &mut repository,
             &services,
             UndoDistributionRequest {
@@ -1452,6 +1463,8 @@ mod tests {
             },
         )
         .unwrap();
+        assert_eq!(undone.subscription_id, "subscription-1");
+        assert_eq!(undone.quantity, 1);
         let partial = load_distribution_desk(
             &mut repository,
             &FixedClock,

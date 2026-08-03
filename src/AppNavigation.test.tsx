@@ -30,6 +30,11 @@ describe("AppNavigation", () => {
     expect(markup).toContain("다크 테마 사용 중");
     expect(markup).toContain("교육국 담당자");
     expect(markup).toContain("2026 교육국 제작");
+    expect(markup).toContain('class="rail-wordmark"');
+    expect(markup).toContain("QT<br/>Manager");
+    expect(markup.indexOf("교육국 담당자")).toBeLessThan(
+      markup.indexOf("2026 교육국 제작"),
+    );
   });
 
   it("moves the current-page marker to management", () => {

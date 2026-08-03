@@ -7,7 +7,7 @@ use qt_application::{
     MergePersonResolution, PeopleManagement, PersonDetail, Phase0Report, Phase1Report,
     PreviewApplicationsRequest, RecordDistributionRequest, RecordPurchaseRequest,
     RegisterPersonRequest, RenewSubscriptionRequest, RestorePointView, RunPhase0Probe,
-    RunPhase1Probe, RuntimeServices, StateCounts, UndoDistributionRequest,
+    RunPhase1Probe, RuntimeServices, StateCounts, UndoDistributionRequest, UndoDistributionResult,
     UpdateCheckItemStatusRequest, UpdatePersonRequest, UpdatePinnedNoteRequest, apply_state_import,
     cancel_latest_purchase, create_check_item, create_draft, create_pinned_note, delete_check_item,
     delete_pinned_note, export_state, import_applications, load_distribution_desk,
@@ -253,7 +253,7 @@ fn record_distribution_command(
 fn undo_distribution_command(
     app: tauri::AppHandle,
     request: UndoDistributionRequest,
-) -> Result<(), String> {
+) -> Result<UndoDistributionResult, String> {
     let mut repository = open_operational_repository(&app)?;
     let runtime = SystemRuntime;
     let logger = event_logger(&app);
