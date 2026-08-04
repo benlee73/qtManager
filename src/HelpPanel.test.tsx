@@ -26,5 +26,7 @@ describe("HelpPanel", () => {
     expect(markup).toContain("신청자 메모");
     expect(markup).toContain("신청자 관리 목록에서는 숨기고");
     expect(markup).toContain("상세 또는 정보 수정 화면에서 전체 전화번호");
+    expect(markup).toContain("신청자 관리 상단에는 제목 하나만 표시됩니다.");
+    expect(markup).toContain("긴 신청자 목록은 왼쪽 목록 안에서");
   });
 });

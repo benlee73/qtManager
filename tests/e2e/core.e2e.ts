@@ -990,7 +990,7 @@ describe("QT Manager desktop flow", () => {
             ?.getAttribute("aria-current") ?? null,
       ),
     ).toBe("page");
-    await waitForText("h2", "신청자 정보와 전체 이력");
+    await waitForText("h2", "신청자 관리");
     await setInput('[data-testid="management-search"]', detailPrefix);
     await browser.waitUntil(
       async () =>
@@ -1172,6 +1172,10 @@ describe("QT Manager desktop flow", () => {
       documentStayedStill: true,
       documentFits: true,
       panelOverflow: ["auto", "auto"],
+      listPanelMinHeight: "0px",
+      detailPanelMinHeight: "0px",
+      listScrollbarGutter: "stable",
+      detailScrollbarGutter: "stable",
     });
 
     await browser.setWindowSize(2200, 1440);
@@ -1186,7 +1190,28 @@ describe("QT Manager desktop flow", () => {
       documentStayedStill: true,
       documentFits: true,
       panelOverflow: ["auto", "auto"],
+      listPanelMinHeight: "0px",
+      detailPanelMinHeight: "0px",
+      listScrollbarGutter: "stable",
+      detailScrollbarGutter: "stable",
     });
+
+    expect(
+      await browser.execute(() => {
+        const cohort = document.querySelector<HTMLElement>(
+          '[data-testid="person-cohort"]',
+        )!;
+        const name = document.querySelector<HTMLElement>(
+          '[data-testid="person-name"]',
+        )!;
+        const cohortRect = cohort.getBoundingClientRect();
+        const nameRect = name.getBoundingClientRect();
+        return {
+          nameIsBesideCohort: nameRect.left > cohortRect.right,
+          identityLineDelta: Math.abs(nameRect.top - cohortRect.top),
+        };
+      }),
+    ).toEqual({ nameIsBesideCohort: true, identityLineDelta: 0 });
 
     const expectedCaptureContract = {
       fontsStatus: "loaded",
@@ -1406,7 +1431,7 @@ describe("QT Manager desktop flow", () => {
         .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
         ?.click();
     });
-    await waitForText("h2", "신청자 정보와 전체 이력");
+    await waitForText("h2", "신청자 관리");
     await browser.execute(() => {
       document
         .querySelector<HTMLButtonElement>(
@@ -1486,7 +1511,7 @@ describe("QT Manager desktop flow", () => {
         .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
         ?.click();
     });
-    await waitForText("h2", "신청자 정보와 전체 이력");
+    await waitForText("h2", "신청자 관리");
     await browser.execute(() => {
       document
         .querySelector<HTMLButtonElement>('[data-testid="open-handover"]')
@@ -1989,6 +2014,12 @@ async function managementScrollContract() {
         getComputedStyle(list).overflowY,
         getComputedStyle(detail).overflowY,
       ],
+      listPanelMinHeight: getComputedStyle(
+        list.closest<HTMLElement>(".management-list-panel")!,
+      ).minHeight,
+      detailPanelMinHeight: getComputedStyle(detail).minHeight,
+      listScrollbarGutter: getComputedStyle(list).scrollbarGutter,
+      detailScrollbarGutter: getComputedStyle(detail).scrollbarGutter,
     };
   });
 }
@@ -2012,7 +2043,7 @@ async function prepareManagementCapture(
       .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
       ?.click();
   });
-  await waitForText("h2", "신청자 정보와 전체 이력");
+  await waitForText("h2", "신청자 관리");
   await setInput('[data-testid="management-search"]', query);
   await browser.waitUntil(
     async () =>

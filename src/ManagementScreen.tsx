@@ -93,8 +93,7 @@ export function ManagementScreen({
     <main className="app-shell management-shell">
       <section className="management-heading">
         <div>
-          <p className="section-label">신청과 구독</p>
-          <h2>신청자 정보와 전체 이력</h2>
+          <h2>신청자 관리</h2>
           <p>과거 구독과 배부 기록을 보존하면서 정보를 보완하고 갱신합니다.</p>
         </div>
         <div className="heading-actions">

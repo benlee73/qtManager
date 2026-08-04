@@ -145,6 +145,25 @@ describe("PersonDetailPanel", () => {
     expect(markup).toContain('checked=""');
   });
 
+  it("keeps the cohort badge and applicant name on the same identity line", () => {
+    const markup = renderToStaticMarkup(
+      <PersonDetailPanel
+        detail={detail}
+        busy={false}
+        onEdit={vi.fn()}
+        onRenew={vi.fn()}
+        onToggleArchived={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain('data-testid="person-identity"');
+    expect(markup).toContain('data-testid="person-cohort"');
+    expect(markup).toContain('data-testid="person-name"');
+    expect(markup).toMatch(
+      /data-testid="person-cohort"[\s\S]*data-testid="person-name"/,
+    );
+  });
+
   it("distinguishes every subscription period with text and exposes distribution columns", () => {
     const markup = renderToStaticMarkup(
       <PersonDetailPanel
@@ -194,6 +213,9 @@ describe("ManagementScreen heading actions", () => {
     expect(markup).toContain("Google 응답 붙여넣기");
     expect(markup).toContain("+ 신청자 등록");
     expect(markup).not.toContain("+ QT 신청자 정식 등록");
+    expect(markup).toContain("<h2>신청자 관리</h2>");
+    expect(markup).not.toContain("신청과 구독");
+    expect(markup).not.toContain("신청자 정보와 전체 이력");
   });
 });
 

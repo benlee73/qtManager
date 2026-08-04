@@ -94,10 +94,14 @@ export function PersonDetailPanel({
   return (
     <div className="person-detail-panel" data-testid="person-detail">
       <div className="detail-heading">
-        <div className="identity large">
-          <span className="cohort">{detail.cohort ?? "--"}</span>
+        <div className="identity large" data-testid="person-identity">
+          <span className="cohort" data-testid="person-cohort">
+            {detail.cohort ?? "--"}
+          </span>
           <div>
-            <h2 title={detail.name}>{detail.name}</h2>
+            <h2 data-testid="person-name" title={detail.name}>
+              {detail.name}
+            </h2>
             <p title={detail.phone || "연락처 없음"}>
               {detail.phone || "연락처 없음"} · {detail.status}
             </p>
