@@ -556,6 +556,59 @@ describe("QT Manager desktop flow", () => {
         ?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
     });
 
+    await browser.execute(() => {
+      const rows = [
+        ...document.querySelectorAll<HTMLElement>('[data-testid="person-row"]'),
+      ];
+      const first = rows[0];
+      if (!first) throw new Error("선택 상태 검증용 신청자 행이 없습니다.");
+      first.click();
+      first.focus();
+      first.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+    });
+    await waitForText(".menu-popover", "확인할 일 추가");
+    await browser.execute(() =>
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
+    );
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(
+          () => document.querySelectorAll(".menu-popover").length,
+        )) === 0,
+      { timeoutMsg: "Escape로 신청자 메뉴가 닫히지 않았습니다." },
+    );
+    expect(
+      await browser.execute(
+        () =>
+          document.activeElement?.closest<HTMLElement>(
+            '[data-testid="person-row"]',
+          ) === null,
+      ),
+    ).toBe(true);
+    await browser.execute(() =>
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" })),
+    );
+    expect(
+      await browser.execute(() => {
+        const rows = [
+          ...document.querySelectorAll<HTMLElement>(
+            '[data-testid="person-row"]',
+          ),
+        ];
+        const selected = rows.findIndex((row) =>
+          row.classList.contains("selected"),
+        );
+        const focused = rows.findIndex((row) => row === document.activeElement);
+        return {
+          selectedCount: rows.filter((row) =>
+            row.classList.contains("selected"),
+          ).length,
+          selected,
+          focused,
+        };
+      }),
+    ).toEqual({ selectedCount: 1, selected: 1, focused: 1 });
+
     await setPersonFilters(["배부 완료", "구독 만료"]);
     await browser.waitUntil(
       async () =>
@@ -1668,7 +1721,17 @@ describe("QT Manager desktop flow", () => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }));
     });
     await waitForText("#help-title", "QT Manager 도움말");
-    await clickButtonByText("", "도움말 닫기");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLElement>('[data-testid="help-backdrop"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(() => document.querySelector("#help-title"))) ===
+        null,
+      { timeoutMsg: "도움말 바깥 영역 클릭으로 닫히지 않았습니다." },
+    );
     await clickButtonByText("현장 배부");
     await waitForText('[data-testid="selected-issue"]', "월호");
     expect(

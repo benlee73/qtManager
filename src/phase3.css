@@ -23,6 +23,22 @@
   padding: 14px 18px 10px;
 }
 
+.management-heading-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.management-heading-help {
+  margin-top: 1px;
+}
+
+.management-heading-help > span,
+.person-note-help > span {
+  max-width: min(24rem, calc(100vw - 2rem));
+  white-space: normal;
+}
+
 .management-heading h2 {
   margin-bottom: 0.35rem;
   font-size: 20px;
@@ -228,16 +244,6 @@
 
 .person-note {
   margin-top: 1.2rem;
-  padding: 0.75rem 0.9rem;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--note-line);
-  border-radius: 0.55rem;
-  background: var(--panel-high);
-}
-
-.person-note.empty {
-  border-left-color: var(--line);
-  background: transparent;
 }
 
 .person-note-heading {
@@ -277,17 +283,9 @@
 .person-note-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 0.75rem;
   min-width: 0;
-}
-
-.person-note p {
-  min-width: 0;
-  margin: 0.35rem 0 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .person-note-actions .quiet-button {
@@ -373,11 +371,6 @@
 
 .management-edit-dialog .submit {
   margin-top: 0.7rem;
-}
-
-/* Keep the empty note quieter than an active operational warning. */
-.person-note.empty .person-note-actions p {
-  color: var(--faint);
 }
 
 .detail-section {

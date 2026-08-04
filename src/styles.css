@@ -143,6 +143,10 @@ summary:focus-visible {
   outline-offset: -1px;
 }
 
+.person-row.selected:focus-visible {
+  outline: none;
+}
+
 input::placeholder,
 textarea::placeholder {
   color: var(--placeholder);

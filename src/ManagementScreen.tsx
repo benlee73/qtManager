@@ -93,8 +93,20 @@ export function ManagementScreen({
     <main className="app-shell management-shell">
       <section className="management-heading">
         <div>
-          <h2>신청자 관리</h2>
-          <p>과거 구독과 배부 기록을 보존하면서 정보를 보완하고 갱신합니다.</p>
+          <div className="management-heading-title">
+            <h2>신청자 관리</h2>
+            <span
+              className="info-tooltip management-heading-help"
+              data-testid="management-heading-help"
+            >
+              <button type="button" aria-label="신청자 관리 안내">
+                i
+              </button>
+              <span role="tooltip">
+                과거 구독과 배부 기록을 보존하면서 정보를 보완하고 갱신합니다.
+              </span>
+            </span>
+          </div>
         </div>
         <div className="heading-actions">
           <button

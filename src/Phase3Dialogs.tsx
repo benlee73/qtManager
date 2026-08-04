@@ -53,7 +53,7 @@ export function RegisterDialog({
   }
 
   return (
-    <FormDialog title="QT 신청자 정식 등록" onClose={onClose}>
+    <FormDialog title="QT 신청자 등록" onClose={onClose}>
       <form
         data-testid="register-person-form"
         onSubmit={(event) => {
@@ -128,7 +128,7 @@ export function EditDialog({
       >
         {person.status === "정보 보완 필요" && (
           <p className="dialog-description">
-            저장하면 간이 등록 상태가 정식 등록으로 바뀝니다.
+            저장하면 간이 등록 상태가 해제되고 입력한 정보가 반영됩니다.
           </p>
         )}
         <LinkedCheckItems items={checkItems} />

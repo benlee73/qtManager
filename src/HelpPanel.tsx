@@ -130,7 +130,14 @@ export function HelpPanel({
   }
 
   return (
-    <div className="modal-backdrop help-backdrop" role="presentation">
+    <div
+      className="modal-backdrop help-backdrop"
+      data-testid="help-backdrop"
+      role="presentation"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <section
         className="help-panel"
         role="dialog"
@@ -304,7 +311,8 @@ export function HelpPanel({
                 <HelpCard title="등록과 갱신">
                   <HelpList>
                     <li>
-                      신청자 관리에서 이름·또래·연락처를 입력해 정식 등록합니다.
+                      신청자 관리에서 이름·또래·연락처를 입력해 신청자를
+                      등록합니다.
                     </li>
                     <li>
                       현장 간이 등록자는 나중에 ‘정보 수정’으로 보완합니다.

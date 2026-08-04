@@ -29,7 +29,9 @@ export function ManagementPersonList({
         const periodSummary = person.latestLastIssue
           ? `${person.latestLastIssue}까지`
           : "구독 종료 호 정보 없음";
-        const contextSummary = `${person.status} · 구독 ${person.subscriptionCount}건 · ${periodSummary}`;
+        const statusSummary =
+          person.status === "정식 등록" ? "" : `${person.status} · `;
+        const contextSummary = `${statusSummary}구독 ${person.subscriptionCount}건 · ${periodSummary}`;
         const accessibleLabel = `${person.cohort ?? "또래 정보 없음"} ${person.name} · ${contextSummary}`;
         const statusMarker =
           person.status === "정보 보완 필요"
@@ -138,7 +140,8 @@ function PersonDetailContent({
               {detail.name}
             </h2>
             <p title={detail.phone || "연락처 없음"}>
-              {detail.phone || "연락처 없음"} · {detail.status}
+              {detail.phone || "연락처 없음"}
+              {detail.status !== "정식 등록" && ` · ${detail.status}`}
             </p>
           </div>
         </div>
@@ -163,13 +166,20 @@ function PersonDetailContent({
         </div>
       </div>
 
-      <div
-        className={`person-note ${detail.personNote ? "has-content" : "empty"}`}
-        data-testid="person-note"
-      >
+      <div className="person-note" data-testid="person-note">
         <div className="person-note-heading">
           <strong>신청자 메모</strong>
-          <span>{detail.personNote ? "지속 참고" : "아직 없음"}</span>
+          <span
+            className="info-tooltip person-note-help"
+            data-testid="person-note-help"
+          >
+            <button type="button" aria-label="신청자 메모 안내">
+              i
+            </button>
+            <span role="tooltip">
+              필요할 때 이 사람에게만 적용되는 내용을 적습니다.
+            </span>
+          </span>
         </div>
         <textarea
           data-testid="person-note-input"
@@ -180,9 +190,6 @@ function PersonDetailContent({
           aria-label="신청자 메모"
         />
         <div className="person-note-actions">
-          {!detail.personNote && (
-            <p>필요할 때 이 사람에게만 적용되는 내용을 적습니다.</p>
-          )}
           <button
             className="quiet-button"
             data-testid="save-person-note"
@@ -245,9 +252,6 @@ function PersonDetailContent({
               </article>
             );
           })}
-          {detail.checkItems.length === 0 && (
-            <p>연결된 확인할 일이 없습니다.</p>
-          )}
         </div>
       </DetailSection>
 

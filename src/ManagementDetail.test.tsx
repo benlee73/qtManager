@@ -120,8 +120,9 @@ describe("ManagementPersonList", () => {
     expect(markup).not.toContain('data-testid="management-person-meta"');
     expect(markup).not.toContain('data-testid="management-person-period"');
     expect(markup).toContain(
-      'aria-label="00 가상 신청자 · 정식 등록 · 구독 2건 · 2027년 3~4월호까지"',
+      'aria-label="00 가상 신청자 · 구독 2건 · 2027년 3~4월호까지"',
     );
+    expect(markup).not.toContain("정식 등록");
     expect(markup).toContain('data-testid="management-person-status-marker"');
     expect(markup).toContain('aria-label="정보 보완 필요"');
     expect(markup).toContain('aria-pressed="true"');
@@ -129,7 +130,7 @@ describe("ManagementPersonList", () => {
 });
 
 describe("PersonDetailPanel", () => {
-  it("shows the complete phone, empty note guidance, and linked check states", () => {
+  it("shows the complete phone, note tooltip, and linked check states", () => {
     const markup = renderToStaticMarkup(
       <PersonDetailPanel
         detail={detail}
@@ -143,10 +144,13 @@ describe("PersonDetailPanel", () => {
     );
 
     expect(markup).toContain("010-0000-0000");
+    expect(markup).not.toContain("정식 등록");
     expect(markup).toContain('data-testid="person-note"');
-    expect(markup).toContain(
-      "필요할 때 이 사람에게만 적용되는 내용을 적습니다.",
+    expect(markup).toContain('data-testid="person-note-help"');
+    expect(markup).toMatch(
+      /data-testid="person-note-help"[\s\S]*role="tooltip"[\s\S]*필요할 때 이 사람에게만 적용되는 내용을 적습니다\./,
     );
+    expect(markup).not.toContain("아직 없음");
     expect(markup).toContain('data-testid="linked-check-items"');
     expect(markup).toContain("다음 배부 때 수량 확인");
     expect(markup).toContain("연락처 확인 완료");
@@ -154,6 +158,23 @@ describe("PersonDetailPanel", () => {
     expect(markup).toContain('checked=""');
     expect(markup).toContain('data-testid="person-note-input"');
     expect(markup).toContain('data-testid="person-check-item-form"');
+  });
+
+  it("does not add an empty-state sentence to the linked check section", () => {
+    const markup = renderToStaticMarkup(
+      <PersonDetailPanel
+        detail={{ ...detail, checkItems: [] }}
+        busy={false}
+        onEdit={vi.fn()}
+        onRenew={vi.fn()}
+        onToggleArchived={vi.fn()}
+        onSavePersonNote={vi.fn(async () => true)}
+        onCreateCheckItem={vi.fn(async () => true)}
+      />,
+    );
+
+    expect(markup).not.toContain("연결된 확인할 일이 없습니다.");
+    expect(markup).not.toContain('class="person-note empty"');
   });
 
   it("keeps the cohort badge and applicant name on the same identity line", () => {
@@ -233,6 +254,13 @@ describe("ManagementScreen heading actions", () => {
     expect(markup).toContain("Google 응답 붙여넣기");
     expect(markup).toContain("+ 신청자 등록");
     expect(markup).not.toContain("+ QT 신청자 정식 등록");
+    expect(markup).toContain('data-testid="management-heading-help"');
+    expect(markup).toMatch(
+      /data-testid="management-heading-help"[\s\S]*role="tooltip"[\s\S]*과거 구독과 배부 기록을 보존하면서 정보를 보완하고 갱신합니다\./,
+    );
+    expect(markup).not.toContain(
+      "과거 구독과 배부 기록을 보존하면서 정보를 보완하고 갱신합니다.</p>",
+    );
     expect(markup).toContain("<h2>신청자 관리</h2>");
     expect(markup).not.toContain("신청과 구독");
     expect(markup).not.toContain("신청자 정보와 전체 이력");

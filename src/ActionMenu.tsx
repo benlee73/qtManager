@@ -24,7 +24,12 @@ export function ActionMenu({
       if (!rootRef.current?.contains(event.target as Node)) onOpenMenu(null);
     };
     const closeWithEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onOpenMenu(null);
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onOpenMenu(null);
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
     };
     window.addEventListener("pointerdown", closeOutside);
     window.addEventListener("keydown", closeWithEscape);

@@ -81,6 +81,7 @@ export default function App() {
   const [redoStack, setRedoStack] = useState<ReversibleAction[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
   const quickItemRef = useRef<HTMLTextAreaElement>(null);
+  const personRowRefs = useRef(new Map<string, HTMLElement>());
   const { notifications, notify, dismiss } = useNotifications();
 
   useEffect(() => {
@@ -282,7 +283,13 @@ export default function App() {
           event.key === "ArrowDown"
             ? Math.min(current + 1, Math.max(visiblePeople.length - 1, 0))
             : Math.max(current < 0 ? 0 : current - 1, 0);
-        setSelectedPersonId(visiblePeople[next]?.personId ?? null);
+        const nextPersonId = visiblePeople[next]?.personId ?? null;
+        setSelectedPersonId(nextPersonId);
+        if (nextPersonId) {
+          personRowRefs.current.get(nextPersonId)?.focus();
+        } else if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
       }
     }
     window.addEventListener("keydown", handleKeydown);
@@ -586,6 +593,11 @@ export default function App() {
                     })
                   }
                   onEdit={() => void openPersonEdit(person.personId)}
+                  rowRef={(element) => {
+                    if (element)
+                      personRowRefs.current.set(person.personId, element);
+                    else personRowRefs.current.delete(person.personId);
+                  }}
                 />
               ))}
               {desk && visiblePeople.length === 0 && (
@@ -973,6 +985,7 @@ export function PersonRow({
   onPartial,
   onCheckItem,
   onEdit,
+  rowRef,
 }: {
   person: DeskPerson;
   selected: boolean;
@@ -985,10 +998,12 @@ export function PersonRow({
   onPartial: () => void;
   onCheckItem: () => void;
   onEdit: () => void;
+  rowRef?: (element: HTMLElement | null) => void;
 }) {
   const headline = subscriptionHeadline(person);
   return (
     <article
+      ref={rowRef}
       className={`person-row ${selected ? "selected" : ""} ${distributionClass(person.distributionStatus)}`}
       role="option"
       aria-label={`${person.cohort ?? "또래 없음"} ${person.name}, ${person.phone ?? "연락처 없음"}, ${person.subscriptionStatus}, ${person.distributionStatus}`}
