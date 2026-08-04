@@ -106,7 +106,7 @@ const detail: PersonDetail = {
 };
 
 describe("ManagementPersonList", () => {
-  it("keeps phone text out of three-line rows while preserving useful metadata", () => {
+  it("keeps rows focused on cohort and name while preserving context accessibly", () => {
     const markup = renderToStaticMarkup(
       <ManagementPersonList
         people={people}
@@ -117,8 +117,13 @@ describe("ManagementPersonList", () => {
 
     expect(markup).not.toContain("010-0000-0000");
     expect(markup).toContain('data-testid="management-person-primary"');
-    expect(markup).toContain('data-testid="management-person-meta"');
-    expect(markup).toContain("정식 등록 · 구독 2건");
+    expect(markup).not.toContain('data-testid="management-person-meta"');
+    expect(markup).not.toContain('data-testid="management-person-period"');
+    expect(markup).toContain(
+      'aria-label="00 가상 신청자 · 정식 등록 · 구독 2건 · 2027년 3~4월호까지"',
+    );
+    expect(markup).toContain('data-testid="management-person-status-marker"');
+    expect(markup).toContain('aria-label="정보 보완 필요"');
     expect(markup).toContain('aria-pressed="true"');
   });
 });

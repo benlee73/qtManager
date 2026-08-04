@@ -1072,6 +1072,14 @@ describe("QT Manager desktop flow", () => {
           rowHeights: rowRects.map((row) => Math.round(row.height)),
           maxRowHeight,
           unusedListHeight: listRect.bottom - lastRowBottom,
+          listHasVisibleMetadata: rows.some((row) =>
+            row.querySelector(
+              '[data-testid="management-person-meta"], [data-testid="management-person-period"]',
+            ),
+          ),
+          listRowsHaveAccessibleContext: rows.every((row) =>
+            row.getAttribute("aria-label")?.includes("구독"),
+          ),
           listHasFixturePhone: fixturePhones.some((phone) =>
             list.textContent?.includes(phone),
           ),
@@ -1112,10 +1120,12 @@ describe("QT Manager desktop flow", () => {
     );
     expect(managementContract.rowCount).toBe(2);
     expect(managementContract.rowHeights).toHaveLength(2);
-    expect(managementContract.maxRowHeight).toBeLessThanOrEqual(96);
+    expect(managementContract.maxRowHeight).toBeLessThanOrEqual(72);
     expect(managementContract.unusedListHeight).toBeGreaterThan(
       managementContract.maxRowHeight,
     );
+    expect(managementContract.listHasVisibleMetadata).toBe(false);
+    expect(managementContract.listRowsHaveAccessibleContext).toBe(true);
     expect(managementContract.listHasFixturePhone).toBe(false);
     expect(managementContract.detailText).toContain(detailPhone);
     expect(managementContract.detailText).toContain(personNote);
@@ -2084,6 +2094,10 @@ async function prepareManagementCapture(
     };
     void document.fonts.ready.then(afterFonts, afterFonts);
     if (document.fonts.status === "loaded") afterFonts();
+    // WebKit can report loaded fonts without resolving `document.fonts.ready`
+    // promptly after a Tauri navigation. Keep the capture contract deterministic
+    // while still waiting for two animation frames when the promise is healthy.
+    window.setTimeout(afterFonts, 500);
   });
   await browser.waitUntil(
     async () =>

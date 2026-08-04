@@ -26,9 +26,17 @@ export function ManagementPersonList({
     <div className="management-person-list">
       {people.map((person) => {
         const selected = person.id === selectedId;
-        const lastIssue = person.latestLastIssue
+        const periodSummary = person.latestLastIssue
           ? `${person.latestLastIssue}까지`
           : "구독 종료 호 정보 없음";
+        const contextSummary = `${person.status} · 구독 ${person.subscriptionCount}건 · ${periodSummary}`;
+        const accessibleLabel = `${person.cohort ?? "또래 정보 없음"} ${person.name} · ${contextSummary}`;
+        const statusMarker =
+          person.status === "정보 보완 필요"
+            ? { className: "draft", label: "정보 보완 필요" }
+            : person.status === "보관됨"
+              ? { className: "archived", label: "보관됨" }
+              : null;
         return (
           <button
             key={person.id}
@@ -40,6 +48,8 @@ export function ManagementPersonList({
             }
             data-testid="management-person"
             aria-pressed={selected}
+            aria-label={accessibleLabel}
+            title={accessibleLabel}
             onClick={() => onSelect(person.id)}
           >
             <span className="cohort">{person.cohort ?? "--"}</span>
@@ -49,12 +59,17 @@ export function ManagementPersonList({
                 data-testid="management-person-primary"
                 title={person.name}
               >
+                {statusMarker && (
+                  <span
+                    className={`management-person-status-marker ${statusMarker.className}`}
+                    data-testid="management-person-status-marker"
+                    role="img"
+                    aria-label={statusMarker.label}
+                    title={statusMarker.label}
+                  />
+                )}
                 <strong>{person.name}</strong>
               </span>
-              <small data-testid="management-person-meta">
-                {person.status} · 구독 {person.subscriptionCount}건
-              </small>
-              <em title={lastIssue}>{lastIssue}</em>
             </span>
           </button>
         );
