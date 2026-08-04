@@ -18,6 +18,30 @@ impl SqliteCoreRepository {
         sqlite_migrations::configure(&connection)?;
         Ok(Self { connection })
     }
+
+    /// Clears operational rows for an isolated desktop E2E run while keeping
+    /// app settings such as the configured operator.
+    pub fn reset_for_e2e(&mut self) -> Result<(), PortError> {
+        let transaction = self.connection.transaction().map_err(port_error)?;
+        for table in [
+            "import_rows",
+            "import_batches",
+            "distributions",
+            "one_time_purchases",
+            "subscriptions",
+            "check_items",
+            "pinned_notes",
+            "people",
+            "change_logs",
+            "restore_points",
+            "phase0_people",
+        ] {
+            transaction
+                .execute(&format!("DELETE FROM {table}"), [])
+                .map_err(port_error)?;
+        }
+        transaction.commit().map_err(port_error)
+    }
 }
 
 impl CoreRepository for SqliteCoreRepository {

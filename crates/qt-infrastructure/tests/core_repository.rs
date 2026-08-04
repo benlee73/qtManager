@@ -1,4 +1,4 @@
-use qt_application::{CoreRepository, RunPhase1Probe};
+use qt_application::{CoreRepository, DistributionDeskRepository, RunPhase1Probe};
 use qt_domain::{ChangeLog, Issue, Person, PersonStatus, Subscription, SubscriptionSource};
 use qt_infrastructure::{SqliteCoreRepository, StderrEventLogger};
 use rusqlite::Connection;
@@ -115,4 +115,32 @@ fn rolls_back_person_when_subscription_write_fails() {
     );
     assert_eq!(repository.find_person(&person.id).unwrap(), None);
     assert!(repository.list_changes().unwrap().is_empty());
+}
+
+#[test]
+fn resets_e2e_rows_without_removing_app_settings() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join("reset.sqlite");
+    let mut repository = SqliteCoreRepository::open(&path).unwrap();
+    repository.migrate_core().unwrap();
+    repository
+        .save_operator("가상 담당자", "2026-08-04T12:00:00+09:00")
+        .unwrap();
+    let logger = StderrEventLogger;
+    let mut probe = RunPhase1Probe::new(&mut repository, &logger);
+    probe.execute().unwrap();
+
+    repository.reset_for_e2e().unwrap();
+
+    assert_eq!(
+        repository
+            .find_person("00000000-0000-4000-8000-000000000101")
+            .unwrap(),
+        None
+    );
+    assert!(repository.list_changes().unwrap().is_empty());
+    assert_eq!(
+        repository.current_operator().unwrap().as_deref(),
+        Some("가상 담당자")
+    );
 }

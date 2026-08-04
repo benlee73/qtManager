@@ -9,7 +9,7 @@ import {
   type ManagementSelection,
 } from "./managementLoader";
 import type { ReversibleAction } from "./actionHistory";
-import { createCheckItem, type Issue } from "./phase2";
+import { createCheckItem, type Issue, updateCheckItemStatus } from "./phase2";
 import {
   type PeopleManagement,
   type PersonDetail,
@@ -32,10 +32,14 @@ export function ManagementScreen({
   issue,
   notify,
   recordAction,
+  onExternalChange,
+  onStateImported,
 }: {
   issue: Issue;
   notify: (message: string, kind?: "success" | "error") => void;
   recordAction: (action: ReversibleAction) => void;
+  onExternalChange?: () => void;
+  onStateImported?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
@@ -74,6 +78,7 @@ export function ManagementScreen({
   useEffect(() => () => loader.cancelPending(), [loader]);
 
   async function mutate(work: () => Promise<unknown>, success: string) {
+    onExternalChange?.();
     setBusy(true);
     try {
       await work();
@@ -209,12 +214,21 @@ export function ManagementScreen({
               return saved;
             });
           }}
-          onCreateCheckItem={(personId, content) =>
-            mutate(
-              () => createCheckItem(personId, content),
-              "신청자 확인할 일을 저장했습니다.",
-            )
-          }
+          onCreateCheckItem={(personId, content) => {
+            let createdId = "";
+            return mutate(async () => {
+              createdId = await createCheckItem(personId, content);
+            }, "신청자 확인할 일을 저장했습니다.").then((saved) => {
+              if (saved) {
+                recordAction({
+                  description: "신청자 확인할 일 추가",
+                  undo: () => updateCheckItemStatus(createdId, "archived"),
+                  redo: () => updateCheckItemStatus(createdId, "needs_check"),
+                });
+              }
+              return saved;
+            });
+          }}
           onToggleArchived={(person) =>
             void mutate(
               () => setPersonArchived(person.id, person.status !== "보관됨"),
@@ -242,13 +256,20 @@ export function ManagementScreen({
           onClose={() => setDialog(null)}
           onDirectRegister={() => setDialog({ type: "register" })}
           onImported={async (message) => {
+            // 붙여넣기 가져오기는 외부 상태를 추가하므로 이전 undo/redo를
+            // 현재 데이터에 재적용하지 않도록 전체 기록을 초기화한다.
+            onStateImported?.();
             notify(message);
             await refresh();
           }}
         />
       )}
       {dialog?.type === "handover" && (
-        <HandoverDialog onClose={() => setDialog(null)} onChanged={refresh} />
+        <HandoverDialog
+          onClose={() => setDialog(null)}
+          onChanged={refresh}
+          onImported={onStateImported}
+        />
       )}
       {dialog?.type === "edit" && (
         <ManagementEditDialog

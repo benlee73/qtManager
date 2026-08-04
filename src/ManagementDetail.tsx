@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
+import { useTextDraft } from "./drafts";
 
 import type {
   PersonDetail,
@@ -125,8 +126,15 @@ function PersonDetailContent({
   onSavePersonNote,
   onCreateCheckItem,
 }: PersonDetailContentProps) {
-  const [noteDraft, setNoteDraft] = useState(detail.personNote ?? "");
-  const [checkDraft, setCheckDraft] = useState("");
+  const noteDraftState = useTextDraft(
+    `person-note:${detail.id}`,
+    detail.personNote ?? "",
+  );
+  const noteDraft = noteDraftState.value;
+  const setNoteDraft = noteDraftState.setValue;
+  const checkDraftState = useTextDraft(`person-check-item:${detail.id}`);
+  const checkDraft = checkDraftState.value;
+  const setCheckDraft = checkDraftState.setValue;
 
   return (
     <div className="person-detail-panel" data-testid="person-detail">
@@ -195,7 +203,11 @@ function PersonDetailContent({
             data-testid="save-person-note"
             type="button"
             disabled={busy || noteDraft === (detail.personNote ?? "")}
-            onClick={() => void onSavePersonNote(detail, noteDraft.trim())}
+            onClick={() =>
+              void onSavePersonNote(detail, noteDraft.trim()).then((saved) => {
+                if (saved) noteDraftState.clear();
+              })
+            }
           >
             메모 저장
           </button>
@@ -211,7 +223,7 @@ function PersonDetailContent({
             const content = checkDraft.trim();
             if (!content || busy) return;
             void onCreateCheckItem(detail.id, content).then((saved) => {
-              if (saved) setCheckDraft("");
+              if (saved) checkDraftState.clear();
             });
           }}
         >

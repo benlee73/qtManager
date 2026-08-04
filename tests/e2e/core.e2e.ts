@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { dirname, join, resolve } from "node:path";
+import { beforeEach } from "mocha";
 
 const execFileAsync = promisify(execFile);
 const nativeVisualEnabled = process.env.QT_MANAGER_NATIVE_VISUAL === "1";
@@ -10,6 +11,21 @@ const nativeCommandTimeoutMs = 5_000;
 describe("QT Manager desktop flow", () => {
   before(async () => {
     if (nativeVisualEnabled) await assertNativeVisualPreflight();
+  });
+
+  beforeEach(async () => {
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.querySelector('[data-testid="people-search"]') !== null,
+        ),
+      { timeoutMsg: "E2E 초기화 전에 QT Manager 화면이 준비되지 않았습니다." },
+    );
+    await invokeTauri("reset_e2e_state_command");
+    await refreshApp(
+      "E2E 테스트 상태를 초기화한 뒤 화면을 새로 열지 못했습니다.",
+    );
   });
 
   it("registers an on-site applicant, partially distributes, completes and undoes", async () => {
@@ -216,6 +232,7 @@ describe("QT Manager desktop flow", () => {
   });
 
   it("creates linked and general check items, transitions all states, and keeps pinned notes periodless", async () => {
+    await registerE2ePerson(`가상확인대상${Date.now()}`);
     await setPersonFilterPreset("전체");
     const unique = String(Date.now());
     const generalItem = `가상 일반 확인 ${unique}`;
@@ -258,6 +275,27 @@ describe("QT Manager desktop flow", () => {
     await setInput("textarea[name='content']", linkedItem);
     await clickButtonByText("확인할 일 저장");
     await waitForText(".check-item-list", linkedItem);
+    await browser.execute((content) => {
+      const item = [
+        ...document.querySelectorAll<HTMLElement>(".check-item"),
+      ].find((candidate) => candidate.textContent?.includes(content));
+      item
+        ?.querySelector<HTMLButtonElement>(
+          '[data-testid="open-check-item-detail"]',
+        )
+        ?.click();
+    }, linkedItem);
+    await waitForText(".check-item-detail", linkedItem);
+    await browser.execute(() =>
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
+    );
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(() =>
+          document.querySelector(".check-item-detail"),
+        )) === null,
+      { timeoutMsg: "확인할 일 전문 창이 Escape로 닫히지 않았습니다." },
+    );
     expect(
       await browser.execute((content) => {
         const item = [
@@ -456,6 +494,12 @@ describe("QT Manager desktop flow", () => {
   });
 
   it("focuses search with slash without stealing text entry", async () => {
+    await setInput("#quick-item", "가상 임시 확인할 일 초안");
+    await refreshApp("확인할 일 초안 복원 후 화면을 새로 열지 못했습니다.");
+    expect(await browser.$("#quick-item").getValue()).toBe(
+      "가상 임시 확인할 일 초안",
+    );
+    await setInput("#quick-item", "");
     await browser.execute(() => {
       (document.activeElement as HTMLElement | null)?.blur();
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "/" }));
@@ -480,6 +524,9 @@ describe("QT Manager desktop flow", () => {
   });
 
   it("keeps one action menu open, closes it outside, toggles selection and filters the list", async () => {
+    const menuFixture = `가상메뉴대상${Date.now()}`;
+    await registerE2ePerson(menuFixture);
+    await registerE2ePerson(`${menuFixture}보조`);
     await setPersonFilterPreset("전체");
     await setInput('[data-testid="people-search"]', "");
     await clickButtonByText("", "기타 기능");
@@ -562,11 +609,26 @@ describe("QT Manager desktop flow", () => {
       ];
       const first = rows[0];
       if (!first) throw new Error("선택 상태 검증용 신청자 행이 없습니다.");
-      first.click();
+      if (first.getAttribute("aria-selected") !== "true") first.click();
       first.focus();
       first.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
     });
     await waitForText(".menu-popover", "확인할 일 추가");
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const rows = [
+            ...document.querySelectorAll<HTMLElement>(
+              '[data-testid="person-row"]',
+            ),
+          ];
+          return (
+            rows.filter((row) => row.classList.contains("selected")).length ===
+              1 && rows[0]?.classList.contains("selected")
+          );
+        }),
+      { timeoutMsg: "우클릭 전 선택 상태가 안정되지 않았습니다." },
+    );
     await browser.execute(() =>
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
     );
@@ -1076,6 +1138,30 @@ describe("QT Manager desktop flow", () => {
         ?.requestSubmit();
     });
     await waitForText(".toast", "신청자 확인할 일을 저장했습니다.");
+    await waitForText('[data-testid="person-detail"]', inlineCheck);
+    await clickButtonByText("현장 배부");
+    await waitForText('[data-testid="selected-issue"]', "월호");
+    await clickButtonByText("", "마지막 동작 되돌리기");
+    await browser.waitUntil(
+      async () => !(await textOf(".check-item-list")).includes(inlineCheck),
+      { timeoutMsg: "신청자 연결 확인할 일 되돌리기가 반영되지 않았습니다." },
+    );
+    await clickButtonByText("", "되돌린 동작 다시 실행");
+    await waitForText(".check-item-list", inlineCheck);
+    await clickButtonByText("신청자 관리");
+    await waitForText("h2", "신청자 관리");
+    const managementFixture = await invokeTauri<{
+      people: { name: string }[];
+    }>("load_people_management_command", {
+      query: detailPrefix,
+      includeArchived: false,
+    });
+    expect(
+      managementFixture.people.some(
+        (person) => person.name === detailApplicant,
+      ),
+    ).toBe(true);
+    await selectManagementPerson(detailApplicant);
     await waitForText('[data-testid="person-detail"]', inlineCheck);
     await setInput('[data-testid="person-note-input"]', inlinePersonNote);
     await clickButtonByText("메모 저장");
@@ -1830,6 +1916,7 @@ describe("QT Manager desktop flow", () => {
   });
 
   it("exports, replaces, restores and rejects a damaged handover workbook", async () => {
+    await registerE2ePerson(`가상인수기준${Date.now()}`);
     await browser.execute(() => {
       document
         .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
@@ -1903,6 +1990,25 @@ describe("QT Manager desktop flow", () => {
       mode: "replace",
       personResolutions: [],
     });
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="open-handover"]')
+        ?.click();
+    });
+    await waitForText("#handover-title", "데이터 백업·복원");
+    await waitForEnabled('[data-testid="undo-state-import"]');
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="undo-state-import"]')
+        ?.click();
+    });
+    await waitForText('[data-testid="restore-confirm"]', "복원하기 전 확인");
+    await waitForText(
+      '[data-testid="restore-confirm"]',
+      "현재 상태를 가져오기 직전으로 바꾸겠습니까?",
+    );
+    await clickButtonByText("취소");
+    await clickButtonByText("", "닫기");
     management = await invokeTauri("load_people_management_command", {
       query: unique,
       includeArchived: true,
@@ -1962,6 +2068,30 @@ async function configureOperatorIfNeeded() {
   await browser.waitUntil(async () => (await textOf("#dialog-title")) === "", {
     timeoutMsg: "담당자 설정 창이 닫히지 않았습니다.",
   });
+}
+
+async function registerE2ePerson(name: string) {
+  const issue = await selectedIssue();
+  await invokeTauri<string>("register_person_command", {
+    request: {
+      name,
+      cohort: "00",
+      phone: null,
+      personNote: null,
+      issueYear: issue.year,
+      issueMonth: issue.startMonth,
+      quantity: 1,
+      appliedAt: null,
+      memo: null,
+      confirmDuplicate: true,
+    },
+  });
+  await setInput('[data-testid="people-search"]', name);
+  await browser.waitUntil(
+    async () => (await textOf('[data-testid="person-row"]')).includes(name),
+    { timeoutMsg: `E2E 신청자 등록을 확인하지 못했습니다: ${name}` },
+  );
+  await setInput('[data-testid="people-search"]', "");
 }
 
 async function refreshApp(timeoutMsg: string) {
@@ -2245,16 +2375,20 @@ async function personRowFocusRule() {
 }
 
 async function selectManagementPerson(name: string) {
-  await browser.execute((expectedName) => {
-    const row = [
-      ...document.querySelectorAll<HTMLButtonElement>(
-        '[data-testid="management-person"]',
-      ),
-    ].find((candidate) => candidate.textContent?.includes(expectedName));
-    if (!row)
-      throw new Error(`관리 신청자 행을 찾지 못했습니다: ${expectedName}`);
-    row.click();
-  }, name);
+  await browser.waitUntil(
+    async () =>
+      browser.execute((expectedName) => {
+        const row = [
+          ...document.querySelectorAll<HTMLButtonElement>(
+            '[data-testid="management-person"]',
+          ),
+        ].find((candidate) => candidate.textContent?.includes(expectedName));
+        if (!row) return false;
+        row.click();
+        return true;
+      }, name),
+    { timeoutMsg: `관리 신청자 행을 찾지 못했습니다: ${name}` },
+  );
 }
 
 async function managementScrollContract() {

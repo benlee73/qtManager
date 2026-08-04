@@ -208,6 +208,41 @@ fn open_operational_repository(app: &tauri::AppHandle) -> Result<SqliteCoreRepos
 }
 
 #[tauri::command]
+fn reset_e2e_state_command(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(not(feature = "e2e"))]
+    {
+        let _ = app;
+        return Err("E2E 전용 명령입니다.".to_owned());
+    }
+
+    #[cfg(feature = "e2e")]
+    {
+        let directory = operational_data_directory(&app)?;
+        let mut repository = open_operational_repository(&app)?;
+        repository
+            .reset_for_e2e()
+            .map_err(|error| error.to_string())?;
+        drop(repository);
+
+        let restore_directory = restore_points_directory(directory);
+        if restore_directory.exists() {
+            for entry in fs::read_dir(&restore_directory)
+                .map_err(|error| format!("E2E 복원 지점을 읽지 못했습니다: {error}"))?
+            {
+                let path = entry
+                    .map_err(|error| format!("E2E 복원 지점을 읽지 못했습니다: {error}"))?
+                    .path();
+                if path.is_file() {
+                    fs::remove_file(path)
+                        .map_err(|error| format!("E2E 복원 지점을 삭제하지 못했습니다: {error}"))?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+#[tauri::command]
 fn load_distribution_desk_command(
     app: tauri::AppHandle,
     issue_year: i32,
@@ -838,7 +873,8 @@ pub fn run() {
             preview_state_import_command,
             apply_state_import_command,
             latest_restore_point_command,
-            undo_state_import_command
+            undo_state_import_command,
+            reset_e2e_state_command
         ])
         .build(tauri::generate_context!())
         .expect("QT Manager 빌드에 실패했습니다.");
