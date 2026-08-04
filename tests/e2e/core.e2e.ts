@@ -1430,6 +1430,55 @@ describe("QT Manager desktop flow", () => {
     );
     await browser.execute(() => {
       document
+        .querySelector<HTMLAnchorElement>(
+          '[data-testid="help-nav-quick-start"]',
+        )
+        ?.click();
+    });
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(() =>
+          document
+            .querySelector<HTMLElement>('[data-testid="help-nav-quick-start"]')
+            ?.getAttribute("aria-current"),
+        )) === "location",
+      {
+        timeoutMsg: "도움말 목차의 빠른 시작 선택 상태가 갱신되지 않았습니다.",
+      },
+    );
+    await browser.saveScreenshot("test-results/ui-help-quick-start-dark.png");
+    expect(
+      await browser.execute(() => {
+        const copies = [
+          ...document.querySelectorAll<HTMLElement>(
+            ".help-step-list .help-step-copy",
+          ),
+        ];
+        return {
+          stepCount: document.querySelectorAll(".help-step-list > li").length,
+          copyCount: copies.length,
+          minCopyWidth: Math.min(
+            ...copies.map((copy) => copy.getBoundingClientRect().width),
+          ),
+        };
+      }),
+    ).toEqual({
+      stepCount: 5,
+      copyCount: 5,
+      minCopyWidth: expect.any(Number),
+    });
+    expect(
+      await browser.execute(() => {
+        const widths = [
+          ...document.querySelectorAll<HTMLElement>(
+            ".help-step-list .help-step-copy",
+          ),
+        ].map((copy) => copy.getBoundingClientRect().width);
+        return widths.every((width) => width > 160);
+      }),
+    ).toBe(true);
+    await browser.execute(() => {
+      document
         .querySelector<HTMLAnchorElement>('[data-testid="help-nav-handover"]')
         ?.click();
     });
@@ -1496,6 +1545,41 @@ describe("QT Manager desktop flow", () => {
       '[data-testid="help-distribution"]',
       "현장 배부 표는 구독과 배부 상태를 넓게 보여주기 위해",
     );
+    expect(
+      await browser.execute(() => {
+        const dataPath = document.querySelector<HTMLElement>(
+          '[data-testid="support-path-data"]',
+        );
+        const logPath = document.querySelector<HTMLElement>(
+          '[data-testid="support-path-log"]',
+        );
+        return {
+          dataTitle: dataPath?.title ?? "",
+          logTitle: logPath?.title ?? "",
+          dataWhiteSpace: dataPath ? getComputedStyle(dataPath).whiteSpace : "",
+          logWhiteSpace: logPath ? getComputedStyle(logPath).whiteSpace : "",
+        };
+      }),
+    ).toMatchObject({
+      dataTitle: expect.any(String),
+      logTitle: expect.any(String),
+      dataWhiteSpace: "normal",
+      logWhiteSpace: "normal",
+    });
+    await browser.execute(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(() =>
+          Boolean(document.querySelector("#help-title")),
+        )) === false,
+      { timeoutMsg: "Escape로 도움말이 닫히지 않았습니다." },
+    );
+    await browser.execute(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }));
+    });
+    await waitForText("#help-title", "QT Manager 도움말");
     await clickButtonByText("", "도움말 닫기");
     await clickButtonByText("현장 배부");
     await waitForText('[data-testid="selected-issue"]', "월호");

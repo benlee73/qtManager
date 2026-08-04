@@ -77,6 +77,16 @@ export function HelpPanel({
   }, []);
 
   useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  useEffect(() => {
     const content = contentRef.current;
     if (!content) return;
 
@@ -129,7 +139,6 @@ export function HelpPanel({
       >
         <header className="help-heading">
           <div>
-            <p className="section-label">인터넷 없이 보는 사용법</p>
             <h2 id="help-title">QT Manager 도움말</h2>
           </div>
           <button type="button" aria-label="도움말 닫기" onClick={onClose}>
@@ -166,26 +175,38 @@ export function HelpPanel({
             >
               <ol className="help-step-list">
                 <li>
-                  <strong>담당자 설정</strong>
-                  <span>첫 실행 시 현재 담당자 이름을 입력합니다.</span>
+                  <div className="help-step-copy">
+                    <strong>담당자 설정</strong>
+                    <span>첫 실행 시 현재 담당자 이름을 입력합니다.</span>
+                  </div>
                 </li>
                 <li>
-                  <strong>호 확인</strong>
-                  <span>상단에서 오늘 배부할 QT 호를 선택합니다.</span>
+                  <div className="help-step-copy">
+                    <strong>호 확인</strong>
+                    <span>상단에서 오늘 배부할 QT 호를 선택합니다.</span>
+                  </div>
                 </li>
                 <li>
-                  <strong>찾기</strong>
-                  <span>
-                    검색창에 이름 일부, 또래 또는 전화번호를 입력합니다.
-                  </span>
+                  <div className="help-step-copy">
+                    <strong>찾기</strong>
+                    <span>
+                      검색창에 이름 일부, 또래 또는 전화번호를 입력합니다.
+                    </span>
+                  </div>
                 </li>
                 <li>
-                  <strong>배부</strong>
-                  <span>책을 건넨 뒤 각 행의 ‘N권 배부’를 누릅니다.</span>
+                  <div className="help-step-copy">
+                    <strong>배부</strong>
+                    <span>책을 건넨 뒤 각 행의 ‘N권 배부’를 누릅니다.</span>
+                  </div>
                 </li>
                 <li>
-                  <strong>실수 복구</strong>
-                  <span>배부 취소 확인창 또는 상단 되돌리기를 사용합니다.</span>
+                  <div className="help-step-copy">
+                    <strong>실수 복구</strong>
+                    <span>
+                      배부 취소 확인창 또는 상단 되돌리기를 사용합니다.
+                    </span>
+                  </div>
                 </li>
               </ol>
             </HelpSection>
@@ -460,13 +481,21 @@ export function HelpPanel({
                       </div>
                       <div>
                         <dt>데이터 위치</dt>
-                        <dd title={support.dataDirectory}>
+                        <dd
+                          data-testid="support-path-data"
+                          title={support.dataDirectory}
+                        >
                           {support.dataDirectory}
                         </dd>
                       </div>
                       <div>
                         <dt>로그 파일</dt>
-                        <dd title={support.logFile}>{support.logFile}</dd>
+                        <dd
+                          data-testid="support-path-log"
+                          title={support.logFile}
+                        >
+                          {support.logFile}
+                        </dd>
                       </div>
                     </dl>
                   ) : (

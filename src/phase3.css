@@ -751,12 +751,17 @@
   display: grid;
   grid-template-columns: 2rem minmax(0, 1fr);
   gap: 0.7rem;
-  align-items: center;
+  align-items: start;
   padding: 0.8rem 0.9rem;
   border: 1px solid var(--line);
   border-radius: 0.7rem;
   background: var(--panel-high);
   counter-increment: help-step;
+}
+
+.help-step-copy {
+  min-width: 0;
+  grid-column: 2;
 }
 
 .help-step-list li::before {
@@ -840,7 +845,7 @@
 .support-paths dd {
   min-width: 0;
   margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  line-height: 1.35;
 }

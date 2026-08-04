@@ -37,5 +37,7 @@ describe("HelpPanel", () => {
     expect(markup).not.toContain("신청자 행의 점 세 개 또는 우클릭");
     expect(markup).toContain('class="help-card"');
     expect(markup).toContain("도움말 2026-08-04");
+    expect(markup).not.toContain("인터넷 없이 보는 사용법");
+    expect(markup).toContain('class="help-step-copy"');
   });
 });
