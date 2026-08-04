@@ -30,5 +30,12 @@ describe("HelpPanel", () => {
     expect(markup).toContain("긴 신청자 목록은 왼쪽 목록 안에서");
     expect(markup).toContain("신청자 목록에는 또래와 이름만 기본 표시됩니다.");
     expect(markup).toContain("정보 보완이나 보관 상태는 작은 표시");
+    expect(markup).toContain('data-testid="help-nav-people"');
+    expect(markup).toContain('aria-current="location"');
+    expect(markup).toContain('data-testid="help-notes"');
+    expect(markup).toContain("현장 배부 화면의 신청자 행");
+    expect(markup).not.toContain("신청자 행의 점 세 개 또는 우클릭");
+    expect(markup).toContain('class="help-card"');
+    expect(markup).toContain("도움말 2026-08-04");
   });
 });

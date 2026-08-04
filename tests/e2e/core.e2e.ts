@@ -1408,10 +1408,89 @@ describe("QT Manager desktop flow", () => {
       '[data-testid="help-people"]',
       "과거 구독을 수정하지 않고",
     );
+    await browser.saveScreenshot("test-results/ui-help-management-dark.png");
+    await browser.execute(() => {
+      document.documentElement.dataset.theme = "light";
+    });
+    await browser.saveScreenshot("test-results/ui-help-management-light.png");
+    await browser.execute(() => {
+      document.documentElement.dataset.theme = "dark";
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document
+              .querySelector<HTMLElement>('[data-testid="help-nav-people"]')
+              ?.getAttribute("aria-current") === "location" &&
+            (document.querySelector<HTMLElement>('[data-testid="help-content"]')
+              ?.scrollTop ?? 0) > 0,
+        ),
+      { timeoutMsg: "신청자 관리 도움말이 해당 섹션으로 이동하지 않았습니다." },
+    );
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLAnchorElement>('[data-testid="help-nav-handover"]')
+        ?.click();
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document
+              .querySelector<HTMLElement>('[data-testid="help-nav-handover"]')
+              ?.getAttribute("aria-current") === "location",
+        ),
+      {
+        timeoutMsg: "도움말 목차의 백업·복원 선택 상태가 갱신되지 않았습니다.",
+      },
+    );
+    await browser.execute(() => {
+      const content = document.querySelector<HTMLElement>(
+        '[data-testid="help-content"]',
+      );
+      const notes = document.querySelector<HTMLElement>(
+        '[data-testid="help-notes"]',
+      );
+      if (!content || !notes) return;
+      content.style.scrollBehavior = "auto";
+      content.scrollTop =
+        notes.getBoundingClientRect().top -
+        content.getBoundingClientRect().top +
+        content.scrollTop;
+      content.dispatchEvent(new Event("scroll"));
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document
+              .querySelector<HTMLElement>('[data-testid="help-nav-notes"]')
+              ?.getAttribute("aria-current") === "location",
+        ),
+      {
+        timeoutMsg:
+          "도움말 스크롤 위치와 목차 선택 상태가 동기화되지 않았습니다.",
+      },
+    );
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLAnchorElement>('[data-testid="help-nav-app-info"]')
+        ?.click();
+    });
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(() =>
+          document
+            .querySelector<HTMLElement>('[data-testid="help-nav-app-info"]')
+            ?.getAttribute("aria-current"),
+        )) === "location",
+      { timeoutMsg: "도움말 목차의 앱 정보 선택 상태가 갱신되지 않았습니다." },
+    );
     await waitForText('[data-testid="support-info"]', "0.1.0");
     await waitForText(
       '[data-testid="help-app-info"]',
-      "이름·전화번호·메모는 기록하지 않습니다",
+      "운영 로그에는 이름·전화번호·메모를 기록하지 않습니다",
     );
     await waitForText(
       '[data-testid="help-distribution"]',
@@ -2098,6 +2177,11 @@ async function prepareManagementCapture(
     // promptly after a Tauri navigation. Keep the capture contract deterministic
     // while still waiting for two animation frames when the promise is healthy.
     window.setTimeout(afterFonts, 500);
+    window.setTimeout(() => {
+      if (!document.documentElement.dataset.managementCaptureReady) {
+        document.documentElement.dataset.managementCaptureReady = "true";
+      }
+    }, 1_000);
   });
   await browser.waitUntil(
     async () =>
