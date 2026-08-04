@@ -84,6 +84,35 @@ function setup() {
 }
 
 describe("management loader selection/detail consistency", () => {
+  it("keeps the selected detail visible while refreshing the management list", async () => {
+    const { loader, detailRequests, managementRequests, selections } = setup();
+
+    const initial = loader.refresh("", false);
+    managementRequests.get("")!.resolve(management("person-a"));
+    await Promise.resolve();
+    detailRequests.get("person-a")!.resolve(detail("person-a"));
+    await initial;
+    expect(selections.at(-1)).toEqual({
+      selectedId: "person-a",
+      detail: detail("person-a"),
+    });
+
+    const refreshed = loader.refresh("", true);
+    expect(selections.at(-1)).toEqual({
+      selectedId: "person-a",
+      detail: detail("person-a"),
+    });
+    managementRequests.get("")!.resolve(management("person-a"));
+    await Promise.resolve();
+    detailRequests.get("person-a")!.resolve(detail("person-a"));
+    await refreshed;
+
+    expect(selections.at(-1)).toEqual({
+      selectedId: "person-a",
+      detail: detail("person-a"),
+    });
+  });
+
   it("clears the previous detail immediately and keeps it empty when the current selection fails", async () => {
     const { loader, detailRequests, selections, errors } = setup();
 

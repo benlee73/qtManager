@@ -26,15 +26,19 @@ export function createManagementLoader({
   let managementRequestToken = 0;
   let detailRequestToken = 0;
   let selectedId: string | null = null;
+  let currentDetail: PersonDetail | null = null;
 
   function publishSelection(detail: PersonDetail | null) {
+    currentDetail = detail;
     onSelection({ selectedId, detail });
   }
 
-  async function select(nextId: string | null) {
+  async function select(nextId: string | null, preserveCurrentDetail = false) {
     const requestToken = ++detailRequestToken;
+    const canPreserve =
+      preserveCurrentDetail && currentDetail?.id === nextId && nextId !== null;
     selectedId = nextId;
-    publishSelection(null);
+    if (!canPreserve) publishSelection(null);
     if (!nextId) return;
 
     try {
@@ -58,20 +62,25 @@ export function createManagementLoader({
   async function refresh(query: string, includeArchived: boolean) {
     const requestToken = ++managementRequestToken;
     ++detailRequestToken;
-    publishSelection(null);
+    const previousId = selectedId;
     try {
       const next = await loadManagement(query, includeArchived);
       if (requestToken !== managementRequestToken) return;
 
       onManagement(next);
       const nextId =
-        selectedId && next.people.some((person) => person.id === selectedId)
-          ? selectedId
+        previousId && next.people.some((person) => person.id === previousId)
+          ? previousId
           : (next.people[0]?.id ?? null);
-      await select(nextId);
+      await select(
+        nextId,
+        nextId === previousId && currentDetail?.id === previousId,
+      );
     } catch (reason) {
       if (requestToken !== managementRequestToken) return;
-      publishSelection(null);
+      if (!currentDetail || currentDetail.id !== selectedId) {
+        publishSelection(null);
+      }
       onError(reason);
     }
   }
@@ -79,7 +88,6 @@ export function createManagementLoader({
   function invalidate() {
     ++managementRequestToken;
     ++detailRequestToken;
-    publishSelection(null);
   }
 
   function cancelPending() {

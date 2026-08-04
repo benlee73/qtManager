@@ -65,7 +65,7 @@ const detail: PersonDetail = {
       quantity: 1,
       appliedAt: null,
       source: "기존 XLSX",
-      memo: null,
+      memo: "2026년 기존 배부현황 최초 이전",
       archived: false,
       periodState: "past",
     },
@@ -137,17 +137,23 @@ describe("PersonDetailPanel", () => {
         onEdit={vi.fn()}
         onRenew={vi.fn()}
         onToggleArchived={vi.fn()}
+        onSavePersonNote={vi.fn(async () => true)}
+        onCreateCheckItem={vi.fn(async () => true)}
       />,
     );
 
     expect(markup).toContain("010-0000-0000");
     expect(markup).toContain('data-testid="person-note"');
-    expect(markup).toContain("등록된 신청자 메모가 없습니다.");
+    expect(markup).toContain(
+      "필요할 때 이 사람에게만 적용되는 내용을 적습니다.",
+    );
     expect(markup).toContain('data-testid="linked-check-items"');
     expect(markup).toContain("다음 배부 때 수량 확인");
     expect(markup).toContain("연락처 확인 완료");
     expect(markup).toContain('disabled=""');
     expect(markup).toContain('checked=""');
+    expect(markup).toContain('data-testid="person-note-input"');
+    expect(markup).toContain('data-testid="person-check-item-form"');
   });
 
   it("keeps the cohort badge and applicant name on the same identity line", () => {
@@ -158,6 +164,8 @@ describe("PersonDetailPanel", () => {
         onEdit={vi.fn()}
         onRenew={vi.fn()}
         onToggleArchived={vi.fn()}
+        onSavePersonNote={vi.fn(async () => true)}
+        onCreateCheckItem={vi.fn(async () => true)}
       />,
     );
 
@@ -177,11 +185,18 @@ describe("PersonDetailPanel", () => {
         onEdit={vi.fn()}
         onRenew={vi.fn()}
         onToggleArchived={vi.fn()}
+        onSavePersonNote={vi.fn(async () => true)}
+        onCreateCheckItem={vi.fn(async () => true)}
       />,
     );
 
     expect(markup).toContain('data-testid="subscription-current"');
     expect(markup).toContain("현재 구독");
+    expect(markup).toContain("시작");
+    expect(markup).toContain("끝");
+    expect(markup).not.toContain("→");
+    expect(markup).not.toContain("기존 XLSX");
+    expect(markup).not.toContain("2026년 기존 배부현황 최초 이전");
     expect(markup).toContain('data-testid="subscription-scheduled"');
     expect(markup).toContain("예정 구독");
     expect(markup).toContain('data-testid="subscription-past"');

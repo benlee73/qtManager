@@ -114,7 +114,11 @@ export function EditDialog({
   }
 
   return (
-    <FormDialog title="QT 신청자 정보 수정" onClose={onClose}>
+    <FormDialog
+      title="QT 신청자 정보 수정"
+      className="management-edit-dialog"
+      onClose={onClose}
+    >
       <form
         data-testid="edit-person-form"
         onSubmit={(event) => {
@@ -367,10 +371,12 @@ function DuplicateWarning({
 
 function FormDialog({
   title,
+  className = "",
   children,
   onClose,
 }: {
   title: string;
+  className?: string;
   children: ReactNode;
   onClose: () => void;
 }) {
@@ -385,7 +391,7 @@ function FormDialog({
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section
-        className="dialog wide"
+        className={`dialog wide ${className}`.trim()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="management-dialog-title"

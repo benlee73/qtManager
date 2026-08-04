@@ -9,7 +9,7 @@ import {
   type ManagementSelection,
 } from "./managementLoader";
 import type { ReversibleAction } from "./actionHistory";
-import type { Issue } from "./phase2";
+import { createCheckItem, type Issue } from "./phase2";
 import {
   type PeopleManagement,
   type PersonDetail,
@@ -166,6 +166,43 @@ export function ManagementScreen({
           busy={busy}
           onEdit={(person) => setDialog({ type: "edit", person })}
           onRenew={(person) => setDialog({ type: "renew", person })}
+          onSavePersonNote={(person, note) => {
+            const previous: PersonInput = {
+              name: person.name,
+              cohort: person.cohort ?? "",
+              phone: person.phone ?? "",
+              personNote: person.personNote ?? "",
+            };
+            const next: PersonInput = { ...previous, personNote: note };
+            return mutate(
+              () =>
+                updatePerson(person.id, { ...next, confirmDuplicate: true }),
+              "신청자 메모를 저장했습니다.",
+            ).then((saved) => {
+              if (saved) {
+                recordAction({
+                  description: `${person.name} 신청자 메모 수정`,
+                  undo: () =>
+                    updatePerson(person.id, {
+                      ...previous,
+                      confirmDuplicate: true,
+                    }),
+                  redo: () =>
+                    updatePerson(person.id, {
+                      ...next,
+                      confirmDuplicate: true,
+                    }),
+                });
+              }
+              return saved;
+            });
+          }}
+          onCreateCheckItem={(personId, content) =>
+            mutate(
+              () => createCheckItem(personId, content),
+              "신청자 확인할 일을 저장했습니다.",
+            )
+          }
           onToggleArchived={(person) =>
             void mutate(
               () => setPersonArchived(person.id, person.status !== "보관됨"),

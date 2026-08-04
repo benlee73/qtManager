@@ -1012,6 +1012,90 @@ describe("QT Manager desktop flow", () => {
     }, detailApplicant);
     await waitForText('[data-testid="person-detail"]', detailPhone);
 
+    const inlinePersonNote = `${detailPrefix} 즉시 메모`;
+    const inlineCheck = `${detailPrefix} 즉시 확인할 일`;
+    await setInput('[data-testid="person-check-item-input"]', inlineCheck);
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLFormElement>(
+          '[data-testid="person-check-item-form"]',
+        )
+        ?.requestSubmit();
+    });
+    await waitForText(".toast", "신청자 확인할 일을 저장했습니다.");
+    await waitForText('[data-testid="person-detail"]', inlineCheck);
+    await setInput('[data-testid="person-note-input"]', inlinePersonNote);
+    await clickButtonByText("메모 저장");
+    await waitForText(".toast", "신청자 메모를 저장했습니다.");
+    await waitForText('[data-testid="person-detail"]', inlinePersonNote);
+
+    const detailBeforeArchiveToggle = await textOf(
+      '[data-testid="person-detail"]',
+    );
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLInputElement>(".archived-toggle input")
+        ?.click();
+    });
+    expect(await textOf('[data-testid="person-detail"]')).toContain(
+      detailPhone,
+    );
+    expect(detailBeforeArchiveToggle).toContain(detailPhone);
+    await browser.waitUntil(
+      async () =>
+        await browser.execute(
+          () =>
+            document.querySelector<HTMLInputElement>(".archived-toggle input")
+              ?.checked === true,
+        ),
+      { timeoutMsg: "보관된 신청자 보기 전환이 반영되지 않았습니다." },
+    );
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLInputElement>(".archived-toggle input")
+        ?.click();
+    });
+    await browser.waitUntil(
+      async () =>
+        await browser.execute(
+          () =>
+            document.querySelector<HTMLInputElement>(".archived-toggle input")
+              ?.checked === false,
+        ),
+      { timeoutMsg: "보관된 신청자 보기 해제가 반영되지 않았습니다." },
+    );
+
+    await clickButtonByText("정보 수정");
+    const editDialogContract = await browser.execute(() => {
+      const dialog = document.querySelector<HTMLElement>(
+        ".management-edit-dialog",
+      );
+      const name =
+        dialog?.querySelector<HTMLInputElement>("input[name='name']");
+      const cohort = dialog?.querySelector<HTMLInputElement>(
+        "input[name='cohort']",
+      );
+      return {
+        width: dialog?.getBoundingClientRect().width ?? 0,
+        nameWidth: name?.getBoundingClientRect().width ?? 0,
+        cohortWidth: cohort?.getBoundingClientRect().width ?? 0,
+      };
+    });
+    expect(editDialogContract.width).toBeGreaterThan(400);
+    expect(editDialogContract.width).toBeLessThanOrEqual(560);
+    expect(editDialogContract.nameWidth).toBeLessThanOrEqual(470);
+    expect(editDialogContract.cohortWidth).toBeLessThanOrEqual(300);
+    await browser.execute(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(() =>
+          document.querySelector('[data-testid="edit-person-form"]'),
+        )) === null,
+      { timeoutMsg: "신청자 정보 수정창이 Escape로 닫히지 않았습니다." },
+    );
+
     // Retina 물리 픽셀 1800×1280은 지원 최소 논리 크기 900×640에 해당한다.
     await browser.setWindowSize(1800, 1280);
     const managementContract = await browser.execute(
@@ -1128,8 +1212,12 @@ describe("QT Manager desktop flow", () => {
     expect(managementContract.listRowsHaveAccessibleContext).toBe(true);
     expect(managementContract.listHasFixturePhone).toBe(false);
     expect(managementContract.detailText).toContain(detailPhone);
-    expect(managementContract.detailText).toContain(personNote);
+    expect(managementContract.detailText).toContain(inlinePersonNote);
     expect(managementContract.detailText).toContain(linkedCheck);
+    expect(managementContract.detailText).toContain("시작");
+    expect(managementContract.detailText).toContain("끝");
+    expect(managementContract.detailText).not.toContain("→");
+    expect(managementContract.detailText).not.toContain("기존 XLSX");
     expect(managementContract.currentStateCount).toBe(1);
     expect(managementContract.pastStateCount).toBe(1);
     expect(managementContract.distributionHeaders).toEqual([
@@ -1290,7 +1378,7 @@ describe("QT Manager desktop flow", () => {
         detailApplicant,
         detailPhone,
         comparisonPhone,
-        personNote,
+        inlinePersonNote,
         linkedCheck,
       ),
     ).toEqual({ theme: "light", ...expectedCaptureContract });
@@ -1308,7 +1396,7 @@ describe("QT Manager desktop flow", () => {
         detailApplicant,
         detailPhone,
         comparisonPhone,
-        personNote,
+        inlinePersonNote,
         linkedCheck,
       ),
     ).toEqual({ theme: "dark", ...expectedCaptureContract });

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import type {
   PersonDetail,
@@ -81,20 +81,18 @@ export function ManagementPersonList({
   );
 }
 
-export function PersonDetailPanel({
-  detail,
-  busy,
-  onEdit,
-  onRenew,
-  onToggleArchived,
-}: {
+type PersonDetailPanelProps = {
   detail: PersonDetail | null;
   busy: boolean;
   onEdit: (detail: PersonDetail) => void;
   onRenew: (detail: PersonDetail) => void;
   onToggleArchived: (detail: PersonDetail) => void;
-}) {
-  if (!detail) {
+  onSavePersonNote: (detail: PersonDetail, note: string) => Promise<boolean>;
+  onCreateCheckItem: (personId: string, content: string) => Promise<boolean>;
+};
+
+export function PersonDetailPanel(props: PersonDetailPanelProps) {
+  if (!props.detail) {
     return (
       <div className="person-detail-panel" data-testid="person-detail">
         <div className="detail-empty">
@@ -105,6 +103,28 @@ export function PersonDetailPanel({
       </div>
     );
   }
+
+  const detailKey = `${props.detail.id}:${props.detail.personNote ?? ""}`;
+  return (
+    <PersonDetailContent key={detailKey} {...props} detail={props.detail} />
+  );
+}
+
+type PersonDetailContentProps = Omit<PersonDetailPanelProps, "detail"> & {
+  detail: PersonDetail;
+};
+
+function PersonDetailContent({
+  detail,
+  busy,
+  onEdit,
+  onRenew,
+  onToggleArchived,
+  onSavePersonNote,
+  onCreateCheckItem,
+}: PersonDetailContentProps) {
+  const [noteDraft, setNoteDraft] = useState(detail.personNote ?? "");
+  const [checkDraft, setCheckDraft] = useState("");
 
   return (
     <div className="person-detail-panel" data-testid="person-detail">
@@ -143,14 +163,66 @@ export function PersonDetailPanel({
         </div>
       </div>
 
-      <div className="person-note" data-testid="person-note">
-        <strong>신청자 메모</strong>
-        <p title={detail.personNote ?? undefined}>
-          {detail.personNote || "등록된 신청자 메모가 없습니다."}
-        </p>
+      <div
+        className={`person-note ${detail.personNote ? "has-content" : "empty"}`}
+        data-testid="person-note"
+      >
+        <div className="person-note-heading">
+          <strong>신청자 메모</strong>
+          <span>{detail.personNote ? "지속 참고" : "아직 없음"}</span>
+        </div>
+        <textarea
+          data-testid="person-note-input"
+          rows={2}
+          value={noteDraft}
+          onChange={(event) => setNoteDraft(event.target.value)}
+          placeholder="이 사람에게 계속 적용되는 참고사항"
+          aria-label="신청자 메모"
+        />
+        <div className="person-note-actions">
+          {!detail.personNote && (
+            <p>필요할 때 이 사람에게만 적용되는 내용을 적습니다.</p>
+          )}
+          <button
+            className="quiet-button"
+            data-testid="save-person-note"
+            type="button"
+            disabled={busy || noteDraft === (detail.personNote ?? "")}
+            onClick={() => void onSavePersonNote(detail, noteDraft.trim())}
+          >
+            메모 저장
+          </button>
+        </div>
       </div>
 
       <DetailSection title={`연결된 확인할 일 ${detail.checkItems.length}건`}>
+        <form
+          className="detail-inline-form"
+          data-testid="person-check-item-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const content = checkDraft.trim();
+            if (!content || busy) return;
+            void onCreateCheckItem(detail.id, content).then((saved) => {
+              if (saved) setCheckDraft("");
+            });
+          }}
+        >
+          <input
+            data-testid="person-check-item-input"
+            value={checkDraft}
+            onChange={(event) => setCheckDraft(event.target.value)}
+            placeholder="이 신청자에게 확인할 일을 적으세요"
+            aria-label="신청자 확인할 일"
+          />
+          <button
+            className="secondary-button compact"
+            type="submit"
+            disabled={busy || !checkDraft.trim()}
+          >
+            추가
+          </button>
+        </form>
         <div
           className="detail-linked-check-items"
           data-testid="linked-check-items"
@@ -187,16 +259,22 @@ export function PersonDetailPanel({
               data-testid={`subscription-${subscription.periodState}`}
               key={subscription.id}
             >
-              <div>
-                <strong
-                  title={`${subscription.startIssue} → ${subscription.lastIssue}`}
-                >
-                  {subscription.startIssue} → {subscription.lastIssue}
-                </strong>
+              <div className="subscription-period">
+                <div>
+                  <span>시작</span>
+                  <strong title={subscription.startIssue}>
+                    {subscription.startIssue}
+                  </strong>
+                </div>
+                <div>
+                  <span>끝</span>
+                  <strong title={subscription.lastIssue}>
+                    {subscription.lastIssue}
+                  </strong>
+                </div>
                 <p>
                   매 호{" "}
-                  <span className="numeric">{subscription.quantity}권</span> ·{" "}
-                  {subscription.source}
+                  <span className="numeric">{subscription.quantity}권</span>
                   {subscription.appliedAt
                     ? ` · 신청 ${subscription.appliedAt}`
                     : ""}
@@ -205,9 +283,10 @@ export function PersonDetailPanel({
               <span className="subscription-state">
                 {subscriptionStateLabels[subscription.periodState]}
               </span>
-              {subscription.memo && (
-                <small title={subscription.memo}>{subscription.memo}</small>
-              )}
+              {subscription.memo &&
+                !isLegacyMigrationMemo(subscription.memo) && (
+                  <small title={subscription.memo}>{subscription.memo}</small>
+                )}
             </article>
           ))}
           {detail.subscriptions.length === 0 && <p>등록된 구독이 없습니다.</p>}
@@ -276,4 +355,8 @@ function DetailSection({
 
 function displayDate(value: string) {
   return value.replace("T", " ").slice(0, 16);
+}
+
+function isLegacyMigrationMemo(value: string) {
+  return value.trim() === "2026년 기존 배부현황 최초 이전";
 }

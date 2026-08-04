@@ -228,19 +228,156 @@
 
 .person-note {
   margin-top: 1.2rem;
-  padding: 0.9rem 1rem;
-  border-left: 4px solid #e5a334;
-  border-radius: 0.45rem;
-  background: var(--orange-soft);
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--note-line);
+  border-radius: 0.55rem;
+  background: var(--panel-high);
 }
 
-.person-note strong {
+.person-note.empty {
+  border-left-color: var(--line);
+  background: transparent;
+}
+
+.person-note-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.person-note-heading strong {
   font-size: var(--font-sm);
 }
 
+.person-note-heading span,
 .person-note p {
-  margin: 0.3rem 0 0;
   color: var(--muted);
+  font-size: var(--font-xs);
+}
+
+.person-note textarea {
+  display: block;
+  width: 100%;
+  min-height: 3.2rem;
+  margin-top: 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  padding: 0.55rem 0.65rem;
+  color: var(--text);
+  background: var(--input);
+  resize: vertical;
+}
+
+.person-note textarea::placeholder {
+  color: var(--placeholder);
+}
+
+.person-note-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.person-note p {
+  min-width: 0;
+  margin: 0.35rem 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.person-note-actions .quiet-button {
+  flex: 0 0 auto;
+  margin-top: 0.25rem;
+}
+
+.detail-inline-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.detail-inline-form input {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  padding: 0.55rem 0.65rem;
+  color: var(--text);
+  background: var(--input);
+}
+
+.detail-inline-form input::placeholder {
+  color: var(--placeholder);
+}
+
+.detail-inline-form button {
+  min-width: 3.2rem;
+}
+
+.subscription-period {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.subscription-period > div {
+  display: grid;
+  grid-template-columns: 2.2rem minmax(0, 1fr);
+  gap: 0.4rem;
+  align-items: baseline;
+}
+
+.subscription-period > div > span {
+  color: var(--muted);
+  font-size: var(--font-xs);
+  font-weight: 700;
+}
+
+.subscription-period > div > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subscription-period p {
+  grid-column: 1 / -1;
+  margin-top: 0.3rem;
+}
+
+.dialog.wide.management-edit-dialog {
+  width: min(32rem, calc(100vw - 3rem));
+}
+
+.management-edit-dialog .field-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, 0.62fr);
+}
+
+.management-edit-dialog .field input,
+.management-edit-dialog .field textarea {
+  max-width: 100%;
+}
+
+.management-edit-dialog .linked-check-items {
+  margin-bottom: 0.9rem;
+}
+
+.management-edit-dialog .dialog-heading {
+  margin-bottom: 0.9rem;
+}
+
+.management-edit-dialog .submit {
+  margin-top: 0.7rem;
+}
+
+/* Keep the empty note quieter than an active operational warning. */
+.person-note.empty .person-note-actions p {
+  color: var(--faint);
 }
 
 .detail-section {
