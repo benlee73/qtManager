@@ -105,6 +105,13 @@ const detail: PersonDetail = {
   ],
 };
 
+const linkedCheckItemActions = {
+  onUpdateCheckItem: vi.fn(async () => true),
+  onToggleCheckItem: vi.fn(async () => true),
+  onArchiveCheckItem: vi.fn(async () => true),
+  onDeleteCheckItem: vi.fn(),
+};
+
 describe("ManagementPersonList", () => {
   it("keeps rows focused on cohort and name while preserving context accessibly", () => {
     const markup = renderToStaticMarkup(
@@ -140,6 +147,7 @@ describe("PersonDetailPanel", () => {
         onToggleArchived={vi.fn()}
         onSavePersonNote={vi.fn(async () => true)}
         onCreateCheckItem={vi.fn(async () => true)}
+        {...linkedCheckItemActions}
       />,
     );
 
@@ -154,7 +162,9 @@ describe("PersonDetailPanel", () => {
     expect(markup).toContain('data-testid="linked-check-items"');
     expect(markup).toContain("다음 배부 때 수량 확인");
     expect(markup).toContain("연락처 확인 완료");
-    expect(markup).toContain('disabled=""');
+    expect(markup).toContain('aria-label="연결된 확인할 일 수정"');
+    expect(markup).toContain('aria-label="연결된 확인할 일 보관"');
+    expect(markup).toContain('aria-label="연결된 확인할 일 삭제"');
     expect(markup).toContain('checked=""');
     expect(markup).toContain('data-testid="person-note-input"');
     expect(markup).toContain('data-testid="person-check-item-form"');
@@ -170,6 +180,7 @@ describe("PersonDetailPanel", () => {
         onToggleArchived={vi.fn()}
         onSavePersonNote={vi.fn(async () => true)}
         onCreateCheckItem={vi.fn(async () => true)}
+        {...linkedCheckItemActions}
       />,
     );
 
@@ -187,6 +198,7 @@ describe("PersonDetailPanel", () => {
         onToggleArchived={vi.fn()}
         onSavePersonNote={vi.fn(async () => true)}
         onCreateCheckItem={vi.fn(async () => true)}
+        {...linkedCheckItemActions}
       />,
     );
 
@@ -208,6 +220,7 @@ describe("PersonDetailPanel", () => {
         onToggleArchived={vi.fn()}
         onSavePersonNote={vi.fn(async () => true)}
         onCreateCheckItem={vi.fn(async () => true)}
+        {...linkedCheckItemActions}
       />,
     );
 
@@ -253,6 +266,10 @@ describe("ManagementScreen heading actions", () => {
     expect(markup).toContain("데이터 백업·복원");
     expect(markup).toContain("Google 응답 붙여넣기");
     expect(markup).toContain("+ 신청자 등록");
+    expect(markup).toContain("정보 보완 필요 0명");
+    expect(markup).toContain(
+      "간이 등록 등으로 연락처나 구독 정보가 아직 부족한 신청자 수",
+    );
     expect(markup).not.toContain("+ QT 신청자 정식 등록");
     expect(markup).toContain('data-testid="management-heading-help"');
     expect(markup).toMatch(
@@ -275,6 +292,7 @@ describe("ManagementEditDialog", () => {
         busy={false}
         onClose={vi.fn()}
         onSaved={vi.fn(async () => true)}
+        {...linkedCheckItemActions}
       />,
     );
 

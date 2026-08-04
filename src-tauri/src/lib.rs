@@ -8,14 +8,14 @@ use qt_application::{
     PreviewApplicationsRequest, RecordDistributionRequest, RecordPurchaseRequest,
     RegisterPersonRequest, RenewSubscriptionRequest, RestorePointView, RunPhase0Probe,
     RunPhase1Probe, RuntimeServices, StateCounts, UndoDistributionRequest, UndoDistributionResult,
-    UpdateCheckItemStatusRequest, UpdatePersonRequest, UpdatePinnedNoteRequest, apply_state_import,
-    cancel_latest_purchase, create_check_item, create_draft, create_pinned_note, delete_check_item,
-    delete_pinned_note, export_state, import_applications, issue_containing_date,
-    load_distribution_desk, load_people_management, load_person_detail, preview_applications,
-    preview_duplicates, preview_state_import, record_distribution, record_purchase,
-    register_person, renew_subscription, save_operator, set_person_archived,
-    undo_last_distribution, undo_state_import, update_check_item_status, update_person,
-    update_pinned_note,
+    UpdateCheckItemRequest, UpdateCheckItemStatusRequest, UpdatePersonRequest,
+    UpdatePinnedNoteRequest, apply_state_import, cancel_latest_purchase, create_check_item,
+    create_draft, create_pinned_note, delete_check_item, delete_pinned_note, export_state,
+    import_applications, issue_containing_date, load_distribution_desk, load_people_management,
+    load_person_detail, preview_applications, preview_duplicates, preview_state_import,
+    record_distribution, record_purchase, register_person, renew_subscription, save_operator,
+    set_person_archived, undo_last_distribution, undo_state_import, update_check_item,
+    update_check_item_status, update_person, update_pinned_note,
 };
 use qt_domain::Issue;
 use qt_infrastructure::{
@@ -384,6 +384,32 @@ fn update_check_item_status_command(
         logger.info("check_item_status_update_completed");
     } else {
         logger.error("check_item_status_update_failed");
+    }
+    result
+}
+
+#[tauri::command]
+fn update_check_item_command(
+    app: tauri::AppHandle,
+    request: UpdateCheckItemRequest,
+) -> Result<(), String> {
+    let mut repository = open_operational_repository(&app)?;
+    let runtime = SystemRuntime;
+    let logger = event_logger(&app);
+    logger.info("check_item_update_started");
+    let result = update_check_item(
+        &mut repository,
+        &RuntimeServices {
+            clock: &runtime,
+            ids: &runtime,
+        },
+        request,
+    )
+    .map_err(|error| error.to_string());
+    if result.is_ok() {
+        logger.info("check_item_update_completed");
+    } else {
+        logger.error("check_item_update_failed");
     }
     result
 }
@@ -854,6 +880,7 @@ pub fn run() {
             create_draft_command,
             create_check_item_command,
             update_check_item_status_command,
+            update_check_item_command,
             delete_check_item_command,
             create_pinned_note_command,
             update_pinned_note_command,

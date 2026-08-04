@@ -16,6 +16,8 @@
 }
 
 .management-heading {
+  position: relative;
+  z-index: 5;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -35,8 +37,21 @@
 
 .management-heading-help > span,
 .person-note-help > span {
+  width: min(24rem, calc(100vw - 2rem));
   max-width: min(24rem, calc(100vw - 2rem));
+  overflow-wrap: anywhere;
   white-space: normal;
+}
+
+.management-heading-help > span {
+  left: 0;
+  transform: none;
+}
+
+.person-note-help > span {
+  right: 0;
+  left: auto;
+  transform: none;
 }
 
 .management-heading h2 {
@@ -516,11 +531,19 @@
 
 .detail-linked-check-items p {
   margin: 0.2rem 0 0;
-  overflow: hidden;
   color: var(--muted);
   font-size: var(--font-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.detail-linked-check-items .linked-check-item-content {
+  min-width: 0;
+}
+
+.detail-linked-check-items .linked-check-item-actions {
+  margin-top: 0.55rem;
 }
 
 .danger-link {

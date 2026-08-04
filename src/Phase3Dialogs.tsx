@@ -1,5 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 
+import {
+  LinkedCheckItemsEditor,
+  type EditableCheckItem,
+} from "./LinkedCheckItemsEditor";
 import type { CheckItemView, Issue } from "./phase2";
 import {
   type DuplicateCandidate,
@@ -85,6 +89,10 @@ export function EditDialog({
   busy,
   onClose,
   onSaved,
+  onUpdateCheckItem,
+  onToggleCheckItem,
+  onArchiveCheckItem,
+  onDeleteCheckItem,
 }: {
   person: PersonDetail;
   checkItems: LinkedCheckItemSummary[];
@@ -94,6 +102,16 @@ export function EditDialog({
     work: () => Promise<unknown>,
     input: PersonInput,
   ) => Promise<boolean>;
+  onUpdateCheckItem?: (
+    item: EditableCheckItem,
+    content: string,
+  ) => Promise<boolean>;
+  onToggleCheckItem?: (
+    item: EditableCheckItem,
+    checked: boolean,
+  ) => Promise<boolean>;
+  onArchiveCheckItem?: (item: EditableCheckItem) => Promise<boolean>;
+  onDeleteCheckItem?: (item: EditableCheckItem) => void;
 }) {
   const [candidates, setCandidates] = useState<DuplicateCandidate[]>([]);
   const [checked, setChecked] = useState(false);
@@ -131,7 +149,14 @@ export function EditDialog({
             저장하면 간이 등록 상태가 해제되고 입력한 정보가 반영됩니다.
           </p>
         )}
-        <LinkedCheckItems items={checkItems} />
+        <LinkedCheckItems
+          items={checkItems}
+          busy={busy}
+          onUpdate={onUpdateCheckItem}
+          onToggle={onToggleCheckItem}
+          onArchive={onArchiveCheckItem}
+          onDelete={onDeleteCheckItem}
+        />
         <PersonFields person={person} />
         <DuplicateWarning
           candidates={candidates}
@@ -148,24 +173,31 @@ export function EditDialog({
 
 export function LinkedCheckItems({
   items,
+  busy = false,
+  onUpdate,
+  onToggle,
+  onArchive,
+  onDelete,
 }: {
   items: LinkedCheckItemSummary[];
+  busy?: boolean;
+  onUpdate?: (item: EditableCheckItem, content: string) => Promise<boolean>;
+  onToggle?: (item: EditableCheckItem, checked: boolean) => Promise<boolean>;
+  onArchive?: (item: EditableCheckItem) => Promise<boolean>;
+  onDelete?: (item: EditableCheckItem) => void;
 }) {
   if (items.length === 0) return null;
   return (
     <section className="linked-check-items" aria-label="연결된 확인할 일">
       <h3>연결된 확인할 일</h3>
-      <div>
-        {items.map((item) => (
-          <article
-            className={item.status === "확인 완료" ? "checked" : ""}
-            key={item.id}
-          >
-            <span>{item.status}</span>
-            <p>{item.summary}</p>
-          </article>
-        ))}
-      </div>
+      <LinkedCheckItemsEditor
+        items={items}
+        busy={busy}
+        onUpdate={onUpdate}
+        onToggle={onToggle}
+        onArchive={onArchive}
+        onDelete={onDelete}
+      />
     </section>
   );
 }

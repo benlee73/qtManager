@@ -1,5 +1,9 @@
 import { type ReactNode } from "react";
 import { useTextDraft } from "./drafts";
+import {
+  LinkedCheckItemsEditor,
+  type EditableCheckItem,
+} from "./LinkedCheckItemsEditor";
 
 import type {
   PersonDetail,
@@ -84,7 +88,7 @@ export function ManagementPersonList({
   );
 }
 
-type PersonDetailPanelProps = {
+export type PersonDetailPanelProps = {
   detail: PersonDetail | null;
   busy: boolean;
   onEdit: (detail: PersonDetail) => void;
@@ -92,6 +96,16 @@ type PersonDetailPanelProps = {
   onToggleArchived: (detail: PersonDetail) => void;
   onSavePersonNote: (detail: PersonDetail, note: string) => Promise<boolean>;
   onCreateCheckItem: (personId: string, content: string) => Promise<boolean>;
+  onUpdateCheckItem: (
+    item: EditableCheckItem,
+    content: string,
+  ) => Promise<boolean>;
+  onToggleCheckItem: (
+    item: EditableCheckItem,
+    checked: boolean,
+  ) => Promise<boolean>;
+  onArchiveCheckItem: (item: EditableCheckItem) => Promise<boolean>;
+  onDeleteCheckItem: (item: EditableCheckItem) => void;
 };
 
 export function PersonDetailPanel(props: PersonDetailPanelProps) {
@@ -125,6 +139,10 @@ function PersonDetailContent({
   onToggleArchived,
   onSavePersonNote,
   onCreateCheckItem,
+  onUpdateCheckItem,
+  onToggleCheckItem,
+  onArchiveCheckItem,
+  onDeleteCheckItem,
 }: PersonDetailContentProps) {
   const noteDraftState = useTextDraft(
     `person-note:${detail.id}`,
@@ -242,29 +260,16 @@ function PersonDetailContent({
             추가
           </button>
         </form>
-        <div
+        <LinkedCheckItemsEditor
+          items={detail.checkItems}
+          busy={busy}
           className="detail-linked-check-items"
-          data-testid="linked-check-items"
-        >
-          {detail.checkItems.map((item) => {
-            const checked = item.status === "확인 완료";
-            return (
-              <article className={checked ? "checked" : ""} key={item.id}>
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled
-                  readOnly
-                  aria-label={`${item.summary} · ${item.status}`}
-                />
-                <div>
-                  <strong>{item.status}</strong>
-                  <p title={item.summary}>{item.summary}</p>
-                </div>
-              </article>
-            );
-          })}
-        </div>
+          testId="linked-check-items"
+          onUpdate={onUpdateCheckItem}
+          onToggle={onToggleCheckItem}
+          onArchive={onArchiveCheckItem}
+          onDelete={onDeleteCheckItem}
+        />
       </DetailSection>
 
       <DetailSection title={`구독 이력 ${detail.subscriptions.length}건`}>
@@ -289,7 +294,6 @@ function PersonDetailContent({
                   </strong>
                 </div>
                 <p>
-                  매 호{" "}
                   <span className="numeric">{subscription.quantity}권</span>
                   {subscription.appliedAt
                     ? ` · 신청 ${subscription.appliedAt}`

@@ -3,7 +3,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { EditDialog, RegisterDialog, RenewDialog } from "./Phase3Dialogs";
 import { ApplicationImportDialog } from "./ApplicationImportDialog";
 import { HandoverDialog } from "./HandoverDialog";
-import { ManagementPersonList, PersonDetailPanel } from "./ManagementDetail";
+import { createLinkedCheckItemHandlers } from "./linkedCheckItemActions";
+import {
+  ManagementPersonList,
+  PersonDetailPanel,
+  type PersonDetailPanelProps,
+} from "./ManagementDetail";
 import {
   createManagementLoader,
   type ManagementSelection,
@@ -77,12 +82,16 @@ export function ManagementScreen({
 
   useEffect(() => () => loader.cancelPending(), [loader]);
 
-  async function mutate(work: () => Promise<unknown>, success: string) {
+  async function mutate(
+    work: () => Promise<unknown>,
+    success: string,
+    options: { closeDialog?: boolean } = {},
+  ) {
     onExternalChange?.();
     setBusy(true);
     try {
       await work();
-      setDialog(null);
+      if (options.closeDialog !== false) setDialog(null);
       notify(success);
       await refresh();
       return true;
@@ -93,6 +102,17 @@ export function ManagementScreen({
       setBusy(false);
     }
   }
+
+  const mutateLinkedCheckItem = (
+    work: () => Promise<unknown>,
+    success: string,
+  ) => mutate(work, success, { closeDialog: false });
+
+  const linkedCheckItemHandlers = createLinkedCheckItemHandlers({
+    mutate: mutateLinkedCheckItem,
+    recordAction,
+    label: "신청자 연결",
+  });
 
   return (
     <main className="app-shell management-shell">
@@ -169,7 +189,9 @@ export function ManagementScreen({
           </label>
           <div className="management-counts">
             <span>검색 결과 {management?.people.length ?? 0}명</span>
-            <span>정보 보완 {management?.draftCount ?? 0}명</span>
+            <span title="간이 등록 등으로 연락처나 구독 정보가 아직 부족한 신청자 수">
+              정보 보완 필요 {management?.draftCount ?? 0}명
+            </span>
           </div>
           <ManagementPersonList
             people={management?.people ?? []}
@@ -229,6 +251,7 @@ export function ManagementScreen({
               return saved;
             });
           }}
+          {...linkedCheckItemHandlers}
           onToggleArchived={(person) =>
             void mutate(
               () => setPersonArchived(person.id, person.status !== "보관됨"),
@@ -273,7 +296,11 @@ export function ManagementScreen({
       )}
       {dialog?.type === "edit" && (
         <ManagementEditDialog
-          person={dialog.person}
+          person={
+            selection.detail?.id === dialog.person.id
+              ? selection.detail
+              : dialog.person
+          }
           busy={busy}
           onClose={() => setDialog(null)}
           onSaved={(work, input) =>
@@ -302,6 +329,7 @@ export function ManagementScreen({
               return saved;
             })
           }
+          {...linkedCheckItemHandlers}
         />
       )}
       {dialog?.type === "renew" && (
@@ -322,6 +350,10 @@ export function ManagementEditDialog({
   busy,
   onClose,
   onSaved,
+  onUpdateCheckItem,
+  onToggleCheckItem,
+  onArchiveCheckItem,
+  onDeleteCheckItem,
 }: {
   person: PersonDetail;
   busy: boolean;
@@ -330,6 +362,10 @@ export function ManagementEditDialog({
     work: () => Promise<unknown>,
     input: PersonInput,
   ) => Promise<boolean>;
+  onUpdateCheckItem: PersonDetailPanelProps["onUpdateCheckItem"];
+  onToggleCheckItem: PersonDetailPanelProps["onToggleCheckItem"];
+  onArchiveCheckItem: PersonDetailPanelProps["onArchiveCheckItem"];
+  onDeleteCheckItem: PersonDetailPanelProps["onDeleteCheckItem"];
 }) {
   return (
     <EditDialog
@@ -338,6 +374,10 @@ export function ManagementEditDialog({
       busy={busy}
       onClose={onClose}
       onSaved={onSaved}
+      onUpdateCheckItem={onUpdateCheckItem}
+      onToggleCheckItem={onToggleCheckItem}
+      onArchiveCheckItem={onArchiveCheckItem}
+      onDeleteCheckItem={onDeleteCheckItem}
     />
   );
 }

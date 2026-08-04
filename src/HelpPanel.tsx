@@ -62,10 +62,17 @@ export function HelpPanel({
 
     const marker = content.scrollTop + 48;
     let nextTopic = topics[0].id;
-    for (const item of topics) {
-      const section = sectionForTopic(content, item.id, sectionRefs.current);
-      if (!section || sectionTopWithinContent(section, content) > marker) break;
-      nextTopic = item.id;
+    const atBottom =
+      content.scrollTop + content.clientHeight >= content.scrollHeight - 2;
+    if (atBottom) {
+      nextTopic = topics.at(-1)?.id ?? nextTopic;
+    } else {
+      for (const item of topics) {
+        const section = sectionForTopic(content, item.id, sectionRefs.current);
+        if (!section || sectionTopWithinContent(section, content) > marker)
+          break;
+        nextTopic = item.id;
+      }
     }
     setActiveTopic((current) => (current === nextTopic ? current : nextTopic));
   }, []);
@@ -283,6 +290,14 @@ export function HelpPanel({
                       만들면 해당 신청자와 연결됩니다.
                     </li>
                     <li>
+                      긴 내용은 여러 줄로 표시되며 카드 하단의 ‘전문 보기’에서
+                      전체 내용을 확인합니다.
+                    </li>
+                    <li>
+                      신청자 상세와 정보 수정창에서 연결된 항목을
+                      수정·체크·보관·삭제할 수 있습니다.
+                    </li>
+                    <li>
                       우측 입력란은 신청자와 연결하지 않는 일반 항목입니다.
                     </li>
                   </HelpList>
@@ -328,6 +343,10 @@ export function HelpPanel({
                     <li>신청자 목록에는 또래와 이름만 기본 표시됩니다.</li>
                     <li>정보 보완이나 보관 상태는 작은 표시로 구분합니다.</li>
                     <li>
+                      `정보 보완 필요 N명`은 연락처나 구독 정보가 아직 부족한
+                      간이 등록 신청자 수이며 입금 상태와는 무관합니다.
+                    </li>
+                    <li>
                       전화번호는 신청자 관리 목록에서는 숨기고, 선택한 신청자의
                       상세 또는 정보 수정 화면에서 전체 전화번호를 확인합니다.
                     </li>
@@ -337,7 +356,8 @@ export function HelpPanel({
                     </li>
                     <li>
                       상세에서 신청자 메모를 바로 저장하고, 해당 신청자에게
-                      연결된 확인할 일을 바로 추가할 수 있습니다.
+                      연결된 확인할 일을 바로 추가하거나 수정·체크·보관·삭제할
+                      수 있습니다.
                     </li>
                   </HelpList>
                 </HelpCard>

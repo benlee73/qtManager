@@ -6,6 +6,7 @@ import { ArchiveDialog } from "./ArchiveDialog";
 import { CheckItemCard } from "./CheckItemCard";
 import { HelpPanel } from "./HelpPanel";
 import { ChevronLeftIcon, ChevronRightIcon, RedoIcon, UndoIcon } from "./Icons";
+import { createLinkedCheckItemHandlers } from "./linkedCheckItemActions";
 import { ManagementScreen } from "./ManagementScreen";
 import { NotificationStack } from "./Notifications";
 import { PersonFilterMenu } from "./PersonFilterMenu";
@@ -151,6 +152,16 @@ export default function App() {
     setUndoStack([]);
     setRedoStack([]);
   }, []);
+
+  const linkedCheckItemHandlers = useMemo(
+    () =>
+      createLinkedCheckItemHandlers({
+        mutate,
+        recordAction,
+        onDeleted: () => setEditPerson(null),
+      }),
+    [mutate, recordAction],
+  );
 
   const undoAction = useCallback(async () => {
     const action = undoStack.at(-1);
@@ -942,6 +953,7 @@ export default function App() {
               return saved;
             })
           }
+          {...linkedCheckItemHandlers}
         />
       )}
       {deleteTarget && (

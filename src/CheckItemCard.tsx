@@ -39,7 +39,6 @@ export function CheckItemCard({
           onClick={onOpenDetail}
         >
           <p>{item.summary}</p>
-          <span className="check-item-detail-link">전문 보기</span>
         </button>
       </div>
       <div>
@@ -47,6 +46,14 @@ export function CheckItemCard({
           <b>{item.personName ?? "일반"}</b>
         </small>
         <span className="check-item-actions">
+          <button
+            className="check-item-detail-link"
+            type="button"
+            aria-label="확인할 일 전문 보기"
+            onClick={onOpenDetail}
+          >
+            전문 보기
+          </button>
           <button
             type="button"
             aria-label="확인할 일 보관"

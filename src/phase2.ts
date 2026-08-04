@@ -219,6 +219,12 @@ export function updateCheckItemStatus(
   });
 }
 
+export function updateCheckItem(id: string, content: string) {
+  return invoke<void>("update_check_item_command", {
+    request: { id, content },
+  });
+}
+
 export function deleteCheckItem(id: string) {
   return invoke<void>("delete_check_item_command", { id });
 }

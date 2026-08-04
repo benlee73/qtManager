@@ -33,6 +33,8 @@ describe("CheckItemCard", () => {
     expect(markup).toContain('data-testid="open-check-item-detail"');
     expect(markup).toContain(longItem.summary);
     expect(markup).toContain("전문 보기");
+    expect(markup.indexOf("전문 보기")).toBeLessThan(markup.indexOf("보관"));
+    expect(markup.indexOf("보관")).toBeLessThan(markup.indexOf("삭제"));
   });
 
   it("shows the complete summary in the detail view", () => {

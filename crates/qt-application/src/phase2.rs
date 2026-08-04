@@ -243,6 +243,13 @@ pub struct UpdateCheckItemStatusRequest {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct UpdateCheckItemRequest {
+    pub id: String,
+    pub content: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdatePinnedNoteRequest {
     pub id: String,
     pub is_pinned: Option<bool>,
@@ -724,6 +731,39 @@ where
         "check_item",
         &item.id,
         summary,
+    );
+    repository.save_check_item(&item, &change)?;
+    Ok(())
+}
+
+pub fn update_check_item<R, C, I>(
+    repository: &mut R,
+    services: &RuntimeServices<'_, C, I>,
+    request: UpdateCheckItemRequest,
+) -> Result<(), ApplicationError>
+where
+    R: DistributionDeskRepository,
+    C: Clock,
+    I: IdGenerator,
+{
+    let mut item = repository
+        .list_check_items()?
+        .into_iter()
+        .chain(repository.list_archived_check_items()?)
+        .find(|item| item.id == request.id)
+        .ok_or(ApplicationError::MissingDeskRecord)?;
+    item.content = request.content.trim().into();
+    item.validate()?;
+    let now = services.clock.now();
+    item.updated_at = now.clone();
+    let change = change_log(
+        services.ids.next_id(),
+        &now,
+        &required_operator(repository)?,
+        "check_item_updated",
+        "check_item",
+        &item.id,
+        "확인할 일 수정",
     );
     repository.save_check_item(&item, &change)?;
     Ok(())
@@ -1665,6 +1705,50 @@ mod tests {
         .unwrap();
 
         assert_eq!(desk.check_items[0].summary, content);
+    }
+
+    #[test]
+    fn linked_check_item_content_can_be_updated_without_changing_its_state() {
+        let mut repository = MemoryRepository {
+            operator: Some("담당자".into()),
+            ..Default::default()
+        };
+        let ids = SequenceIds(Cell::new(0));
+        let services = RuntimeServices {
+            clock: &FixedClock,
+            ids: &ids,
+        };
+        create_check_item(
+            &mut repository,
+            &services,
+            CreateCheckItemRequest {
+                person_id: Some("person-1".into()),
+                content: "기존 확인 내용".into(),
+            },
+        )
+        .unwrap();
+        let item_id = repository.check_items[0].id.clone();
+        update_check_item_status(
+            &mut repository,
+            &services,
+            UpdateCheckItemStatusRequest {
+                id: item_id.clone(),
+                status: CheckItemStatus::Checked,
+            },
+        )
+        .unwrap();
+        update_check_item(
+            &mut repository,
+            &services,
+            UpdateCheckItemRequest {
+                id: item_id,
+                content: "수정된 확인 내용".into(),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(repository.check_items[0].content, "수정된 확인 내용");
+        assert_eq!(repository.check_items[0].status, CheckItemStatus::Checked);
     }
 
     #[test]

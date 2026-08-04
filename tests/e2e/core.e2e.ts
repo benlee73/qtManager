@@ -319,6 +319,21 @@ describe("QT Manager desktop flow", () => {
     });
     await waitForText(".linked-check-items", linkedItem);
     await waitForText(".linked-check-items", "확인 필요");
+    await browser.execute((content) => {
+      const item = [
+        ...document.querySelectorAll<HTMLElement>(
+          ".linked-check-items .linked-check-item",
+        ),
+      ].find((candidate) => candidate.textContent?.includes(content));
+      item
+        ?.querySelector<HTMLButtonElement>(
+          '[aria-label="연결된 확인할 일 수정"]',
+        )
+        ?.click();
+    }, linkedItem);
+    await setInput('[data-testid="edit-linked-check-item"]', linkedItem);
+    await clickButtonByText("저장");
+    await waitForText(".toast", "연결된 확인할 일을 수정했습니다");
     await browser.execute(() =>
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
     );
@@ -1127,6 +1142,43 @@ describe("QT Manager desktop flow", () => {
     }, detailApplicant);
     await waitForText('[data-testid="person-detail"]', detailPhone);
 
+    await browser.execute(() => {
+      const tip = document.querySelector<HTMLElement>(
+        '[data-testid="management-heading-help"] [role="tooltip"]',
+      );
+      if (!tip) throw new Error("신청자 관리 안내 툴팁을 찾지 못했습니다.");
+      // WebKit embedded driver does not expose CSS :hover/:focus state after
+      // a programmatic pointer move. Open it explicitly to verify the real
+      // rendered bounds and clipping policy.
+      tip.style.display = "block";
+    });
+    const headingTooltip = await browser.execute(() => {
+      const tip = document.querySelector<HTMLElement>(
+        '[data-testid="management-heading-help"] [role="tooltip"]',
+      );
+      const rect = tip?.getBoundingClientRect();
+      return {
+        display: tip ? getComputedStyle(tip).display : "missing",
+        left: rect?.left ?? -1,
+        right: rect?.right ?? -1,
+        top: rect?.top ?? -1,
+        width: rect?.width ?? 0,
+        windowWidth: window.innerWidth,
+      };
+    });
+    expect(headingTooltip.display).toBe("block");
+    expect(headingTooltip.left).toBeGreaterThanOrEqual(0);
+    expect(headingTooltip.right).toBeLessThanOrEqual(
+      headingTooltip.windowWidth,
+    );
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLElement>(
+          '[data-testid="management-heading-help"] [role="tooltip"]',
+        )
+        ?.style.removeProperty("display");
+    });
+
     const inlinePersonNote = `${detailPrefix} 즉시 메모`;
     const inlineCheck = `${detailPrefix} 즉시 확인할 일`;
     await setInput('[data-testid="person-check-item-input"]', inlineCheck);
@@ -1163,6 +1215,77 @@ describe("QT Manager desktop flow", () => {
     ).toBe(true);
     await selectManagementPerson(detailApplicant);
     await waitForText('[data-testid="person-detail"]', inlineCheck);
+    await browser.execute((content) => {
+      const item = [
+        ...document.querySelectorAll<HTMLElement>(
+          '[data-testid="linked-check-items"] .linked-check-item',
+        ),
+      ].find((candidate) => candidate.textContent?.includes(content));
+      item
+        ?.querySelector<HTMLButtonElement>(
+          '[aria-label="연결된 확인할 일 수정"]',
+        )
+        ?.click();
+    }, inlineCheck);
+    await setInput('[data-testid="edit-linked-check-item"]', inlineCheck);
+    await clickButtonByText("저장");
+    await waitForText(".toast", "신청자 연결 확인할 일을 수정했습니다");
+    await browser.execute((content) => {
+      const item = [
+        ...document.querySelectorAll<HTMLElement>(
+          '[data-testid="linked-check-items"] .linked-check-item',
+        ),
+      ].find((candidate) => candidate.textContent?.includes(content));
+      item?.querySelector<HTMLInputElement>("input[type='checkbox']")?.click();
+    }, inlineCheck);
+    await waitForText(".toast", "신청자 연결 확인할 일을 완료했습니다");
+    await browser.execute((content) => {
+      const item = [
+        ...document.querySelectorAll<HTMLElement>(
+          '[data-testid="linked-check-items"] .linked-check-item',
+        ),
+      ].find((candidate) => candidate.textContent?.includes(content));
+      item
+        ?.querySelector<HTMLButtonElement>(
+          '[aria-label="연결된 확인할 일 보관"]',
+        )
+        ?.click();
+    }, inlineCheck);
+    await waitForText(".toast", "신청자 연결 확인할 일을 보관했습니다");
+    const deletedManagementCheck = `${detailPrefix} 상세 확인 1`;
+    await browser.execute((content) => {
+      const item = [
+        ...document.querySelectorAll<HTMLElement>(
+          '[data-testid="linked-check-items"] .linked-check-item',
+        ),
+      ].find((candidate) => candidate.textContent?.includes(content));
+      item
+        ?.querySelector<HTMLButtonElement>(
+          '[aria-label="연결된 확인할 일 삭제"]',
+        )
+        ?.click();
+    }, deletedManagementCheck);
+    await waitForText('[data-testid="linked-check-items"]', "삭제할까요?");
+    await browser.execute((content) => {
+      const item = [
+        ...document.querySelectorAll<HTMLElement>(
+          '[data-testid="linked-check-items"] .linked-check-item',
+        ),
+      ].find((candidate) => candidate.textContent?.includes(content));
+      item
+        ?.querySelector<HTMLButtonElement>(
+          ".linked-check-item-delete-confirm .danger-button",
+        )
+        ?.click();
+    }, deletedManagementCheck);
+    await waitForText(".toast", "신청자 연결 확인할 일을 삭제했습니다");
+    await browser.waitUntil(
+      async () =>
+        !(await textOf('[data-testid="person-detail"]')).includes(
+          deletedManagementCheck,
+        ),
+      { timeoutMsg: "신청자 상세 확인할 일 삭제가 반영되지 않았습니다." },
+    );
     await setInput('[data-testid="person-note-input"]', inlinePersonNote);
     await clickButtonByText("메모 저장");
     await waitForText(".toast", "신청자 메모를 저장했습니다.");
@@ -1205,6 +1328,38 @@ describe("QT Manager desktop flow", () => {
     );
 
     await clickButtonByText("정보 수정");
+    const editDialogCheck = `${detailPrefix} 상세 확인 2`;
+    await browser.execute((content) => {
+      const item = [
+        ...document.querySelectorAll<HTMLElement>(
+          ".management-edit-dialog .linked-check-item",
+        ),
+      ].find((candidate) => candidate.textContent?.includes(content));
+      item
+        ?.querySelector<HTMLButtonElement>(
+          '[aria-label="연결된 확인할 일 수정"]',
+        )
+        ?.click();
+    }, editDialogCheck);
+    await setInput('[data-testid="edit-linked-check-item"]', editDialogCheck);
+    await browser.execute((content) => {
+      const item = [
+        ...document.querySelectorAll<HTMLElement>(
+          ".management-edit-dialog .linked-check-item",
+        ),
+      ].find((candidate) => candidate.textContent?.includes(content));
+      const button = item?.querySelector<HTMLButtonElement>(
+        ".linked-check-item-actions button",
+      );
+      if (!button) throw new Error("관리 편집 저장 버튼을 찾지 못했습니다.");
+      button.click();
+    }, editDialogCheck);
+    await waitForText(".toast", "신청자 연결 확인할 일을 수정했습니다");
+    expect(
+      await browser.execute(
+        () => document.querySelector(".management-edit-dialog") !== null,
+      ),
+    ).toBe(true);
     const editDialogContract = await browser.execute(() => {
       const dialog = document.querySelector<HTMLElement>(
         ".management-edit-dialog",

@@ -32,6 +32,8 @@ describe("HelpPanel", () => {
     expect(markup).toContain("신청자 목록에는 또래와 이름만 기본 표시됩니다.");
     expect(markup).not.toContain("정식 등록");
     expect(markup).toContain("정보 보완이나 보관 상태는 작은 표시");
+    expect(markup).toContain("정보 보완 필요 N명");
+    expect(markup).toContain("입금 상태와는 무관합니다");
     expect(markup).toContain('data-testid="help-nav-people"');
     expect(markup).toContain('aria-current="location"');
     expect(markup).toContain('data-testid="help-notes"');
