@@ -1,6 +1,17 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, unlinkSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { dirname, join, resolve } from "node:path";
+
+const execFileAsync = promisify(execFile);
+const nativeVisualEnabled = process.env.QT_MANAGER_NATIVE_VISUAL === "1";
+const nativeCommandTimeoutMs = 5_000;
 
 describe("QT Manager desktop flow", () => {
+  before(async () => {
+    if (nativeVisualEnabled) await assertNativeVisualPreflight();
+  });
+
   it("registers an on-site applicant, partially distributes, completes and undoes", async () => {
     await browser.waitUntil(
       async () =>
@@ -280,15 +291,43 @@ describe("QT Manager desktop flow", () => {
         ),
       { timeoutMsg: "연결 확인 정보를 본 수정창이 닫히지 않았습니다." },
     );
-    expect(
-      await browser.execute(() => {
-        const row = document.querySelector<HTMLElement>(
-          '[data-testid="person-row"]',
-        );
-        row?.focus();
-        return row ? getComputedStyle(row).outlineWidth : "";
-      }),
-    ).toBe("1px");
+    const mouseFocus = await browser.execute(() => {
+      const row = document.querySelector<HTMLElement>(
+        '[data-testid="person-row"]',
+      );
+      const style = row ? getComputedStyle(row) : null;
+      return {
+        focusVisible: row?.matches(":focus-visible") ?? false,
+        thickFocusLine:
+          style?.outlineStyle !== "none" &&
+          parseFloat(style?.outlineWidth ?? "0") > 1,
+      };
+    });
+    expect(mouseFocus).toEqual({ focusVisible: false, thickFocusLine: false });
+
+    if (nativeVisualEnabled) {
+      expect(await activateMacOsQtManager()).toBe("qt-manager");
+      expect(await focusPreviousElementBeforePersonRow()).toBe(true);
+      await sendMacOsOptionTab();
+      await browser.waitUntil(
+        async () => (await personRowFocusContract()).active,
+        { timeoutMsg: "macOS Option+Tab이 신청자 행으로 이동하지 않았습니다." },
+      );
+      const keyboardFocus = await personRowFocusContract();
+      expect(keyboardFocus).toEqual({
+        active: true,
+        focusVisible: true,
+        width: "1px",
+        offset: "-1px",
+        style: "solid",
+        colorMatchesAccent: true,
+      });
+    } else {
+      expect(await personRowFocusRule()).toEqual({
+        outline: "1px solid var(--accent)",
+        offset: "-1px",
+      });
+    }
 
     const linkedCheckbox = `input[aria-label="${linkedItem} 확인 완료"]`;
     await browser.execute((selector) => {
@@ -857,7 +896,87 @@ describe("QT Manager desktop flow", () => {
     const registrationPhone = `010-${unique.slice(0, 4)}-${unique.slice(4)}`;
     const editedPhone = `011-${unique.slice(0, 4)}-${unique.slice(4)}`;
     const renewalIssue = shiftIssue(await selectedIssue(), 6);
+    const currentIssue = currentCalendarIssue();
+    const pastIssue = shiftIssue(currentIssue, -6);
+    const detailPrefix = `가상상세${unique}`;
+    const detailApplicant = `${detailPrefix}현재`;
+    const comparisonApplicant = `${detailPrefix}비교`;
+    const detailPhone = `012-${unique.slice(0, 4)}-${unique.slice(4)}`;
+    const comparisonPhone = `013-${unique.slice(0, 4)}-${unique.slice(4)}`;
+    const personNote = `가상 신청자 메모 ${unique}`;
+    const linkedCheck = `가상 연결 확인 ${unique}`;
 
+    const detailPersonId = await invokeTauri<string>(
+      "register_person_command",
+      {
+        request: {
+          name: detailApplicant,
+          cohort: "00",
+          phone: detailPhone,
+          personNote,
+          issueYear: currentIssue.year,
+          issueMonth: currentIssue.startMonth,
+          quantity: 1,
+          appliedAt: null,
+          memo: "현재 구독 fixture",
+          confirmDuplicate: true,
+        },
+      },
+    );
+    await invokeTauri("renew_subscription_command", {
+      request: {
+        personId: detailPersonId,
+        issueYear: pastIssue.year,
+        issueMonth: pastIssue.startMonth,
+        quantity: 1,
+        appliedAt: null,
+        memo: "지난 구독 fixture",
+        confirmOverlap: false,
+      },
+    });
+    const detailFixture = await invokeTauri<{
+      subscriptions: { id: string; periodState: string }[];
+    }>("load_person_detail_command", { personId: detailPersonId });
+    const currentSubscriptionId = detailFixture.subscriptions.find(
+      (subscription) => subscription.periodState === "current",
+    )?.id;
+    if (!currentSubscriptionId) {
+      throw new Error("관리 상세 배부 fixture의 현재 구독을 찾지 못했습니다.");
+    }
+    await invokeTauri("record_distribution_command", {
+      request: {
+        issueYear: currentIssue.year,
+        issueMonth: currentIssue.startMonth,
+        subscriptionId: currentSubscriptionId,
+        quantity: 1,
+        note: null,
+      },
+    });
+    await invokeTauri("create_check_item_command", {
+      request: { personId: detailPersonId, content: linkedCheck },
+    });
+    for (let index = 1; index <= 5; index += 1) {
+      await invokeTauri("create_check_item_command", {
+        request: {
+          personId: detailPersonId,
+          content: `${detailPrefix} 상세 확인 ${index}`,
+        },
+      });
+    }
+    await invokeTauri<string>("register_person_command", {
+      request: {
+        name: comparisonApplicant,
+        cohort: "01",
+        phone: comparisonPhone,
+        personNote: null,
+        issueYear: currentIssue.year,
+        issueMonth: currentIssue.startMonth,
+        quantity: 1,
+        appliedAt: null,
+        memo: null,
+        confirmDuplicate: true,
+      },
+    });
     await browser.execute(() => {
       document
         .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
@@ -871,25 +990,325 @@ describe("QT Manager desktop flow", () => {
             ?.getAttribute("aria-current") ?? null,
       ),
     ).toBe("page");
-    await waitForText("h2", "신청자 정보와 전체 이력");
+    await waitForText("h2", "신청자 관리");
+    await setInput('[data-testid="management-search"]', detailPrefix);
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.querySelectorAll('[data-testid="management-person"]')
+              .length === 2,
+        ),
+      { timeoutMsg: "관리 상세 검증용 신청자 2명을 찾지 못했습니다." },
+    );
+    await browser.execute((name) => {
+      const row = [
+        ...document.querySelectorAll<HTMLButtonElement>(
+          '[data-testid="management-person"]',
+        ),
+      ].find((candidate) => candidate.textContent?.includes(name));
+      if (!row) throw new Error(`관리 상세 검증 행을 찾지 못했습니다: ${name}`);
+      row.click();
+    }, detailApplicant);
+    await waitForText('[data-testid="person-detail"]', detailPhone);
+
+    // Retina 물리 픽셀 1800×1280은 지원 최소 논리 크기 900×640에 해당한다.
+    await browser.setWindowSize(1800, 1280);
+    const managementContract = await browser.execute(
+      (fixturePhones) => {
+        const list = document.querySelector<HTMLElement>(
+          ".management-person-list",
+        )!;
+        const detail = document.querySelector<HTMLElement>(
+          '[data-testid="person-detail"]',
+        )!;
+        const rows = [
+          ...document.querySelectorAll<HTMLElement>(
+            '[data-testid="management-person"]',
+          ),
+        ];
+        const listRect = list.getBoundingClientRect();
+        const rowRects = rows.map((row) => row.getBoundingClientRect());
+        const maxRowHeight = Math.max(...rowRects.map((row) => row.height));
+        const lastRowBottom = Math.max(...rowRects.map((row) => row.bottom));
+        const actionContracts = [
+          ["open-handover", "secondary-button"],
+          ["open-application-import", "secondary-button"],
+          ["open-register-person", "primary-button"],
+        ].map(([testId, expectedClass]) => {
+          const button = document.querySelector<HTMLButtonElement>(
+            `[data-testid="${testId}"]`,
+          )!;
+          const rect = button.getBoundingClientRect();
+          const style = getComputedStyle(button);
+          return {
+            testId,
+            expectedClass,
+            hasExpectedClass: button.classList.contains(expectedClass),
+            hasOppositeClass: button.classList.contains(
+              expectedClass === "primary-button"
+                ? "secondary-button"
+                : "primary-button",
+            ),
+            visible:
+              rect.width > 0 &&
+              rect.height > 0 &&
+              rect.left >= 0 &&
+              rect.right <= window.innerWidth &&
+              rect.top >= 0 &&
+              rect.bottom <= window.innerHeight &&
+              style.display !== "none" &&
+              style.visibility !== "hidden",
+          };
+        });
+        const panelLine = getComputedStyle(
+          document.querySelector<HTMLElement>(".management-grid")!,
+        ).borderTopColor;
+        const distributionRows = [
+          ...detail.querySelectorAll<HTMLElement>(".distribution-history-row"),
+        ];
+        return {
+          rowCount: rows.length,
+          rowHeights: rowRects.map((row) => Math.round(row.height)),
+          maxRowHeight,
+          unusedListHeight: listRect.bottom - lastRowBottom,
+          listHasFixturePhone: fixturePhones.some((phone) =>
+            list.textContent?.includes(phone),
+          ),
+          detailText: detail.textContent ?? "",
+          currentStateCount: detail.querySelectorAll(
+            '[data-testid="subscription-current"]',
+          ).length,
+          pastStateCount: detail.querySelectorAll(
+            '[data-testid="subscription-past"]',
+          ).length,
+          distributionHeaders: [
+            ...detail.querySelectorAll<HTMLElement>(
+              '[data-testid="distribution-history-header"] strong',
+            ),
+          ].map((header) => header.textContent?.trim() ?? ""),
+          distributionRowCount: distributionRows.length,
+          distributionRowLineMatchesPanel: distributionRows.every(
+            (row) => getComputedStyle(row).borderBottomColor === panelLine,
+          ),
+          distributionLineMatchesPanel: [
+            ...detail.querySelectorAll<HTMLElement>(
+              ".distribution-history-header, .distribution-history-row",
+            ),
+          ].every(
+            (row) => getComputedStyle(row).borderBottomColor === panelLine,
+          ),
+          actionContracts,
+          listOverflow: getComputedStyle(list).overflowY,
+          detailOverflow: getComputedStyle(detail).overflowY,
+          listActuallyOverflows: list.scrollHeight > list.clientHeight,
+          detailActuallyOverflows: detail.scrollHeight > detail.clientHeight,
+          horizontalPageScroll:
+            document.documentElement.scrollWidth > window.innerWidth ||
+            document.body.scrollWidth > window.innerWidth,
+        };
+      },
+      [detailPhone, comparisonPhone],
+    );
+    expect(managementContract.rowCount).toBe(2);
+    expect(managementContract.rowHeights).toHaveLength(2);
+    expect(managementContract.maxRowHeight).toBeLessThanOrEqual(96);
+    expect(managementContract.unusedListHeight).toBeGreaterThan(
+      managementContract.maxRowHeight,
+    );
+    expect(managementContract.listHasFixturePhone).toBe(false);
+    expect(managementContract.detailText).toContain(detailPhone);
+    expect(managementContract.detailText).toContain(personNote);
+    expect(managementContract.detailText).toContain(linkedCheck);
+    expect(managementContract.currentStateCount).toBe(1);
+    expect(managementContract.pastStateCount).toBe(1);
+    expect(managementContract.distributionHeaders).toEqual([
+      "배부 호",
+      "처리",
+      "처리 시각",
+    ]);
+    expect(managementContract.distributionRowCount).toBe(1);
+    expect(managementContract.distributionRowLineMatchesPanel).toBe(true);
+    expect(managementContract.distributionLineMatchesPanel).toBe(true);
+    expect(managementContract.actionContracts).toEqual([
+      {
+        testId: "open-handover",
+        expectedClass: "secondary-button",
+        hasExpectedClass: true,
+        hasOppositeClass: false,
+        visible: true,
+      },
+      {
+        testId: "open-application-import",
+        expectedClass: "secondary-button",
+        hasExpectedClass: true,
+        hasOppositeClass: false,
+        visible: true,
+      },
+      {
+        testId: "open-register-person",
+        expectedClass: "primary-button",
+        hasExpectedClass: true,
+        hasOppositeClass: false,
+        visible: true,
+      },
+    ]);
+    expect(managementContract.listOverflow).toBe("auto");
+    expect(managementContract.detailOverflow).toBe("auto");
+    expect(managementContract.listActuallyOverflows).toBe(false);
+    expect(managementContract.detailActuallyOverflows).toBe(true);
+    expect(managementContract.horizontalPageScroll).toBe(false);
+
+    await selectManagementPerson(detailApplicant);
+    await waitForText('[data-testid="person-detail"]', detailPhone);
+    expect(await managementScrollContract()).toEqual({
+      anonymousFixtureCount: 2,
+      listActuallyOverflows: true,
+      detailActuallyOverflows: true,
+      listMoved: true,
+      detailStayedWhileListMoved: true,
+      detailMoved: true,
+      listStayedWhileDetailMoved: true,
+      documentStayedStill: true,
+      documentFits: true,
+      panelOverflow: ["auto", "auto"],
+      listPanelMinHeight: "0px",
+      detailPanelMinHeight: "0px",
+      listScrollbarGutter: "stable",
+      detailScrollbarGutter: "stable",
+    });
+
+    await browser.setWindowSize(2200, 1440);
+    expect(await managementScrollContract()).toEqual({
+      anonymousFixtureCount: 2,
+      listActuallyOverflows: true,
+      detailActuallyOverflows: true,
+      listMoved: true,
+      detailStayedWhileListMoved: true,
+      detailMoved: true,
+      listStayedWhileDetailMoved: true,
+      documentStayedStill: true,
+      documentFits: true,
+      panelOverflow: ["auto", "auto"],
+      listPanelMinHeight: "0px",
+      detailPanelMinHeight: "0px",
+      listScrollbarGutter: "stable",
+      detailScrollbarGutter: "stable",
+    });
+
+    expect(
+      await browser.execute(() => {
+        const cohort = document.querySelector<HTMLElement>(
+          '[data-testid="person-cohort"]',
+        )!;
+        const name = document.querySelector<HTMLElement>(
+          '[data-testid="person-name"]',
+        )!;
+        const cohortRect = cohort.getBoundingClientRect();
+        const nameRect = name.getBoundingClientRect();
+        return {
+          nameIsBesideCohort: nameRect.left > cohortRect.right,
+          identityLineDelta: Math.abs(nameRect.top - cohortRect.top),
+        };
+      }),
+    ).toEqual({ nameIsBesideCohort: true, identityLineDelta: 0 });
+
+    const expectedCaptureContract = {
+      fontsStatus: "loaded",
+      headingActionContracts: [
+        {
+          text: "데이터 백업·복원",
+          expectedClass: "secondary-button",
+          hasExpectedClass: true,
+          hasOppositeClass: false,
+          height: 32,
+          insideViewport: true,
+        },
+        {
+          text: "Google 응답 붙여넣기",
+          expectedClass: "secondary-button",
+          hasExpectedClass: true,
+          hasOppositeClass: false,
+          height: 32,
+          insideViewport: true,
+        },
+        {
+          text: "+ 신청자 등록",
+          expectedClass: "primary-button",
+          hasExpectedClass: true,
+          hasOppositeClass: false,
+          height: 32,
+          insideViewport: true,
+        },
+      ],
+      detailActionContracts: [
+        {
+          text: "정보 수정",
+          expectedClass: "secondary-button",
+          hasExpectedClass: true,
+          hasOppositeClass: false,
+          height: 38,
+          insideViewport: true,
+        },
+        {
+          text: "구독 추가·갱신",
+          expectedClass: "primary-button",
+          hasExpectedClass: true,
+          hasOppositeClass: false,
+          height: 38,
+          insideViewport: true,
+        },
+      ],
+      currentStateCount: 1,
+      pastStateCount: 1,
+      selectedRowCount: 1,
+      selectedApplicant: true,
+      personNoteVisible: true,
+      linkedCheckVisible: true,
+      distributionHeaders: ["배부 호", "처리", "처리 시각"],
+      distributionRowCount: 1,
+      distributionRowLineMatchesPanel: true,
+      listHasFixturePhone: false,
+      detailHasFixturePhone: true,
+      distributionLineMatchesPanel: true,
+      documentFits: true,
+    };
+    expect(
+      await prepareManagementCapture(
+        "light",
+        detailPrefix,
+        detailApplicant,
+        detailPhone,
+        comparisonPhone,
+        personNote,
+        linkedCheck,
+      ),
+    ).toEqual({ theme: "light", ...expectedCaptureContract });
     mkdirSync("test-results", { recursive: true });
     await browser.saveScreenshot("test-results/ui-management-light.png");
-    const headingFits = await browser.execute(() => {
-      const heading = document
-        .querySelector<HTMLElement>(".management-heading")!
-        .getBoundingClientRect();
-      return [
-        ...document.querySelectorAll<HTMLElement>(".heading-actions button"),
-      ].every((button) => {
-        const rect = button.getBoundingClientRect();
-        return (
-          rect.top >= heading.top &&
-          rect.bottom <= heading.bottom &&
-          rect.right <= heading.right
-        );
-      });
-    });
-    expect(headingFits).toBe(true);
+    if (nativeVisualEnabled) {
+      await captureMacOsCompositor(
+        "test-results/ui-management-light-compositor.png",
+      );
+    }
+    expect(
+      await prepareManagementCapture(
+        "dark",
+        detailPrefix,
+        detailApplicant,
+        detailPhone,
+        comparisonPhone,
+        personNote,
+        linkedCheck,
+      ),
+    ).toEqual({ theme: "dark", ...expectedCaptureContract });
+    await browser.saveScreenshot("test-results/ui-management-dark.png");
+    if (nativeVisualEnabled) {
+      await captureMacOsCompositor(
+        "test-results/ui-management-dark-compositor.png",
+      );
+    }
+
     await browser.execute(() => {
       document
         .querySelector<HTMLButtonElement>(
@@ -937,7 +1356,7 @@ describe("QT Manager desktop flow", () => {
         ?.click();
     });
     await waitForText('[data-testid="person-detail"]', "가상 신청자 메모");
-    await waitForText('[data-testid="person-detail"]', "연속 6개 호");
+    await waitForText('[data-testid="person-detail"]', "구독 이력 1건");
 
     await clickButtonByText("정보 수정");
     await setInput("input[name='name']", edited);
@@ -1012,7 +1431,7 @@ describe("QT Manager desktop flow", () => {
         .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
         ?.click();
     });
-    await waitForText("h2", "신청자 정보와 전체 이력");
+    await waitForText("h2", "신청자 관리");
     await browser.execute(() => {
       document
         .querySelector<HTMLButtonElement>(
@@ -1092,7 +1511,7 @@ describe("QT Manager desktop flow", () => {
         .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
         ?.click();
     });
-    await waitForText("h2", "신청자 정보와 전체 이력");
+    await waitForText("h2", "신청자 관리");
     await browser.execute(() => {
       document
         .querySelector<HTMLButtonElement>('[data-testid="open-handover"]')
@@ -1166,10 +1585,14 @@ describe("QT Manager desktop flow", () => {
     });
     expect(management.people).toHaveLength(0);
 
-    const restore = await invokeTauri<{ sourceFileName: string }>(
-      "latest_restore_point_command",
-    );
+    const restore = await invokeTauri<{
+      sourceFileName: string;
+      snapshotPath: string;
+    }>("latest_restore_point_command");
     expect(restore.sourceFileName).toBe("handover.xlsx");
+    expect(dirname(restore.snapshotPath)).toBe(
+      join(dirname(dirname(paths.exportPath)), "phase2-e2e", "restore-points"),
+    );
     await invokeTauri("undo_state_import_command");
     management = await invokeTauri("load_people_management_command", {
       query: unique,
@@ -1293,6 +1716,510 @@ function shiftIssue(
   const year = Math.floor(absolute / 6);
   const index = ((absolute % 6) + 6) % 6;
   return { year, startMonth: index * 2 + 1 };
+}
+
+function currentCalendarIssue() {
+  // 앱 런타임과 같은 Asia/Seoul 달력 날짜를 사용해 자정 경계에서도 상태가 맞는다.
+  const seoulNow = new Date(Date.now() + 9 * 60 * 60 * 1_000);
+  const year = seoulNow.getUTCFullYear();
+  const month = seoulNow.getUTCMonth() + 1;
+  return { year, startMonth: month % 2 === 0 ? month - 1 : month };
+}
+
+async function sendMacOsOptionTab() {
+  await execNativeCommand(
+    "/usr/bin/osascript",
+    ["-e", 'tell application "System Events" to key code 48 using option down'],
+    "macOS Option+Tab 입력",
+  );
+}
+
+async function activateMacOsQtManager() {
+  const pid = await getMacOsQtManagerPid();
+  const { stdout } = await execNativeCommand(
+    "/usr/bin/osascript",
+    [
+      "-e",
+      `tell application "System Events"
+      set targetProcess to first application process whose unix id is ${pid}
+      set frontmost of targetProcess to true
+      delay 0.2
+      return name of targetProcess
+    end tell`,
+    ],
+    "QT Manager 창 전면화",
+  );
+  return stdout.trim();
+}
+
+async function getMacOsQtManagerPid() {
+  const { stdout: rawPid } = await execNativeCommand(
+    "/usr/bin/pgrep",
+    ["-n", "-x", "qt-manager"],
+    "QT Manager process 조회",
+  );
+  const pid = Number.parseInt(rawPid.trim(), 10);
+  if (!Number.isSafeInteger(pid)) {
+    throw new Error(`qt-manager PID를 확인하지 못했습니다: ${rawPid}`);
+  }
+  return pid;
+}
+
+async function captureMacOsCompositor(path: string) {
+  await activateMacOsQtManager();
+  const windowId = await getMacOsQtManagerWindowId();
+  await execNativeCommand(
+    "/usr/sbin/screencapture",
+    ["-x", "-o", "-T", "1", "-l", String(windowId), resolve(path)],
+    "QT Manager 단일 창 캡처",
+  );
+}
+
+async function getMacOsQtManagerWindowId() {
+  const pid = await getMacOsQtManagerPid();
+  const { stdout } = await execNativeCommand(
+    "/usr/bin/osascript",
+    [
+      "-l",
+      "JavaScript",
+      "-e",
+      `ObjC.import("CoreGraphics");
+      const windowListRef = $.CGWindowListCopyWindowInfo(
+        $.kCGWindowListOptionOnScreenOnly,
+        $.kCGNullWindowID,
+      );
+      const windows = ObjC.castRefToObject(windowListRef);
+      let windowId = null;
+      for (let index = 0; index < windows.count; index += 1) {
+        const info = ObjC.deepUnwrap(windows.objectAtIndex(index));
+        if (
+          info.kCGWindowOwnerPID === ${pid} &&
+          info.kCGWindowLayer === 0 &&
+          info.kCGWindowSharingState !== 0
+        ) {
+          windowId = info.kCGWindowNumber;
+          break;
+        }
+      }
+      windowId === null ? "" : String(windowId);`,
+    ],
+    "QT Manager 창 ID 조회",
+  );
+  const windowId = Number.parseInt(stdout.trim(), 10);
+  if (!Number.isSafeInteger(windowId) || windowId <= 0) {
+    throw new Error(`QT Manager 창 ID를 확인하지 못했습니다: ${stdout}`);
+  }
+  return windowId;
+}
+
+async function assertNativeVisualPreflight() {
+  if (process.platform !== "darwin") {
+    throw new Error(
+      "QT_MANAGER_NATIVE_VISUAL=1 검수는 macOS에서만 실행할 수 있습니다.",
+    );
+  }
+  const { stdout } = await execNativeCommand(
+    "/usr/bin/osascript",
+    ["-e", 'tell application "System Events" to return UI elements enabled'],
+    "macOS 접근성 권한 사전 확인",
+  );
+  if (stdout.trim() !== "true") {
+    throw new Error(
+      "macOS 접근성 권한이 없습니다. System Settings > Privacy & Security > Accessibility에서 현재 터미널을 허용하세요.",
+    );
+  }
+  mkdirSync("test-results", { recursive: true });
+  const probePath = resolve("test-results/.native-screen-recording-probe.png");
+  try {
+    await execNativeCommand(
+      "/usr/sbin/screencapture",
+      ["-x", "-R", "0,0,1,1", probePath],
+      "macOS 화면 기록 권한 사전 확인",
+    );
+  } finally {
+    if (existsSync(probePath)) unlinkSync(probePath);
+  }
+}
+
+async function execNativeCommand(
+  command: string,
+  args: string[],
+  purpose: string,
+) {
+  try {
+    return await execFileAsync(command, args, {
+      timeout: nativeCommandTimeoutMs,
+      killSignal: "SIGKILL",
+    });
+  } catch (reason) {
+    const detail =
+      reason instanceof Error ? reason.message : String(reason ?? "unknown");
+    throw new Error(
+      `${purpose}에 실패했습니다. macOS 권한 또는 실행 환경을 확인하세요: ${detail}`,
+    );
+  }
+}
+
+async function focusPreviousElementBeforePersonRow() {
+  return browser.execute(() => {
+    const row = document.querySelector<HTMLElement>(
+      '[data-testid="person-row"]',
+    );
+    const tabbable = [
+      ...document.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ].filter(
+      (element) =>
+        element.getClientRects().length > 0 &&
+        getComputedStyle(element).visibility !== "hidden",
+    );
+    const rowIndex = row ? tabbable.indexOf(row) : -1;
+    const previous = rowIndex > 0 ? tabbable[rowIndex - 1] : null;
+    previous?.focus();
+    return previous !== null && document.activeElement === previous;
+  });
+}
+
+async function personRowFocusContract() {
+  return browser.execute(() => {
+    const row = document.querySelector<HTMLElement>(
+      '[data-testid="person-row"]',
+    );
+    const style = row ? getComputedStyle(row) : null;
+    const accentProbe = document.createElement("span");
+    accentProbe.style.color = "var(--accent)";
+    document.body.append(accentProbe);
+    const accent = getComputedStyle(accentProbe).color;
+    accentProbe.remove();
+    return {
+      active: document.activeElement === row,
+      focusVisible: row?.matches(":focus-visible") ?? false,
+      width: style?.outlineWidth ?? "",
+      offset: style?.outlineOffset ?? "",
+      style: style?.outlineStyle ?? "",
+      colorMatchesAccent: style?.outlineColor === accent,
+    };
+  });
+}
+
+async function personRowFocusRule() {
+  return browser.execute(() => {
+    const rules = [...document.styleSheets].flatMap((sheet) => [
+      ...sheet.cssRules,
+    ]);
+    const rule = rules.find(
+      (candidate): candidate is CSSStyleRule =>
+        candidate instanceof CSSStyleRule &&
+        candidate.selectorText === ".person-row:focus-visible",
+    );
+    return {
+      outline: rule?.style.outline ?? "",
+      offset: rule?.style.outlineOffset ?? "",
+    };
+  });
+}
+
+async function selectManagementPerson(name: string) {
+  await browser.execute((expectedName) => {
+    const row = [
+      ...document.querySelectorAll<HTMLButtonElement>(
+        '[data-testid="management-person"]',
+      ),
+    ].find((candidate) => candidate.textContent?.includes(expectedName));
+    if (!row)
+      throw new Error(`관리 신청자 행을 찾지 못했습니다: ${expectedName}`);
+    row.click();
+  }, name);
+}
+
+async function managementScrollContract() {
+  return browser.execute(() => {
+    const list = document.querySelector<HTMLElement>(
+      ".management-person-list",
+    )!;
+    const detail = document.querySelector<HTMLElement>(
+      '[data-testid="person-detail"]',
+    )!;
+    const root = document.querySelector<HTMLElement>("#root")!;
+    document
+      .querySelectorAll('[data-management-scroll-fixture="true"]')
+      .forEach((fixture) => fixture.remove());
+    for (const panel of [list, detail]) {
+      panel.style.removeProperty("height");
+      panel.style.removeProperty("min-height");
+      panel.style.removeProperty("max-height");
+    }
+    const panelHeights = [list.clientHeight, detail.clientHeight];
+    for (const [index, panel] of [list, detail].entries()) {
+      const height = panelHeights[index];
+      panel.style.height = `${height}px`;
+      panel.style.minHeight = "0";
+      panel.style.maxHeight = `${height}px`;
+      const fixture = document.createElement("div");
+      fixture.dataset.managementScrollFixture = "true";
+      fixture.setAttribute("aria-hidden", "true");
+      fixture.style.height = `${height + 160}px`;
+      fixture.style.minHeight = `${height + 160}px`;
+      fixture.style.width = "1px";
+      fixture.style.pointerEvents = "none";
+      panel.append(fixture);
+    }
+    const documentNodes = [document.documentElement, document.body, root];
+    for (const node of documentNodes) node.scrollTop = 0;
+    window.scrollTo(0, 0);
+    list.scrollTop = 0;
+    detail.scrollTop = 0;
+
+    const documentScrolls = () => [
+      window.scrollX,
+      window.scrollY,
+      ...documentNodes.map((node) => node.scrollTop),
+    ];
+    const initialDocumentScrolls = documentScrolls();
+
+    list.scrollTop = Math.min(64, list.scrollHeight - list.clientHeight);
+    const listAfterListMove = list.scrollTop;
+    const detailAfterListMove = detail.scrollTop;
+    const documentAfterListMove = documentScrolls();
+
+    detail.scrollTop = Math.min(64, detail.scrollHeight - detail.clientHeight);
+    const detailAfterDetailMove = detail.scrollTop;
+    const listAfterDetailMove = list.scrollTop;
+    const documentAfterDetailMove = documentScrolls();
+
+    return {
+      anonymousFixtureCount: document.querySelectorAll(
+        '[data-management-scroll-fixture="true"][aria-hidden="true"]',
+      ).length,
+      listActuallyOverflows: list.scrollHeight > list.clientHeight,
+      detailActuallyOverflows: detail.scrollHeight > detail.clientHeight,
+      listMoved: listAfterListMove > 0,
+      detailStayedWhileListMoved: detailAfterListMove === 0,
+      detailMoved: detailAfterDetailMove > 0,
+      listStayedWhileDetailMoved: listAfterDetailMove === listAfterListMove,
+      documentStayedStill:
+        documentAfterListMove.every(
+          (value, index) => value === initialDocumentScrolls[index],
+        ) &&
+        documentAfterDetailMove.every(
+          (value, index) => value === initialDocumentScrolls[index],
+        ),
+      documentFits: documentNodes.every(
+        (node) =>
+          node.scrollWidth === node.clientWidth &&
+          node.scrollHeight === node.clientHeight,
+      ),
+      panelOverflow: [
+        getComputedStyle(list).overflowY,
+        getComputedStyle(detail).overflowY,
+      ],
+      listPanelMinHeight: getComputedStyle(
+        list.closest<HTMLElement>(".management-list-panel")!,
+      ).minHeight,
+      detailPanelMinHeight: getComputedStyle(detail).minHeight,
+      listScrollbarGutter: getComputedStyle(list).scrollbarGutter,
+      detailScrollbarGutter: getComputedStyle(detail).scrollbarGutter,
+    };
+  });
+}
+
+async function prepareManagementCapture(
+  theme: "light" | "dark",
+  query: string,
+  applicant: string,
+  phone: string,
+  comparisonPhone: string,
+  personNote: string,
+  linkedCheck: string,
+) {
+  await browser.execute((targetTheme) => {
+    localStorage.setItem("qt-manager-theme", targetTheme);
+  }, theme);
+  await refreshApp(`${theme} 테마 캡처를 위한 새로고침에 실패했습니다.`);
+  await browser.setWindowSize(2000, 1440);
+  await browser.execute(() => {
+    document
+      .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
+      ?.click();
+  });
+  await waitForText("h2", "신청자 관리");
+  await setInput('[data-testid="management-search"]', query);
+  await browser.waitUntil(
+    async () =>
+      browser.execute(
+        () =>
+          document.querySelectorAll('[data-testid="management-person"]')
+            .length === 2,
+      ),
+    { timeoutMsg: `${theme} 테마에서 관리 신청자 2명을 찾지 못했습니다.` },
+  );
+  await selectManagementPerson(applicant);
+  await waitForText('[data-testid="person-detail"]', phone);
+  await browser.waitUntil(
+    async () =>
+      browser.execute(
+        () =>
+          [
+            ...document.querySelectorAll<HTMLButtonElement>(
+              ".detail-actions button",
+            ),
+          ]
+            .map((button) => button.textContent?.trim() ?? "")
+            .join("|") === "정보 수정|구독 추가·갱신",
+      ),
+    { timeoutMsg: `${theme} 테마에서 상세 버튼 전문이 준비되지 않았습니다.` },
+  );
+  await browser.execute(() => {
+    delete document.documentElement.dataset.managementCaptureReady;
+    let scheduled = false;
+    const afterFonts = () => {
+      if (scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          document.documentElement.dataset.managementCaptureReady = "true";
+        }),
+      );
+    };
+    void document.fonts.ready.then(afterFonts, afterFonts);
+    if (document.fonts.status === "loaded") afterFonts();
+  });
+  await browser.waitUntil(
+    async () =>
+      browser.execute(
+        () =>
+          document.documentElement.dataset.managementCaptureReady === "true",
+      ),
+    {
+      timeoutMsg: `${theme} 테마의 폰트와 연속 프레임이 안정화되지 않았습니다.`,
+    },
+  );
+  return browser.execute(
+    (fixture) => {
+      const detail = document.querySelector<HTMLElement>(
+        '[data-testid="person-detail"]',
+      )!;
+      const list = document.querySelector<HTMLElement>(
+        ".management-person-list",
+      )!;
+      const actionContract = (
+        button: HTMLButtonElement,
+        expectedClass: string,
+      ) => {
+        const rect = button.getBoundingClientRect();
+        return {
+          text: button.textContent?.trim() ?? "",
+          expectedClass,
+          hasExpectedClass: button.classList.contains(expectedClass),
+          hasOppositeClass: button.classList.contains(
+            expectedClass === "primary-button"
+              ? "secondary-button"
+              : "primary-button",
+          ),
+          height: Math.round(rect.height),
+          insideViewport:
+            rect.width > 0 &&
+            rect.height > 0 &&
+            rect.left >= 0 &&
+            rect.right <= window.innerWidth &&
+            rect.top >= 0 &&
+            rect.bottom <= window.innerHeight,
+        };
+      };
+      const headingButtons = [
+        ...document.querySelectorAll<HTMLButtonElement>(
+          ".heading-actions button",
+        ),
+      ];
+      const detailButtons = [
+        ...detail.querySelectorAll<HTMLButtonElement>(".detail-actions button"),
+      ];
+      const selectedRows = [
+        ...document.querySelectorAll<HTMLButtonElement>(
+          '[data-testid="management-person"][aria-pressed="true"]',
+        ),
+      ];
+      const panelLine = getComputedStyle(
+        document.querySelector<HTMLElement>(".management-grid")!,
+      ).borderTopColor;
+      const distributionLines = [
+        ...detail.querySelectorAll<HTMLElement>(
+          ".distribution-history-header, .distribution-history-row",
+        ),
+      ];
+      const distributionRows = [
+        ...detail.querySelectorAll<HTMLElement>(".distribution-history-row"),
+      ];
+      const documentNodes = [
+        document.documentElement,
+        document.body,
+        document.querySelector<HTMLElement>("#root")!,
+      ];
+      return {
+        theme: document.documentElement.dataset.theme,
+        fontsStatus: document.fonts.status,
+        headingActionContracts: headingButtons.map((button, index) =>
+          actionContract(
+            button,
+            index === headingButtons.length - 1
+              ? "primary-button"
+              : "secondary-button",
+          ),
+        ),
+        detailActionContracts: detailButtons.map((button, index) =>
+          actionContract(
+            button,
+            index === 0 ? "secondary-button" : "primary-button",
+          ),
+        ),
+        currentStateCount: detail.querySelectorAll(
+          '[data-testid="subscription-current"]',
+        ).length,
+        pastStateCount: detail.querySelectorAll(
+          '[data-testid="subscription-past"]',
+        ).length,
+        selectedRowCount: selectedRows.length,
+        selectedApplicant:
+          selectedRows.length === 1 &&
+          Boolean(selectedRows[0].textContent?.includes(fixture.applicant)),
+        personNoteVisible:
+          detail
+            .querySelector('[data-testid="person-note"]')
+            ?.textContent?.includes(fixture.personNote) ?? false,
+        linkedCheckVisible:
+          detail
+            .querySelector('[data-testid="linked-check-items"]')
+            ?.textContent?.includes(fixture.linkedCheck) ?? false,
+        distributionHeaders: [
+          ...detail.querySelectorAll<HTMLElement>(
+            '[data-testid="distribution-history-header"] strong',
+          ),
+        ].map((header) => header.textContent?.trim() ?? ""),
+        distributionRowCount: distributionRows.length,
+        distributionRowLineMatchesPanel:
+          distributionRows.length > 0 &&
+          distributionRows.every(
+            (row) => getComputedStyle(row).borderBottomColor === panelLine,
+          ),
+        listHasFixturePhone: [fixture.phone, fixture.comparisonPhone].some(
+          (fixturePhone) => list.textContent?.includes(fixturePhone),
+        ),
+        detailHasFixturePhone: detail.textContent?.includes(fixture.phone),
+        distributionLineMatchesPanel:
+          distributionLines.length > 0 &&
+          distributionLines.every(
+            (row) => getComputedStyle(row).borderBottomColor === panelLine,
+          ),
+        documentFits: documentNodes.every(
+          (node) =>
+            node.scrollWidth === node.clientWidth &&
+            node.scrollHeight === node.clientHeight,
+        ),
+      };
+    },
+    { applicant, phone, comparisonPhone, personNote, linkedCheck },
+  );
 }
 
 async function setInput(selector: string, value: string) {

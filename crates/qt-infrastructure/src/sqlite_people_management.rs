@@ -1,5 +1,5 @@
 use qt_application::{CoreRepository, ManagedPersonRecord, PeopleManagementRepository, PortError};
-use qt_domain::{ChangeLog, Distribution, Person, Subscription};
+use qt_domain::{ChangeLog, CheckItem, Distribution, Person, Subscription};
 use rusqlite::{OptionalExtension, params};
 use std::collections::HashMap;
 
@@ -8,6 +8,7 @@ use crate::sqlite_core_repository::{
     distribution_from_row, person_from_row, subscription_from_row, upsert_change, upsert_person,
     upsert_subscription,
 };
+use crate::sqlite_distribution_desk::check_item_from_row;
 
 impl PeopleManagementRepository for SqliteCoreRepository {
     fn migrate(&mut self) -> Result<(), PortError> {
@@ -158,6 +159,26 @@ impl PeopleManagementRepository for SqliteCoreRepository {
             subscriptions,
             distributions,
         }))
+    }
+
+    fn list_person_check_items(&self, person_id: &str) -> Result<Vec<CheckItem>, PortError> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "
+                SELECT id, person_id, content, status, operator_name, created_at, updated_at,
+                       checked_at
+                FROM check_items
+                WHERE person_id = ?1 AND status != 'archived'
+                ORDER BY updated_at DESC, id DESC
+                ",
+            )
+            .map_err(port_error)?;
+        statement
+            .query_map([person_id], check_item_from_row)
+            .map_err(port_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(port_error)
     }
 
     fn duplicate_candidates(

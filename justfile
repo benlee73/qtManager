@@ -24,6 +24,10 @@ e2e:
     pnpm tauri build --no-bundle --features e2e --config src-tauri/tauri.e2e.conf.json
     pnpm e2e
 
+e2e-native-visual:
+    @node -e 'if (process.platform !== "darwin") { console.error("e2e-native-visual은 macOS에서만 실행할 수 있습니다."); process.exit(1); }'
+    QT_MANAGER_NATIVE_VISUAL=1 just e2e
+
 e2e-build:
     pnpm build
     cargo build --package qt-manager

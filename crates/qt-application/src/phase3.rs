@@ -1,6 +1,6 @@
 use qt_domain::{
-    ChangeLog, Distribution, Issue, Person, PersonStatus, Subscription, SubscriptionSource,
-    normalize_phone,
+    ChangeLog, CheckItem, CheckItemStatus, Distribution, Issue, Person, PersonStatus, Subscription,
+    SubscriptionSource, SubscriptionStatus, normalize_phone,
 };
 use serde::{Deserialize, Serialize};
 
@@ -22,6 +22,9 @@ pub trait PeopleManagementRepository {
         include_archived: bool,
     ) -> Result<Vec<ManagedPersonRecord>, PortError>;
     fn load_person(&self, id: &str) -> Result<Option<ManagedPersonRecord>, PortError>;
+    fn list_person_check_items(&self, _person_id: &str) -> Result<Vec<CheckItem>, PortError> {
+        Ok(Vec::new())
+    }
     fn duplicate_candidates(
         &self,
         name: &str,
@@ -75,6 +78,16 @@ pub struct PersonDetail {
     pub person_note: Option<String>,
     pub subscriptions: Vec<SubscriptionView>,
     pub distributions: Vec<DistributionView>,
+    pub check_items: Vec<LinkedCheckItemView>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SubscriptionPeriodState {
+    Current,
+    Scheduled,
+    Past,
+    Archived,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -88,6 +101,16 @@ pub struct SubscriptionView {
     pub source: String,
     pub memo: Option<String>,
     pub archived: bool,
+    pub period_state: SubscriptionPeriodState,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkedCheckItemView {
+    pub id: String,
+    pub summary: String,
+    pub status: String,
+    pub updated_at: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -147,6 +170,37 @@ pub struct RenewSubscriptionRequest {
     pub confirm_overlap: bool,
 }
 
+pub fn issue_containing_date(today: &str) -> Result<Issue, ApplicationError> {
+    let (year, month) = parse_current_date(today).ok_or(ApplicationError::InvalidCurrentDate)?;
+    Issue::new(year, if month % 2 == 0 { month - 1 } else { month })
+        .map_err(|_| ApplicationError::InvalidCurrentDate)
+}
+
+fn parse_current_date(today: &str) -> Option<(i32, u8)> {
+    let bytes = today.as_bytes();
+    if bytes.len() != 10
+        || bytes.get(4) != Some(&b'-')
+        || bytes.get(7) != Some(&b'-')
+        || ![&bytes[0..4], &bytes[5..7], &bytes[8..10]]
+            .into_iter()
+            .flatten()
+            .all(u8::is_ascii_digit)
+    {
+        return None;
+    }
+    let year = today.get(0..4)?.parse().ok()?;
+    let month = today.get(5..7)?.parse::<u8>().ok()?;
+    let day = today.get(8..10)?.parse::<u8>().ok()?;
+    let days_in_month = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) => 29,
+        2 => 28,
+        _ => return None,
+    };
+    (1..=days_in_month).contains(&day).then_some((year, month))
+}
+
 pub fn load_people_management<R: PeopleManagementRepository>(
     repository: &mut R,
     query: &str,
@@ -197,6 +251,7 @@ pub fn load_people_management<R: PeopleManagementRepository>(
 pub fn load_person_detail<R: PeopleManagementRepository>(
     repository: &mut R,
     person_id: &str,
+    reference_issue: Issue,
 ) -> Result<PersonDetail, ApplicationError> {
     repository.migrate()?;
     let record = repository
@@ -205,20 +260,14 @@ pub fn load_person_detail<R: PeopleManagementRepository>(
     let mut subscriptions = record
         .subscriptions
         .iter()
-        .map(|item| {
-            Ok(SubscriptionView {
-                id: item.id.clone(),
-                start_issue: item.start_issue.display_name(),
-                last_issue: item.last_issue()?.display_name(),
-                quantity: item.quantity,
-                applied_at: item.applied_at.clone(),
-                source: source_label(item.source).into(),
-                memo: item.memo.clone(),
-                archived: item.archived_at.is_some(),
-            })
-        })
-        .collect::<Result<Vec<_>, qt_domain::DomainError>>()?;
-    subscriptions.reverse();
+        .map(|item| subscription_view(item, reference_issue))
+        .collect::<Result<Vec<_>, _>>()?;
+    subscriptions.sort_by(|(left_issue, left), (right_issue, right)| {
+        subscription_period_state_rank(left.period_state)
+            .cmp(&subscription_period_state_rank(right.period_state))
+            .then_with(|| right_issue.cmp(left_issue))
+    });
+    let subscriptions = subscriptions.into_iter().map(|(_, item)| item).collect();
     let mut distributions = record
         .distributions
         .iter()
@@ -230,6 +279,11 @@ pub fn load_person_detail<R: PeopleManagementRepository>(
         })
         .collect::<Vec<_>>();
     distributions.sort_by(|left, right| right.distributed_at.cmp(&left.distributed_at));
+    let check_items = repository
+        .list_person_check_items(person_id)?
+        .into_iter()
+        .map(linked_check_item_view)
+        .collect();
     Ok(PersonDetail {
         id: record.person.id,
         name: record.person.name,
@@ -239,7 +293,71 @@ pub fn load_person_detail<R: PeopleManagementRepository>(
         person_note: record.person.person_note,
         subscriptions,
         distributions,
+        check_items,
     })
+}
+
+fn subscription_view(
+    subscription: &Subscription,
+    reference_issue: Issue,
+) -> Result<(Issue, SubscriptionView), ApplicationError> {
+    let period_state = subscription_period_state(subscription, reference_issue)?;
+    Ok((
+        subscription.start_issue,
+        SubscriptionView {
+            id: subscription.id.clone(),
+            start_issue: subscription.start_issue.display_name(),
+            last_issue: subscription.last_issue()?.display_name(),
+            quantity: subscription.quantity,
+            applied_at: subscription.applied_at.clone(),
+            source: source_label(subscription.source).into(),
+            memo: subscription.memo.clone(),
+            archived: subscription.archived_at.is_some(),
+            period_state,
+        },
+    ))
+}
+
+fn subscription_period_state(
+    subscription: &Subscription,
+    reference_issue: Issue,
+) -> Result<SubscriptionPeriodState, ApplicationError> {
+    if subscription.archived_at.is_some() {
+        return Ok(SubscriptionPeriodState::Archived);
+    }
+    Ok(match subscription.assess(reference_issue, false)?.status {
+        SubscriptionStatus::Active => SubscriptionPeriodState::Current,
+        SubscriptionStatus::Scheduled => SubscriptionPeriodState::Scheduled,
+        SubscriptionStatus::Expired | SubscriptionStatus::NeedsReview => {
+            SubscriptionPeriodState::Past
+        }
+    })
+}
+
+fn subscription_period_state_rank(state: SubscriptionPeriodState) -> u8 {
+    match state {
+        SubscriptionPeriodState::Current => 0,
+        SubscriptionPeriodState::Scheduled => 1,
+        SubscriptionPeriodState::Past => 2,
+        SubscriptionPeriodState::Archived => 3,
+    }
+}
+
+fn linked_check_item_view(item: CheckItem) -> LinkedCheckItemView {
+    LinkedCheckItemView {
+        id: item.id,
+        summary: item.content,
+        status: check_item_status_label(item.status).into(),
+        updated_at: item.updated_at,
+    }
+}
+
+fn check_item_status_label(status: CheckItemStatus) -> &'static str {
+    match status {
+        CheckItemStatus::NeedsCheck => "확인 필요",
+        CheckItemStatus::Checked => "확인 완료",
+        CheckItemStatus::Archived => "보관",
+    }
 }
 
 pub fn preview_duplicates<R: PeopleManagementRepository>(
@@ -573,11 +691,13 @@ mod tests {
     use std::cell::Cell;
 
     use super::*;
+    use qt_domain::{CheckItem, CheckItemStatus};
 
     #[derive(Default)]
     struct MemoryRepository {
         operator: Option<String>,
         records: Vec<ManagedPersonRecord>,
+        check_items: Vec<CheckItem>,
         changes: Vec<ChangeLog>,
     }
 
@@ -606,6 +726,17 @@ mod tests {
                 .iter()
                 .find(|item| item.person.id == id)
                 .cloned())
+        }
+        fn list_person_check_items(&self, person_id: &str) -> Result<Vec<CheckItem>, PortError> {
+            Ok(self
+                .check_items
+                .iter()
+                .filter(|item| {
+                    item.person_id.as_deref() == Some(person_id)
+                        && item.status != CheckItemStatus::Archived
+                })
+                .cloned()
+                .collect())
         }
         fn duplicate_candidates(
             &self,
@@ -690,6 +821,146 @@ mod tests {
     }
 
     #[test]
+    fn maps_today_to_the_issue_that_contains_the_calendar_month() {
+        for (date, expected) in [
+            ("2026-01-01", Issue::new(2026, 1).unwrap()),
+            ("2026-02-28", Issue::new(2026, 1).unwrap()),
+            ("2026-08-03", Issue::new(2026, 7).unwrap()),
+            ("2026-12-31", Issue::new(2026, 11).unwrap()),
+        ] {
+            assert_eq!(issue_containing_date(date).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn rejects_malformed_current_date() {
+        for date in ["not-a-date", "2026-00-01"] {
+            assert!(matches!(
+                issue_containing_date(date),
+                Err(ApplicationError::InvalidCurrentDate)
+            ));
+        }
+    }
+
+    #[test]
+    fn serializes_subscription_period_states_as_api_values() {
+        for (state, expected) in [
+            (SubscriptionPeriodState::Current, "\"current\""),
+            (SubscriptionPeriodState::Scheduled, "\"scheduled\""),
+            (SubscriptionPeriodState::Past, "\"past\""),
+            (SubscriptionPeriodState::Archived, "\"archived\""),
+        ] {
+            assert_eq!(serde_json::to_string(&state).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn loads_period_states_and_only_active_linked_check_items() {
+        let runtime = FixedRuntime(Cell::new(0));
+        let now = runtime.now();
+        let person = Person {
+            id: "person-1".into(),
+            name: "가상상세".into(),
+            cohort: Some("00".into()),
+            phone: None,
+            normalized_phone: None,
+            status: PersonStatus::Active,
+            person_note: None,
+            created_at: now.clone(),
+            updated_at: now.clone(),
+        };
+        let current = annual_subscription(NewSubscription {
+            id: "current".into(),
+            person_id: person.id.clone(),
+            start_issue: Issue::new(2026, 7).unwrap(),
+            quantity: 1,
+            applied_at: None,
+            source: SubscriptionSource::Manual,
+            memo: None,
+            now: &now,
+        })
+        .unwrap();
+        let scheduled = annual_subscription(NewSubscription {
+            id: "scheduled".into(),
+            person_id: person.id.clone(),
+            start_issue: Issue::new(2026, 9).unwrap(),
+            quantity: 1,
+            applied_at: None,
+            source: SubscriptionSource::Manual,
+            memo: None,
+            now: &now,
+        })
+        .unwrap();
+        let past = annual_subscription(NewSubscription {
+            id: "past".into(),
+            person_id: person.id.clone(),
+            start_issue: Issue::new(2025, 7).unwrap(),
+            quantity: 1,
+            applied_at: None,
+            source: SubscriptionSource::Manual,
+            memo: None,
+            now: &now,
+        })
+        .unwrap();
+        let mut archived = annual_subscription(NewSubscription {
+            id: "archived".into(),
+            person_id: person.id.clone(),
+            start_issue: Issue::new(2026, 11).unwrap(),
+            quantity: 1,
+            applied_at: None,
+            source: SubscriptionSource::Manual,
+            memo: None,
+            now: &now,
+        })
+        .unwrap();
+        archived.archived_at = Some(now.clone());
+        let check_item = |id: &str, person_id: Option<&str>, status| CheckItem {
+            id: id.into(),
+            person_id: person_id.map(str::to_owned),
+            content: format!("{id} 확인"),
+            status,
+            operator_name: "가상담당자".into(),
+            created_at: now.clone(),
+            updated_at: now.clone(),
+            checked_at: None,
+        };
+        let mut repository = MemoryRepository {
+            records: vec![ManagedPersonRecord {
+                person,
+                subscriptions: vec![archived, past, current, scheduled],
+                distributions: vec![],
+            }],
+            check_items: vec![
+                check_item("needs", Some("person-1"), CheckItemStatus::NeedsCheck),
+                check_item("checked", Some("person-1"), CheckItemStatus::Checked),
+                check_item("archived", Some("person-1"), CheckItemStatus::Archived),
+                check_item("other", Some("person-2"), CheckItemStatus::NeedsCheck),
+            ],
+            ..Default::default()
+        };
+
+        let detail =
+            load_person_detail(&mut repository, "person-1", Issue::new(2026, 7).unwrap()).unwrap();
+
+        assert_eq!(
+            detail
+                .subscriptions
+                .iter()
+                .map(|item| item.period_state)
+                .collect::<Vec<_>>(),
+            vec![
+                SubscriptionPeriodState::Current,
+                SubscriptionPeriodState::Scheduled,
+                SubscriptionPeriodState::Past,
+                SubscriptionPeriodState::Archived,
+            ],
+        );
+        assert_eq!(detail.check_items.len(), 2);
+        assert_eq!(detail.check_items[0].status, "확인 필요");
+        assert_eq!(detail.check_items[1].status, "확인 완료");
+    }
+
+    #[test]
     fn registers_full_person_and_six_issue_subscription_with_two_changes() {
         let mut repository = MemoryRepository {
             operator: Some("가상담당자".into()),
@@ -755,6 +1026,7 @@ mod tests {
                 subscriptions: vec![old],
                 distributions: vec![],
             }],
+            check_items: vec![],
             changes: vec![],
         };
         update_person(
@@ -810,6 +1082,7 @@ mod tests {
                 subscriptions: vec![],
                 distributions: vec![],
             }],
+            check_items: vec![],
             changes: vec![],
         };
         let result = register_person(

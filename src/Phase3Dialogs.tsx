@@ -11,6 +11,9 @@ import {
   updatePerson,
 } from "./phase3";
 
+type LinkedCheckItemSummary = Pick<CheckItemView, "id" | "summary" | "status"> &
+  Partial<Omit<CheckItemView, "id" | "summary" | "status">>;
+
 export function RegisterDialog({
   issue,
   busy,
@@ -84,7 +87,7 @@ export function EditDialog({
   onSaved,
 }: {
   person: PersonDetail;
-  checkItems: CheckItemView[];
+  checkItems: LinkedCheckItemSummary[];
   busy: boolean;
   onClose: () => void;
   onSaved: (
@@ -139,7 +142,11 @@ export function EditDialog({
   );
 }
 
-export function LinkedCheckItems({ items }: { items: CheckItemView[] }) {
+export function LinkedCheckItems({
+  items,
+}: {
+  items: LinkedCheckItemSummary[];
+}) {
   if (items.length === 0) return null;
   return (
     <section className="linked-check-items" aria-label="연결된 확인할 일">

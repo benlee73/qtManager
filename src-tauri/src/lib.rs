@@ -10,11 +10,12 @@ use qt_application::{
     RunPhase1Probe, RuntimeServices, StateCounts, UndoDistributionRequest, UndoDistributionResult,
     UpdateCheckItemStatusRequest, UpdatePersonRequest, UpdatePinnedNoteRequest, apply_state_import,
     cancel_latest_purchase, create_check_item, create_draft, create_pinned_note, delete_check_item,
-    delete_pinned_note, export_state, import_applications, load_distribution_desk,
-    load_people_management, load_person_detail, preview_applications, preview_duplicates,
-    preview_state_import, record_distribution, record_purchase, register_person,
-    renew_subscription, save_operator, set_person_archived, undo_last_distribution,
-    undo_state_import, update_check_item_status, update_person, update_pinned_note,
+    delete_pinned_note, export_state, import_applications, issue_containing_date,
+    load_distribution_desk, load_people_management, load_person_detail, preview_applications,
+    preview_duplicates, preview_state_import, record_distribution, record_purchase,
+    register_person, renew_subscription, save_operator, set_person_archived,
+    undo_last_distribution, undo_state_import, update_check_item_status, update_person,
+    update_pinned_note,
 };
 use qt_domain::Issue;
 use qt_infrastructure::{
@@ -178,18 +179,28 @@ fn run_phase1_probe(app: tauri::AppHandle) -> Result<Phase1Report, String> {
     use_case.execute().map_err(|error| error.to_string())
 }
 
-fn open_operational_repository(app: &tauri::AppHandle) -> Result<SqliteCoreRepository, String> {
+fn operational_data_directory(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     #[cfg(feature = "e2e")]
-    let directory = app
-        .path()
-        .app_cache_dir()
-        .map_err(|error| format!("테스트 데이터 경로를 찾지 못했습니다: {error}"))?
-        .join("phase2-e2e");
+    {
+        app.path()
+            .app_cache_dir()
+            .map_err(|error| format!("테스트 데이터 경로를 찾지 못했습니다: {error}"))
+            .map(|directory| directory.join("phase2-e2e"))
+    }
     #[cfg(not(feature = "e2e"))]
-    let directory = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("앱 데이터 경로를 찾지 못했습니다: {error}"))?;
+    {
+        app.path()
+            .app_data_dir()
+            .map_err(|error| format!("앱 데이터 경로를 찾지 못했습니다: {error}"))
+    }
+}
+
+fn restore_points_directory(data_directory: PathBuf) -> PathBuf {
+    data_directory.join("restore-points")
+}
+
+fn open_operational_repository(app: &tauri::AppHandle) -> Result<SqliteCoreRepository, String> {
+    let directory = operational_data_directory(app)?;
     fs::create_dir_all(&directory)
         .map_err(|error| format!("앱 데이터 폴더를 만들지 못했습니다: {error}"))?;
     SqliteCoreRepository::open(&directory.join("qt-manager.sqlite"))
@@ -488,13 +499,26 @@ fn load_people_management_command(
         .map_err(|error| error.to_string())
 }
 
+fn load_person_detail_for_today<C: Clock, T>(
+    runtime: &C,
+    load: impl FnOnce(Issue) -> Result<T, String>,
+) -> Result<T, String> {
+    let reference_issue =
+        issue_containing_date(&runtime.today()).map_err(|error| error.to_string())?;
+    load(reference_issue)
+}
+
 #[tauri::command]
 fn load_person_detail_command(
     app: tauri::AppHandle,
     person_id: String,
 ) -> Result<PersonDetail, String> {
     let mut repository = open_operational_repository(&app)?;
-    load_person_detail(&mut repository, &person_id).map_err(|error| error.to_string())
+    let runtime = SystemRuntime;
+    load_person_detail_for_today(&runtime, |reference_issue| {
+        load_person_detail(&mut repository, &person_id, reference_issue)
+            .map_err(|error| error.to_string())
+    })
 }
 
 #[tauri::command]
@@ -708,11 +732,7 @@ fn apply_state_import_command(
     mode: ImportMode,
     person_resolutions: Vec<MergePersonResolution>,
 ) -> Result<StateCounts, String> {
-    let backups = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("앱 데이터 경로를 찾지 못했습니다: {error}"))?
-        .join("restore-points");
+    let backups = restore_points_directory(operational_data_directory(&app)?);
     fs::create_dir_all(&backups)
         .map_err(|error| format!("자동 백업 폴더를 만들지 못했습니다: {error}"))?;
     let runtime = SystemRuntime;
@@ -827,4 +847,40 @@ pub fn run() {
             event_logger(handle).info("app_stopped");
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct FixedToday;
+
+    impl Clock for FixedToday {
+        fn now(&self) -> String {
+            "2026-08-03T10:00:00+09:00".into()
+        }
+
+        fn today(&self) -> String {
+            "2026-08-03".into()
+        }
+    }
+
+    #[test]
+    fn passes_the_issue_containing_runtime_today_to_the_person_detail_query() {
+        let reference_issue = load_person_detail_for_today(&FixedToday, Ok).unwrap();
+
+        assert_eq!(reference_issue, Issue::new(2026, 7).unwrap());
+    }
+
+    #[test]
+    fn keeps_e2e_restore_points_beneath_the_e2e_operational_storage() {
+        let e2e_storage = PathBuf::from("cache").join("phase2-e2e");
+
+        assert_eq!(
+            restore_points_directory(e2e_storage),
+            PathBuf::from("cache")
+                .join("phase2-e2e")
+                .join("restore-points")
+        );
+    }
 }

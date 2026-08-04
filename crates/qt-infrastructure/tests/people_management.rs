@@ -1,11 +1,12 @@
 use std::cell::Cell;
 
 use qt_application::{
-    Clock, IdGenerator, PeopleManagementRepository, RegisterPersonRequest,
-    RenewSubscriptionRequest, RuntimeServices, UpdatePersonRequest, load_people_management,
-    load_person_detail, register_person, renew_subscription, set_person_archived, update_person,
+    Clock, DistributionDeskRepository, IdGenerator, PeopleManagementRepository,
+    RegisterPersonRequest, RenewSubscriptionRequest, RuntimeServices, UpdatePersonRequest,
+    load_people_management, load_person_detail, register_person, renew_subscription,
+    set_person_archived, update_person,
 };
-use qt_domain::Issue;
+use qt_domain::{ChangeLog, CheckItem, CheckItemStatus, Issue};
 use qt_infrastructure::SqliteCoreRepository;
 use tempfile::tempdir;
 
@@ -69,7 +70,8 @@ fn persists_registration_profile_completion_renewal_archive_and_history_across_r
 
     {
         let mut repository = SqliteCoreRepository::open(&path).unwrap();
-        let detail = load_person_detail(&mut repository, &person_id).unwrap();
+        let detail =
+            load_person_detail(&mut repository, &person_id, Issue::new(2026, 7).unwrap()).unwrap();
         assert_eq!(detail.name, "가상관리");
         assert_eq!(detail.subscriptions[0].last_issue, "2027년 5~6월호");
 
@@ -110,10 +112,167 @@ fn persists_registration_profile_completion_renewal_archive_and_history_across_r
     assert_eq!(visible.people.len(), 1);
     assert_eq!(visible.people[0].status, "보관됨");
     assert_eq!(visible.people[0].phone.as_deref(), Some("010-0000-9999"));
-    let detail = load_person_detail(&mut repository, &person_id).unwrap();
+    let detail =
+        load_person_detail(&mut repository, &person_id, Issue::new(2028, 1).unwrap()).unwrap();
     assert_eq!(detail.subscriptions.len(), 2);
     assert_eq!(
         detail.subscriptions[0].start_issue,
         Issue::new(2027, 7).unwrap().display_name()
     );
+}
+
+#[test]
+fn loads_non_archived_linked_check_items_in_latest_update_order_across_restart() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join("management.sqlite");
+    let runtime = FixedRuntime(Cell::new(0));
+    let services = RuntimeServices {
+        clock: &runtime,
+        ids: &runtime,
+    };
+
+    let person_id = {
+        let mut repository = SqliteCoreRepository::open(&path).unwrap();
+        PeopleManagementRepository::migrate(&mut repository).unwrap();
+        qt_application::DistributionDeskRepository::save_operator(
+            &mut repository,
+            "가상담당자",
+            &runtime.now(),
+        )
+        .unwrap();
+        let person_id = register_person(
+            &mut repository,
+            &services,
+            RegisterPersonRequest {
+                name: "가상신청자".into(),
+                cohort: Some("00".into()),
+                phone: Some("010-0000-1234".into()),
+                person_note: Some("연락은 문자".into()),
+                issue_year: 2026,
+                issue_month: 7,
+                quantity: 1,
+                applied_at: None,
+                memo: None,
+                confirm_duplicate: false,
+            },
+        )
+        .unwrap();
+        let other_person_id = register_person(
+            &mut repository,
+            &services,
+            RegisterPersonRequest {
+                name: "다른가상신청자".into(),
+                cohort: Some("01".into()),
+                phone: Some("010-0000-5678".into()),
+                person_note: None,
+                issue_year: 2026,
+                issue_month: 7,
+                quantity: 1,
+                applied_at: None,
+                memo: None,
+                confirm_duplicate: false,
+            },
+        )
+        .unwrap();
+        for item in [
+            check_item(
+                "linked-needs-check",
+                Some(&person_id),
+                "가상 수량 확인",
+                CheckItemStatus::NeedsCheck,
+                "2026-07-26T10:01:00+09:00",
+                None,
+            ),
+            check_item(
+                "linked-checked",
+                Some(&person_id),
+                "가상 연락 확인",
+                CheckItemStatus::Checked,
+                "2026-07-26T10:02:00+09:00",
+                Some("2026-07-26T10:02:00+09:00"),
+            ),
+            check_item(
+                "linked-archived",
+                Some(&person_id),
+                "가상 보관 확인",
+                CheckItemStatus::Archived,
+                "2026-07-26T10:03:00+09:00",
+                None,
+            ),
+            check_item(
+                "other-person-check",
+                Some(&other_person_id),
+                "다른 가상 신청자 확인",
+                CheckItemStatus::NeedsCheck,
+                "2026-07-26T10:04:00+09:00",
+                None,
+            ),
+        ] {
+            DistributionDeskRepository::save_check_item(
+                &mut repository,
+                &item,
+                &check_item_change(&item),
+            )
+            .unwrap();
+        }
+        person_id
+    };
+
+    let mut repository = SqliteCoreRepository::open(&path).unwrap();
+    let detail =
+        load_person_detail(&mut repository, &person_id, Issue::new(2026, 7).unwrap()).unwrap();
+    assert_eq!(detail.person_note.as_deref(), Some("연락은 문자"));
+    assert_eq!(
+        detail
+            .check_items
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["linked-checked", "linked-needs-check"]
+    );
+    assert_eq!(
+        detail
+            .check_items
+            .iter()
+            .map(|item| (item.summary.as_str(), item.status.as_str()))
+            .collect::<Vec<_>>(),
+        vec![
+            ("가상 연락 확인", "확인 완료"),
+            ("가상 수량 확인", "확인 필요"),
+        ]
+    );
+}
+
+fn check_item(
+    id: &str,
+    person_id: Option<&str>,
+    content: &str,
+    status: CheckItemStatus,
+    updated_at: &str,
+    checked_at: Option<&str>,
+) -> CheckItem {
+    CheckItem {
+        id: id.into(),
+        person_id: person_id.map(str::to_owned),
+        content: content.into(),
+        status,
+        operator_name: "가상담당자".into(),
+        created_at: "2026-07-26T10:00:00+09:00".into(),
+        updated_at: updated_at.into(),
+        checked_at: checked_at.map(str::to_owned),
+    }
+}
+
+fn check_item_change(item: &CheckItem) -> ChangeLog {
+    ChangeLog {
+        id: format!("change-{}", item.id),
+        occurred_at: item.updated_at.clone(),
+        operator_name: item.operator_name.clone(),
+        action_type: "check_item_saved".into(),
+        entity_type: "check_item".into(),
+        entity_id: item.id.clone(),
+        summary: "가상 확인 항목 저장".into(),
+        before_json: None,
+        after_json: None,
+    }
 }
