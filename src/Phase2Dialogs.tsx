@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import type { ReversibleAction } from "./actionHistory";
 import { distributionAllocations } from "./distributionView";
@@ -6,6 +6,7 @@ import {
   type DeskPerson,
   type DistributionAllocation,
   type Issue,
+  type CheckItemView,
   cancelLatestPurchase,
   cancelPersonDistribution,
   createCheckItem,
@@ -23,11 +24,45 @@ export type Phase2Dialog =
   | { type: "operator" }
   | { type: "draft" }
   | { type: "check-item"; personId: string | null }
+  | { type: "check-item-detail"; item: CheckItemView }
   | { type: "pinned-note" }
   | { type: "purchase" }
   | { type: "partial"; person: DeskPerson }
   | { type: "cancel-distribution"; person: DeskPerson }
   | null;
+
+export function CheckItemDetail({
+  item,
+  onClose,
+}: {
+  item: CheckItemView;
+  onClose: () => void;
+}) {
+  return (
+    <FormDialog title="확인할 일" onClose={onClose}>
+      <article className="check-item-detail" data-testid="check-item-detail">
+        <p className="check-item-detail-content">{item.summary}</p>
+        <dl>
+          <div>
+            <dt>연결된 신청자</dt>
+            <dd>{item.personName ?? "일반 확인할 일"}</dd>
+          </div>
+          <div>
+            <dt>상태</dt>
+            <dd>{item.status}</dd>
+          </div>
+          <div>
+            <dt>마지막 수정</dt>
+            <dd>{displayDate(item.updatedAt)}</dd>
+          </div>
+        </dl>
+        <button className="secondary-button" type="button" onClick={onClose}>
+          닫기
+        </button>
+      </article>
+    </FormDialog>
+  );
+}
 
 export function Phase2DialogContent({
   dialog,
@@ -41,7 +76,11 @@ export function Phase2DialogContent({
   issue: Issue;
   busy: boolean;
   onClose: () => void;
-  mutate: (work: () => Promise<unknown>, success: string) => Promise<boolean>;
+  mutate: (
+    work: () => Promise<unknown>,
+    success: string,
+    options?: { preserveHistory?: boolean },
+  ) => Promise<boolean>;
   recordAction: (action: ReversibleAction) => void;
 }) {
   if (dialog.type === "operator") {
@@ -159,6 +198,9 @@ export function Phase2DialogContent({
         </form>
       </FormDialog>
     );
+  }
+  if (dialog.type === "check-item-detail") {
+    return <CheckItemDetail item={dialog.item} onClose={onClose} />;
   }
   if (dialog.type === "pinned-note") {
     return (
@@ -346,6 +388,16 @@ function FormDialog({
   children: ReactNode;
   onClose: () => void;
 }) {
+  useEffect(() => {
+    const closeWithEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", closeWithEscape);
+    return () => window.removeEventListener("keydown", closeWithEscape);
+  }, [onClose]);
+
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section
@@ -388,4 +440,8 @@ function SubmitButton({
       {busy ? "저장 중…" : children}
     </button>
   );
+}
+
+function displayDate(value: string) {
+  return value.replace("T", " ").slice(0, 16);
 }

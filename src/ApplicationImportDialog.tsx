@@ -38,6 +38,16 @@ export function ApplicationImportDialog({
   const [error, setError] = useState("");
 
   useEffect(() => {
+    const closeWithEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", closeWithEscape);
+    return () => window.removeEventListener("keydown", closeWithEscape);
+  }, [onClose]);
+
+  useEffect(() => {
     if (!text.trim()) {
       setPreview(null);
       return;
@@ -112,12 +122,19 @@ export function ApplicationImportDialog({
 
   const selectedCount = Object.values(selected).filter(Boolean).length;
   return (
-    <div className="modal-backdrop" role="presentation">
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <section
         className="dialog import-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="application-import-title"
+        onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="dialog-heading">
           <h2 id="application-import-title">Google 응답 붙여넣기</h2>

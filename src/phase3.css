@@ -699,9 +699,8 @@
 }
 
 .restore-card {
-  display: flex;
+  display: grid;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
   border: 1px solid var(--line);
@@ -713,6 +712,32 @@
 .restore-card span,
 .clock-warning {
   color: var(--muted);
+}
+
+.restore-card > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.restore-confirm {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgb(237 66 69 / 40%);
+  border-radius: 7px;
+  padding: 9px;
+  background: rgb(237 66 69 / 8%);
+}
+
+.restore-confirm > span {
+  font-size: 12px;
+}
+
+.restore-confirm > div {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .clock-warning,

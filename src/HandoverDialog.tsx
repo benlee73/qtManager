@@ -13,12 +13,76 @@ import {
   undoStateImport,
 } from "./handover";
 
+export function RestorePointCard({
+  restore,
+  busy,
+  onRestore,
+}: {
+  restore: RestorePoint;
+  busy: boolean;
+  onRestore: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <section className="restore-card" data-testid="restore-point">
+      <div>
+        <strong>가져오기 전 백업</strong>
+        <span>
+          {restore.sourceFileName} · {displayDate(restore.createdAt)}
+        </span>
+      </div>
+      <p>
+        가져오기 이후 변경된 내용이 사라질 수 있습니다. 복원하기 전 현재 작업을
+        확인하세요.
+      </p>
+      {!confirming ? (
+        <button
+          className="secondary-button"
+          data-testid="undo-state-import"
+          type="button"
+          disabled={busy}
+          onClick={() => setConfirming(true)}
+        >
+          가져오기 전 백업으로 복원
+        </button>
+      ) : (
+        <div className="restore-confirm" data-testid="restore-confirm">
+          <strong>복원하기 전 확인</strong>
+          <span>현재 상태를 가져오기 직전으로 바꾸겠습니까?</span>
+          <div>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirming(false)}
+            >
+              취소
+            </button>
+            <button
+              className="danger-button"
+              data-testid="confirm-undo-state-import"
+              type="button"
+              disabled={busy}
+              onClick={onRestore}
+            >
+              복원 실행
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function HandoverDialog({
   onClose,
   onChanged,
+  onImported,
 }: {
   onClose: () => void;
   onChanged: () => Promise<void>;
+  onImported?: () => void;
 }) {
   const [sourcePath, setSourcePath] = useState("");
   const [preview, setPreview] = useState<ImportPreview | null>(null);
@@ -30,6 +94,16 @@ export function HandoverDialog({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const closeWithEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", closeWithEscape);
+    return () => window.removeEventListener("keydown", closeWithEscape);
+  }, [onClose]);
 
   useEffect(() => {
     void latestRestorePoint()
@@ -91,16 +165,24 @@ export function HandoverDialog({
       `${mode === "replace" ? "교체" : "병합"}를 완료했습니다. 신청자 ${counts.people}명, 구독 ${counts.subscriptions}건을 확인했습니다.`,
     );
     setRestore(await latestRestorePoint());
+    onImported?.();
     await onChanged();
   }
 
   return (
-    <div className="modal-backdrop" role="presentation">
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <section
         className="dialog wide handover-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="handover-title"
+        onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="dialog-heading">
           <h2 id="handover-title">데이터 백업·복원</h2>
@@ -252,30 +334,19 @@ export function HandoverDialog({
         )}
 
         {restore && !preview && (
-          <section className="restore-card" data-testid="restore-point">
-            <div>
-              <strong>직전 가져오기 되돌리기</strong>
-              <span>
-                {restore.sourceFileName} · {displayDate(restore.createdAt)}
-              </span>
-            </div>
-            <button
-              className="secondary-button"
-              data-testid="undo-state-import"
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  await undoStateImport();
-                  setRestore(null);
-                  setNotice("가져오기 전 상태로 복구했습니다.");
-                  await onChanged();
-                })
-              }
-            >
-              가져오기 되돌리기
-            </button>
-          </section>
+          <RestorePointCard
+            restore={restore}
+            busy={busy}
+            onRestore={() =>
+              void run(async () => {
+                await undoStateImport();
+                setRestore(null);
+                setNotice("가져오기 전 상태로 복구했습니다.");
+                onImported?.();
+                await onChanged();
+              })
+            }
+          />
         )}
 
         {(notice || error) && (

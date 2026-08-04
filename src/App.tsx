@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionMenu } from "./ActionMenu";
 import { AppNavigation } from "./AppNavigation";
 import { ArchiveDialog } from "./ArchiveDialog";
+import { CheckItemCard } from "./CheckItemCard";
 import { HelpPanel } from "./HelpPanel";
 import { ChevronLeftIcon, ChevronRightIcon, RedoIcon, UndoIcon } from "./Icons";
 import { ManagementScreen } from "./ManagementScreen";
@@ -14,7 +15,6 @@ import type { ReversibleAction } from "./actionHistory";
 import { persistTheme, readStoredTheme, type Theme } from "./appearance";
 import {
   DEFAULT_PERSON_FILTERS,
-  checkItemOwnerLabel,
   distributionAllocations,
   filterLabel,
   filterPeople,
@@ -48,6 +48,8 @@ import {
   updatePerson,
 } from "./phase3";
 import { useNotifications } from "./useNotifications";
+import { createDistributionLoader } from "./distributionLoader";
+import { useTextDraft } from "./drafts";
 
 export default function App() {
   const [screen, setScreen] = useState<"distribution" | "management">(
@@ -76,12 +78,16 @@ export default function App() {
     label: string;
   } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [quickItem, setQuickItem] = useState("");
+  const quickItemDraft = useTextDraft("quick-check-item");
   const [undoStack, setUndoStack] = useState<ReversibleAction[]>([]);
   const [redoStack, setRedoStack] = useState<ReversibleAction[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
   const quickItemRef = useRef<HTMLTextAreaElement>(null);
   const personRowRefs = useRef(new Map<string, HTMLElement>());
+  const distributionLoader = useMemo(
+    () => createDistributionLoader(loadDesk),
+    [],
+  );
   const { notifications, notify, dismiss } = useNotifications();
 
   useEffect(() => {
@@ -91,7 +97,8 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     try {
-      const next = await loadDesk(issue, query, true);
+      const next = await distributionLoader.load(issue, query, true);
+      if (!next) return;
       setDesk(next);
       setSelectedPersonId((current) =>
         current && next.people.some((person) => person.personId === current)
@@ -102,7 +109,9 @@ export default function App() {
     } catch (reason) {
       notify(errorMessage(reason), "error");
     }
-  }, [issue, notify, query]);
+  }, [distributionLoader, issue, notify, query]);
+
+  useEffect(() => () => distributionLoader.cancel(), [distributionLoader]);
 
   useEffect(() => {
     const timeout = window.setTimeout(refresh, 70);
@@ -110,7 +119,12 @@ export default function App() {
   }, [refresh]);
 
   const mutate = useCallback(
-    async (work: () => Promise<unknown>, success: string) => {
+    async (
+      work: () => Promise<unknown>,
+      success: string,
+      options: { preserveHistory?: boolean } = {},
+    ) => {
+      if (!options.preserveHistory) setRedoStack([]);
       setBusy(true);
       try {
         await work();
@@ -133,15 +147,24 @@ export default function App() {
     setRedoStack([]);
   }, []);
 
+  const clearHistory = useCallback(() => {
+    setUndoStack([]);
+    setRedoStack([]);
+  }, []);
+
   const undoAction = useCallback(async () => {
     const action = undoStack.at(-1);
     if (!action) {
       if (desk?.canUndoDistribution) {
         let allocation: Awaited<ReturnType<typeof undoDistribution>> | null =
           null;
-        const saved = await mutate(async () => {
-          allocation = await undoDistribution(issue);
-        }, "최근 배부를 되돌렸습니다.");
+        const saved = await mutate(
+          async () => {
+            allocation = await undoDistribution(issue);
+          },
+          "최근 배부를 되돌렸습니다.",
+          { preserveHistory: true },
+        );
         if (saved && allocation) {
           const allocations = [allocation];
           setRedoStack((current) => [
@@ -156,7 +179,11 @@ export default function App() {
       }
       return;
     }
-    if (await mutate(action.undo, `${action.description}: 되돌렸습니다.`)) {
+    if (
+      await mutate(action.undo, `${action.description}: 되돌렸습니다.`, {
+        preserveHistory: true,
+      })
+    ) {
       setUndoStack((current) => current.slice(0, -1));
       setRedoStack((current) => [...current, action]);
     }
@@ -166,7 +193,9 @@ export default function App() {
     const action = redoStack.at(-1);
     if (!action) return;
     if (
-      await mutate(action.redo, `${action.description}: 다시 실행했습니다.`)
+      await mutate(action.redo, `${action.description}: 다시 실행했습니다.`, {
+        preserveHistory: true,
+      })
     ) {
       setRedoStack((current) => current.slice(0, -1));
       setUndoStack((current) => [...current, action]);
@@ -276,8 +305,15 @@ export default function App() {
         (event.key === "ArrowDown" || event.key === "ArrowUp")
       ) {
         event.preventDefault();
+        // 브라우저가 행 클릭 직후 키 이벤트를 전달하는 경계에서는 React
+        // 상태보다 DOM의 선택 표시가 먼저 반영될 수 있다. 두 값을 함께
+        // 읽어 방향키가 첫 행으로 되돌아가지 않게 한다.
+        const domSelectedId = document.querySelector<HTMLElement>(
+          '[data-testid="person-row"][aria-selected="true"]',
+        )?.dataset.personId;
+        const anchorId = selectedPersonId ?? domSelectedId ?? null;
         const current = visiblePeople.findIndex(
-          (person) => person.personId === selectedPersonId,
+          (person) => person.personId === anchorId,
         );
         const next =
           event.key === "ArrowDown"
@@ -320,6 +356,8 @@ export default function App() {
             issue={issue}
             notify={notify}
             recordAction={recordAction}
+            onExternalChange={() => setRedoStack([])}
+            onStateImported={clearHistory}
           />
         </div>
         <NotificationStack notifications={notifications} onDismiss={dismiss} />
@@ -341,10 +379,10 @@ export default function App() {
   }
 
   const submitQuickItem = () => {
-    if (!quickItem.trim()) return;
+    if (!quickItemDraft.value.trim()) return;
     let createdId = "";
     void mutate(async () => {
-      createdId = await createCheckItem(null, quickItem);
+      createdId = await createCheckItem(null, quickItemDraft.value);
     }, "일반 확인할 일을 추가했습니다.").then((saved) => {
       if (saved) {
         recordAction({
@@ -352,7 +390,7 @@ export default function App() {
           undo: () => updateCheckItemStatus(createdId, "archived"),
           redo: () => updateCheckItemStatus(createdId, "needs_check"),
         });
-        setQuickItem("");
+        quickItemDraft.clear();
         quickItemRef.current?.focus();
       }
     });
@@ -651,15 +689,17 @@ export default function App() {
                 id="quick-item"
                 ref={quickItemRef}
                 autoFocus
-                value={quickItem}
-                onChange={(event) => setQuickItem(event.target.value)}
+                value={quickItemDraft.value}
+                onChange={(event) =>
+                  quickItemDraft.setValue(event.target.value)
+                }
                 placeholder="확인할 내용을 입력하세요…"
               />
               <div>
                 <button
                   type="submit"
                   data-testid="add-general-check-item"
-                  disabled={busy || !quickItem.trim()}
+                  disabled={busy || !quickItemDraft.value.trim()}
                 >
                   추가
                 </button>
@@ -667,97 +707,68 @@ export default function App() {
             </form>
             <div className="check-item-list">
               {desk?.checkItems.map((item) => (
-                <article
-                  className={`check-item ${item.status === "확인 완료" ? "checked" : ""}`}
+                <CheckItemCard
                   key={item.id}
-                  data-item-id={item.id}
-                >
-                  <label className="check-item-main">
-                    <input
-                      type="checkbox"
-                      checked={item.status === "확인 완료"}
-                      aria-label={`${item.summary} 확인 완료`}
-                      onChange={(event) => {
-                        const checked = event.target.checked;
-                        void mutate(
-                          () =>
+                  item={item}
+                  busy={busy}
+                  onToggle={(checked) => {
+                    void mutate(
+                      () =>
+                        updateCheckItemStatus(
+                          item.id,
+                          checked ? "checked" : "needs_check",
+                        ),
+                      checked
+                        ? "확인할 일을 완료했습니다."
+                        : "확인할 일을 다시 확인하도록 바꿨습니다.",
+                    ).then((saved) => {
+                      if (saved) {
+                        recordAction({
+                          description: checked
+                            ? "확인할 일 완료"
+                            : "확인할 일 다시 열기",
+                          undo: () =>
+                            updateCheckItemStatus(
+                              item.id,
+                              checked ? "needs_check" : "checked",
+                            ),
+                          redo: () =>
                             updateCheckItemStatus(
                               item.id,
                               checked ? "checked" : "needs_check",
                             ),
-                          checked
-                            ? "확인할 일을 완료했습니다."
-                            : "확인할 일을 다시 확인하도록 바꿨습니다.",
-                        ).then((saved) => {
-                          if (saved) {
-                            recordAction({
-                              description: checked
-                                ? "확인할 일 완료"
-                                : "확인할 일 다시 열기",
-                              undo: () =>
-                                updateCheckItemStatus(
-                                  item.id,
-                                  checked ? "needs_check" : "checked",
-                                ),
-                              redo: () =>
-                                updateCheckItemStatus(
-                                  item.id,
-                                  checked ? "checked" : "needs_check",
-                                ),
-                            });
-                          }
                         });
-                      }}
-                    />
-                    <p title={item.summary}>{item.summary}</p>
-                  </label>
-                  <div>
-                    <small>
-                      <b>{checkItemOwnerLabel(item.personName)}</b>
-                    </small>
-                    <span className="check-item-actions">
-                      <button
-                        type="button"
-                        aria-label="확인할 일 보관"
-                        onClick={() => {
-                          const previous =
-                            item.status === "확인 완료"
-                              ? "checked"
-                              : "needs_check";
-                          void mutate(
-                            () => updateCheckItemStatus(item.id, "archived"),
-                            "확인할 일을 보관했습니다.",
-                          ).then((saved) => {
-                            if (saved) {
-                              recordAction({
-                                description: "확인할 일 보관",
-                                undo: () =>
-                                  updateCheckItemStatus(item.id, previous),
-                                redo: () =>
-                                  updateCheckItemStatus(item.id, "archived"),
-                              });
-                            }
-                          });
-                        }}
-                      >
-                        보관
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="확인할 일 삭제"
-                        onClick={() => {
-                          setDeleteTarget({
-                            type: "check-item",
-                            id: item.id,
-                            label: "확인할 일",
-                          });
-                        }}
-                      >
-                        삭제
-                      </button>
-                    </span>
-                  </div>
-                </article>
+                      }
+                    });
+                  }}
+                  onArchive={() => {
+                    const previous =
+                      item.status === "확인 완료" ? "checked" : "needs_check";
+                    void mutate(
+                      () => updateCheckItemStatus(item.id, "archived"),
+                      "확인할 일을 보관했습니다.",
+                    ).then((saved) => {
+                      if (saved) {
+                        recordAction({
+                          description: "확인할 일 보관",
+                          undo: () => updateCheckItemStatus(item.id, previous),
+                          redo: () =>
+                            updateCheckItemStatus(item.id, "archived"),
+                        });
+                      }
+                    });
+                  }}
+                  onDelete={() =>
+                    setDeleteTarget({
+                      type: "check-item",
+                      id: item.id,
+                      label: "확인할 일",
+                    })
+                  }
+                  onOpenDetail={() =>
+                    setDialog({ type: "check-item-detail", item })
+                  }
+                />
               ))}
             </div>
             <section className="pinned-section">
@@ -966,7 +977,7 @@ function Summary({
   warning?: boolean;
 }) {
   return (
-    <div className={warning ? "warning" : ""}>
+    <div className={warning ? "warning" : ""} title={value}>
       <span>{label}</span>
       <b>{value}</b>
     </div>
@@ -1009,6 +1020,7 @@ export function PersonRow({
       aria-label={`${person.cohort ?? "또래 없음"} ${person.name}, ${person.phone ?? "연락처 없음"}, ${person.subscriptionStatus}, ${person.distributionStatus}`}
       aria-selected={selected}
       tabIndex={0}
+      data-person-id={person.personId}
       onClick={onSelect}
       onDoubleClick={(event) => {
         event.preventDefault();
@@ -1147,13 +1159,30 @@ function DeleteConfirmDialog({
   onClose: () => void;
   onDelete: () => void;
 }) {
+  useEffect(() => {
+    const closeWithEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", closeWithEscape);
+    return () => window.removeEventListener("keydown", closeWithEscape);
+  }, [onClose]);
+
   return (
-    <div className="modal-backdrop" role="presentation">
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <section
         className="dialog delete-confirm-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="delete-dialog-title"
+        onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="dialog-heading">
           <div>

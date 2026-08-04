@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import type { ReversibleAction } from "./actionHistory";
 import type { CheckItemView, PinnedNoteView } from "./phase2";
@@ -19,6 +19,16 @@ export function ArchiveDialog({
   mutate: (work: () => Promise<unknown>, success: string) => Promise<boolean>;
   recordAction: (action: ReversibleAction) => void;
 }) {
+  useEffect(() => {
+    const closeWithEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", closeWithEscape);
+    return () => window.removeEventListener("keydown", closeWithEscape);
+  }, [onClose]);
+
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section
@@ -42,9 +52,7 @@ export function ArchiveDialog({
             {checkItems.map((item) => (
               <article key={item.id}>
                 <p title={item.summary}>{item.summary}</p>
-                <small>
-                  {item.personName ? `${item.personName} 연결` : "일반"}
-                </small>
+                <small>{item.personName ?? "일반"}</small>
                 <button
                   type="button"
                   disabled={busy}
