@@ -588,7 +588,13 @@ describe("QT Manager desktop flow", () => {
     );
     await clickButtonByText("보관함");
     await waitForText(".memo-archive-dialog", edited);
-    await clickButtonByText("복원");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          ".memo-archive-dialog .memo-archive-actions .quiet-button",
+        )
+        ?.click();
+    });
     await waitForText(".toast", "메모를 복원했습니다.");
     await waitForText(".memo-list", edited);
 
@@ -617,6 +623,63 @@ describe("QT Manager desktop flow", () => {
     await browser.waitUntil(
       async () => !(await textOf(".memo-list")).includes(edited),
       { timeoutMsg: "메모 삭제가 활성 목록에 반영되지 않았습니다." },
+    );
+
+    const archivedOnly = `보관함에서 삭제할 메모 ${Date.now()}`;
+    await setInput("#quick-item", archivedOnly);
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="add-memo"]')
+        ?.click();
+    });
+    await waitForText(".memo-list", archivedOnly);
+    await browser.execute((content) => {
+      const card = [
+        ...document.querySelectorAll<HTMLElement>(".memo-card"),
+      ].find((candidate) => candidate.textContent?.includes(content));
+      card?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    }, archivedOnly);
+    await waitForText(".memo-detail-dialog", archivedOnly);
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          ".memo-detail-dialog .memo-detail-actions .secondary-button",
+        )
+        ?.click();
+    });
+    await waitForText(".toast", "메모를 보관했습니다.");
+    await clickButtonByText("보관함");
+    await waitForText(".memo-archive-dialog", archivedOnly);
+    expect(
+      await browser.execute(
+        () =>
+          document.querySelector(
+            ".memo-archive-actions .danger-link-button",
+          ) !== null,
+      ),
+    ).toBe(true);
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          ".memo-archive-dialog .memo-archive-actions .danger-link-button",
+        )
+        ?.click();
+    });
+    await waitForText(".delete-confirm-dialog", "영구 삭제");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          ".delete-confirm-dialog .danger-button",
+        )
+        ?.click();
+    });
+    await waitForText(".toast", "메모를 삭제했습니다.");
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(() =>
+          document.querySelector(".memo-archive-dialog"),
+        )) === null,
+      { timeoutMsg: "보관함 메모 삭제 후 보관함이 닫히지 않았습니다." },
     );
   });
 
@@ -875,6 +938,95 @@ describe("QT Manager desktop flow", () => {
     expect(sortLabelAfter).not.toBe(sortLabelBefore);
   });
 
+  it("opens management detail from a row menu and preserves both screen states", async () => {
+    const applicant = `가상상세이동${Date.now()}`;
+    await registerE2ePerson(applicant);
+    await setPersonFilterPreset("전체");
+    await setInput('[data-testid="people-search"]', applicant);
+    await waitForText('[data-testid="person-row"]', applicant);
+
+    await browser.execute(() => {
+      const list = document.querySelector<HTMLElement>(".person-list")!;
+      const fixture = document.createElement("div");
+      fixture.dataset.tabStateFixture = "distribution";
+      fixture.style.height = "900px";
+      fixture.setAttribute("aria-hidden", "true");
+      list.append(fixture);
+      list.scrollTop = 32;
+      document
+        .querySelector<HTMLElement>('[data-testid="person-row"]')
+        ?.click();
+    });
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(() =>
+          document
+            .querySelector<HTMLElement>('[data-testid="person-row"]')
+            ?.getAttribute("aria-selected"),
+        )) === "true",
+      { timeoutMsg: "화면 상태 보존용 신청자 선택이 반영되지 않았습니다." },
+    );
+    const distributionBefore = await browser.execute(() => {
+      const list = document.querySelector<HTMLElement>(".person-list")!;
+      return {
+        scrollTop: list.scrollTop,
+        selected: document
+          .querySelector<HTMLElement>('[data-testid="person-row"]')
+          ?.getAttribute("aria-selected"),
+      };
+    });
+    expect(distributionBefore.selected).toBe("true");
+    expect(distributionBefore.scrollTop).toBeGreaterThan(0);
+
+    await clickButtonByText("", `${applicant} 메뉴`);
+    await clickButtonByText("상세 정보 보기");
+    await waitForText("h2", "신청자 관리");
+    await waitForText('[data-testid="person-detail"]', applicant);
+
+    const managementBefore = await browser.execute(() => {
+      const detail = document.querySelector<HTMLElement>(
+        '[data-testid="person-detail"]',
+      )!;
+      const fixture = document.createElement("div");
+      fixture.dataset.tabStateFixture = "management";
+      fixture.style.height = "900px";
+      fixture.setAttribute("aria-hidden", "true");
+      detail.append(fixture);
+      detail.scrollTop = 32;
+      return detail.scrollTop;
+    });
+    expect(managementBefore).toBeGreaterThan(0);
+
+    await clickButtonByText("현장 배부");
+    await waitForText('[data-testid="selected-issue"]', "월호");
+    const distributionAfter = await browser.execute(() => ({
+      scrollTop: document.querySelector<HTMLElement>(".person-list")?.scrollTop,
+      selected: document
+        .querySelector<HTMLElement>('[data-testid="person-row"]')
+        ?.getAttribute("aria-selected"),
+    }));
+    expect(distributionAfter.scrollTop).toBe(distributionBefore.scrollTop);
+    expect(distributionAfter.selected).toBe("true");
+
+    await clickButtonByText("신청자 관리");
+    await waitForText('[data-testid="person-detail"]', applicant);
+    expect(
+      await browser.execute(
+        () =>
+          document.querySelector<HTMLElement>('[data-testid="person-detail"]')
+            ?.scrollTop,
+      ),
+    ).toBe(managementBefore);
+
+    await browser.execute(() => {
+      document
+        .querySelectorAll(
+          '[data-tab-state-fixture="distribution"], [data-tab-state-fixture="management"]',
+        )
+        .forEach((fixture) => fixture.remove());
+    });
+  });
+
   it("persists theme and keeps the resizable scroll-safe four-stat layout", async () => {
     // macOS가 이전 개발 실행의 창 크기를 복원할 수 있으므로 기준 크기로 맞춘다.
     await browser.setWindowSize(2000, 1440);
@@ -1049,6 +1201,7 @@ describe("QT Manager desktop flow", () => {
       return {
         labels: stats.map((item) => item.querySelector("span")?.textContent),
         sizes,
+        summaryTextAlign: stats.map((item) => getComputedStyle(item).textAlign),
         rootOverflow: `${rootStyle.overflowX}/${rootStyle.overflowY}`,
         bodyOverflow: `${bodyStyle.overflowX}/${bodyStyle.overflowY}`,
         bodyFits:
@@ -1077,6 +1230,12 @@ describe("QT Manager desktop flow", () => {
     });
     expect(layout.labels).toEqual(["대상", "완료", "남음", "배부"]);
     expect(new Set(layout.sizes.map(String)).size).toBe(1);
+    expect(layout.summaryTextAlign).toEqual([
+      "center",
+      "center",
+      "center",
+      "center",
+    ]);
     expect(layout.rootOverflow).toBe("hidden/hidden");
     expect(layout.bodyOverflow).toBe("hidden/hidden");
     expect(layout.bodyFits).toBe(true);
@@ -1219,6 +1378,21 @@ describe("QT Manager desktop flow", () => {
       memo?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
     }, editMemo);
     await waitForText(".memo-detail-dialog", editMemo);
+    const editedEditMemo = `${editMemo} 수정`;
+    await clickButtonByText("", "메모 본문. 눌러서 편집");
+    await setInput(".memo-detail-editor", editedEditMemo);
+    await clickButtonByText("저장");
+    await waitForText(".toast", "메모를 수정했습니다.");
+    await waitForText('[data-testid="linked-memos-editor"]', editedEditMemo);
+    await browser.execute((content) => {
+      const memo = [
+        ...document.querySelectorAll<HTMLElement>(
+          '[data-testid="linked-memos-editor"] .linked-memo-content',
+        ),
+      ].find((candidate) => candidate.textContent?.includes(content));
+      memo?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    }, editedEditMemo);
+    await waitForText(".memo-detail-dialog", editedEditMemo);
     expect(
       await browser.execute(
         () => document.querySelector(".linked-memo-actions") === null,

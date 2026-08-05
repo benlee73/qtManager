@@ -2,7 +2,7 @@
   display: grid;
   height: 100%;
   min-height: 0;
-  grid-template-rows: 82px minmax(0, 1fr);
+  grid-template-rows: 70px minmax(0, 1fr);
   overflow: hidden;
   font-size: var(--font-md);
   line-height: 1.45;
@@ -19,10 +19,10 @@
   position: relative;
   z-index: 5;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 14px 18px 10px;
+  padding: 6px 18px 8px;
 }
 
 .management-heading-title {
@@ -55,7 +55,7 @@
 }
 
 .management-heading h2 {
-  margin-bottom: 0.35rem;
+  margin-bottom: 0;
   font-size: 20px;
   letter-spacing: -0.01em;
 }
@@ -382,6 +382,15 @@
 
 .management-edit-dialog .dialog-heading {
   margin-bottom: 0.9rem;
+}
+
+.linked-memos-tooltip > span {
+  left: 0;
+  width: min(18rem, calc(100vw - 4rem));
+  max-width: min(18rem, calc(100vw - 4rem));
+  transform: none;
+  white-space: normal;
+  line-height: 1.45;
 }
 
 .management-edit-dialog .submit {

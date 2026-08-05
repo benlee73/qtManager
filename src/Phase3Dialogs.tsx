@@ -176,12 +176,18 @@ function LinkedMemos({
   onDelete?: (memo: LinkedMemo) => void | Promise<boolean>;
 }) {
   const [draft, setDraft] = useState("");
+  const [visibleMemos, setVisibleMemos] = useState(memos);
   const [selectedMemo, setSelectedMemo] = useState<LinkedMemo | null>(null);
+
+  useEffect(() => {
+    setVisibleMemos(memos);
+  }, [memos]);
+
   return (
     <section className="linked-memos-editor" data-testid="linked-memos-editor">
       <div className="linked-memos-heading">
         <h3>메모</h3>
-        <span className="info-tooltip">
+        <span className="info-tooltip linked-memos-tooltip">
           <button type="button" aria-label="메모 안내">
             i
           </button>
@@ -204,8 +210,20 @@ function LinkedMemos({
           disabled={busy || !draft.trim() || !onCreate}
           onClick={() => {
             if (!onCreate) return;
-            void onCreate(draft.trim()).then((saved) => {
-              if (saved) setDraft("");
+            const content = draft.trim();
+            void onCreate(content).then((saved) => {
+              if (saved) {
+                setDraft("");
+                setVisibleMemos((current) => [
+                  ...current,
+                  {
+                    id: `draft-${Date.now()}`,
+                    content,
+                    status: "활성",
+                    updatedAt: new Date().toISOString(),
+                  },
+                ]);
+              }
             });
           }}
         >
@@ -213,7 +231,7 @@ function LinkedMemos({
         </button>
       </div>
       <div className="linked-memo-items">
-        {memos.map((memo) => (
+        {visibleMemos.map((memo) => (
           <button
             className="linked-memo-content"
             type="button"
@@ -228,7 +246,7 @@ function LinkedMemos({
             {memo.content}
           </button>
         ))}
-        {memos.length === 0 && (
+        {visibleMemos.length === 0 && (
           <p className="linked-memo-empty">등록된 메모가 없습니다.</p>
         )}
       </div>
@@ -248,7 +266,20 @@ function LinkedMemos({
           onSave={(content) =>
             onUpdate
               ? onUpdate(selectedMemo, content).then((saved) => {
-                  if (saved) setSelectedMemo(null);
+                  if (saved) {
+                    setVisibleMemos((current) =>
+                      current.map((memo) =>
+                        memo.id === selectedMemo.id
+                          ? {
+                              ...memo,
+                              content,
+                              updatedAt: new Date().toISOString(),
+                            }
+                          : memo,
+                      ),
+                    );
+                    setSelectedMemo(null);
+                  }
                   return saved;
                 })
               : Promise.resolve(false)
@@ -256,7 +287,18 @@ function LinkedMemos({
           onArchive={(archived) =>
             onArchive
               ? onArchive(selectedMemo, archived).then((saved) => {
-                  if (saved) setSelectedMemo(null);
+                  if (saved) {
+                    setVisibleMemos((current) =>
+                      archived
+                        ? current.filter((memo) => memo.id !== selectedMemo.id)
+                        : current.map((memo) =>
+                            memo.id === selectedMemo.id
+                              ? { ...memo, status: "활성" }
+                              : memo,
+                          ),
+                    );
+                    setSelectedMemo(null);
+                  }
                   return saved;
                 })
               : Promise.resolve(false)
@@ -265,7 +307,12 @@ function LinkedMemos({
             const result = onDelete?.(selectedMemo);
             if (result instanceof Promise) {
               return result.then((saved) => {
-                if (saved) setSelectedMemo(null);
+                if (saved) {
+                  setVisibleMemos((current) =>
+                    current.filter((memo) => memo.id !== selectedMemo.id),
+                  );
+                  setSelectedMemo(null);
+                }
                 return saved;
               });
             }

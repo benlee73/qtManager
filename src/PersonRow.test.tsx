@@ -37,6 +37,7 @@ describe("PersonRow", () => {
         onDistribute={vi.fn()}
         onCancelDistribution={vi.fn()}
         onPartial={vi.fn()}
+        onViewDetails={vi.fn()}
         onMemo={vi.fn()}
         onEdit={vi.fn()}
       />,
@@ -59,6 +60,7 @@ describe("PersonRow", () => {
         onDistribute={vi.fn()}
         onCancelDistribution={vi.fn()}
         onPartial={vi.fn()}
+        onViewDetails={vi.fn()}
         onMemo={vi.fn()}
         onEdit={vi.fn()}
       />,
@@ -66,5 +68,26 @@ describe("PersonRow", () => {
 
     expect(markup).toContain("2026년 11~12월호까지");
     expect(markup).not.toContain("2026-12-31까지");
+  });
+
+  it("keeps a management detail action in the applicant row menu", () => {
+    const markup = renderToStaticMarkup(
+      <PersonRow
+        person={person}
+        selected={false}
+        busy={false}
+        openMenu="person-person-id"
+        onOpenMenu={vi.fn()}
+        onSelect={vi.fn()}
+        onDistribute={vi.fn()}
+        onCancelDistribution={vi.fn()}
+        onPartial={vi.fn()}
+        onViewDetails={vi.fn()}
+        onMemo={vi.fn()}
+        onEdit={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain("상세 정보 보기");
   });
 });

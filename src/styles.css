@@ -461,9 +461,11 @@ p {
   display: grid;
   min-width: 0;
   align-content: center;
+  justify-items: center;
   overflow: hidden;
-  padding: 0 6px;
+  padding: 0 10px;
   border-right: 1px solid var(--line);
+  text-align: center;
 }
 
 .summary-grid > div:last-child {
@@ -477,12 +479,14 @@ p {
 
 .summary-grid b {
   display: block;
+  width: 100%;
   min-width: 0;
   overflow: hidden;
   margin-top: 2px;
   font-size: clamp(13px, 1.3vw, var(--font-lg));
   line-height: 17px;
   text-overflow: ellipsis;
+  text-align: center;
   white-space: nowrap;
 }
 
@@ -1683,8 +1687,8 @@ kbd {
 
 .memo-card-content {
   display: block;
-  font-size: var(--font-sm);
-  line-height: 1.55;
+  font-size: var(--font-xs);
+  line-height: 1.45;
 }
 
 .memo-card-person {
@@ -1701,7 +1705,7 @@ kbd {
 }
 
 .memo-detail-dialog {
-  width: min(560px, 100%);
+  width: min(500px, 100%);
 }
 
 .memo-detail-person {
@@ -1713,12 +1717,14 @@ kbd {
 
 .memo-detail-editor {
   width: 100%;
-  min-height: 12rem;
+  min-height: 9rem;
+  max-height: 16rem;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
   color: var(--text);
   background: var(--input);
+  font-size: var(--font-md);
   line-height: 1.6;
   resize: vertical;
   white-space: pre-wrap;
@@ -1726,18 +1732,23 @@ kbd {
 }
 
 .memo-detail-content {
-  display: block;
+  display: flex;
   width: 100%;
-  min-height: 12rem;
+  min-height: 9rem;
+  max-height: 16rem;
+  align-items: flex-start;
+  justify-content: flex-start;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
   color: var(--text);
   background: var(--panel-high);
+  font-size: var(--font-md);
   text-align: left;
   line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  overflow-y: auto;
 }
 
 .memo-detail-content:hover,
@@ -1788,13 +1799,31 @@ kbd {
   padding: 0;
   color: var(--text);
   background: transparent;
+  font-size: var(--font-sm);
+  line-height: 1.45;
   text-align: left;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .memo-archive-content small {
+  font-size: var(--font-xs);
   color: var(--muted);
+}
+
+.memo-archive-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.memo-archive-actions .danger-link-button {
+  padding: 4px;
+  color: var(--red);
+  background: transparent;
+  font-size: var(--font-sm);
+  font-weight: 800;
 }
 
 .text-button,
@@ -1811,6 +1840,11 @@ kbd {
   grid-column: 2;
   grid-row: 1;
   overflow: hidden;
+}
+
+/* 화면을 숨겨도 React 트리를 유지해 각 화면의 선택·스크롤 위치를 보존한다. */
+.screen-hidden {
+  display: none !important;
 }
 
 @media (max-width: 950px), (max-height: 680px) {

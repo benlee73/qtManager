@@ -55,6 +55,9 @@ export default function App() {
   const [screen, setScreen] = useState<"distribution" | "management">(
     "distribution",
   );
+  const [managementFocusId, setManagementFocusId] = useState<string | null>(
+    null,
+  );
   const [theme, setTheme] = useState<Theme>(() => readStoredTheme());
   const [helpOpen, setHelpOpen] = useState(false);
   const [issue, setIssue] = useState<Issue>(() => recommendedIssue());
@@ -341,46 +344,6 @@ export default function App() {
     visiblePeople,
   ]);
 
-  if (screen === "management") {
-    return (
-      <div className="fixed-app">
-        <AppNavigation
-          active="management"
-          operator={desk?.operatorName}
-          theme={theme}
-          onDistribution={() => setScreen("distribution")}
-          onManagement={() => undefined}
-          onTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
-          onHelp={() => setHelpOpen(true)}
-          onOperator={() => setDialog({ type: "operator" })}
-        />
-        <div className="management-host">
-          <ManagementScreen
-            issue={issue}
-            notify={notify}
-            recordAction={recordAction}
-            onExternalChange={() => setRedoStack([])}
-            onStateImported={clearHistory}
-          />
-        </div>
-        <NotificationStack notifications={notifications} onDismiss={dismiss} />
-        {helpOpen && (
-          <HelpPanel topic="people" onClose={() => setHelpOpen(false)} />
-        )}
-        {dialog && (
-          <Phase2DialogContent
-            dialog={dialog}
-            issue={issue}
-            busy={busy}
-            onClose={() => desk?.operatorName && setDialog(null)}
-            mutate={mutate}
-            recordAction={recordAction}
-          />
-        )}
-      </div>
-    );
-  }
-
   const submitQuickItem = () => {
     if (!quickItemDraft.value.trim()) return;
     let createdId = "";
@@ -402,18 +365,34 @@ export default function App() {
   return (
     <div className="fixed-app">
       <AppNavigation
-        active="distribution"
+        active={screen}
         operator={desk?.operatorName}
         theme={theme}
-        onDistribution={() => undefined}
+        onDistribution={() => setScreen("distribution")}
         onManagement={() => setScreen("management")}
         onTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
         onHelp={() => setHelpOpen(true)}
         onOperator={() => setDialog({ type: "operator" })}
       />
 
+      <div
+        className={`management-host ${screen === "management" ? "screen-visible" : "screen-hidden"}`}
+        aria-hidden={screen !== "management"}
+      >
+        <ManagementScreen
+          issue={issue}
+          notify={notify}
+          recordAction={recordAction}
+          focusPersonId={managementFocusId}
+          onFocusConsumed={() => setManagementFocusId(null)}
+          onExternalChange={() => setRedoStack([])}
+          onStateImported={clearHistory}
+        />
+      </div>
+
       <main
-        className="desk"
+        className={`desk ${screen === "distribution" ? "screen-visible" : "screen-hidden"}`}
+        aria-hidden={screen !== "distribution"}
         onPointerDown={(event) => {
           const target = event.target as HTMLElement;
           if (
@@ -627,6 +606,10 @@ export default function App() {
                     setDialog({ type: "cancel-distribution", person })
                   }
                   onPartial={() => setDialog({ type: "partial", person })}
+                  onViewDetails={() => {
+                    setManagementFocusId(person.personId);
+                    setScreen("management");
+                  }}
                   onMemo={() =>
                     setDialog({
                       type: "memo",
@@ -742,6 +725,13 @@ export default function App() {
               }
             });
           }}
+          onDelete={(memo) =>
+            setDeleteTarget({
+              type: "memo",
+              id: memo.id,
+              label: "메모",
+            })
+          }
         />
       )}
       {dialog && (
@@ -898,6 +888,7 @@ export default function App() {
               if (saved) {
                 setDeleteTarget(null);
                 setMemoDetail(null);
+                setArchiveOpen(false);
               }
             })
           }
@@ -935,6 +926,7 @@ export function PersonRow({
   onDistribute,
   onCancelDistribution,
   onPartial,
+  onViewDetails,
   onMemo,
   onEdit,
   rowRef,
@@ -948,6 +940,7 @@ export function PersonRow({
   onDistribute: () => void;
   onCancelDistribution: () => void;
   onPartial: () => void;
+  onViewDetails: () => void;
   onMemo: () => void;
   onEdit: () => void;
   rowRef?: (element: HTMLElement | null) => void;
@@ -1045,6 +1038,9 @@ export function PersonRow({
           onOpenMenu={onOpenMenu}
           className="row-menu"
         >
+          <button type="button" onClick={onViewDetails}>
+            상세 정보 보기
+          </button>
           <button type="button" onClick={onMemo}>
             메모 추가
           </button>

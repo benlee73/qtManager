@@ -141,6 +141,27 @@ describe("ManagementPersonList", () => {
     expect(markup).toContain('aria-label="정보 보완 필요"');
     expect(markup).toContain('aria-pressed="true"');
   });
+
+  it("marks an active applicant without a cohort as needing profile completion", () => {
+    const markup = renderToStaticMarkup(
+      <ManagementPersonList
+        people={[
+          {
+            ...people[0],
+            id: "person-without-cohort",
+            name: "또래 미입력 신청자",
+            cohort: null,
+            status: "정보 보완 필요",
+          },
+        ]}
+        selectedId={null}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain('aria-label="정보 보완 필요"');
+    expect(markup).toContain("또래 미입력 신청자");
+  });
 });
 
 describe("PersonDetailPanel", () => {
@@ -253,7 +274,7 @@ describe("ManagementScreen heading actions", () => {
     expect(markup).toContain("+ 신청자 등록");
     expect(markup).toContain("정보 보완 필요 0명");
     expect(markup).toContain(
-      "간이 등록 등으로 연락처나 구독 정보가 아직 부족한 신청자 수",
+      "간이 등록 등으로 또래·연락처·구독 정보가 아직 부족한 신청자 수",
     );
     expect(markup).not.toContain("+ QT 신청자 정식 등록");
     expect(markup).toContain('data-testid="management-heading-help"');

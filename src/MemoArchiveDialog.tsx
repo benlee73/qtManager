@@ -6,12 +6,14 @@ export function MemoArchiveDialog({
   onClose,
   onOpen,
   onRestore,
+  onDelete,
 }: {
   memos: MemoView[];
   busy: boolean;
   onClose: () => void;
   onOpen: (memo: MemoView) => void;
   onRestore: (memo: MemoView) => void;
+  onDelete: (memo: MemoView) => void;
 }) {
   return (
     <div
@@ -51,14 +53,24 @@ export function MemoArchiveDialog({
                 <span>{memo.content}</span>
                 {memo.personName && <small>{memo.personName}</small>}
               </button>
-              <button
-                type="button"
-                className="quiet-button"
-                disabled={busy}
-                onClick={() => onRestore(memo)}
-              >
-                복원
-              </button>
+              <div className="memo-archive-actions">
+                <button
+                  type="button"
+                  className="quiet-button"
+                  disabled={busy}
+                  onClick={() => onRestore(memo)}
+                >
+                  복원
+                </button>
+                <button
+                  type="button"
+                  className="danger-link-button"
+                  disabled={busy}
+                  onClick={() => onDelete(memo)}
+                >
+                  삭제
+                </button>
+              </div>
             </article>
           ))}
           {memos.length === 0 && (

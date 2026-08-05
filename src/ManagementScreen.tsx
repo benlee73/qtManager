@@ -38,12 +38,16 @@ export function ManagementScreen({
   issue,
   notify,
   recordAction,
+  focusPersonId,
+  onFocusConsumed,
   onExternalChange,
   onStateImported,
 }: {
   issue: Issue;
   notify: (message: string, kind?: "success" | "error") => void;
   recordAction: (action: ReversibleAction) => void;
+  focusPersonId?: string | null;
+  onFocusConsumed?: () => void;
   onExternalChange?: () => void;
   onStateImported?: () => void;
 }) {
@@ -82,6 +86,28 @@ export function ManagementScreen({
   }, [refresh]);
 
   useEffect(() => () => loader.cancelPending(), [loader]);
+
+  useEffect(() => {
+    if (!focusPersonId || !management) return;
+    const isVisible = management.people.some(
+      (person) => person.id === focusPersonId,
+    );
+    if (!isVisible && (query !== "" || !includeArchived)) {
+      loader.invalidate();
+      if (query !== "") setQuery("");
+      if (!includeArchived) setIncludeArchived(true);
+      return;
+    }
+    void loader.select(focusPersonId);
+    onFocusConsumed?.();
+  }, [
+    focusPersonId,
+    includeArchived,
+    loader,
+    management,
+    onFocusConsumed,
+    query,
+  ]);
 
   async function mutate(
     work: () => Promise<unknown>,
@@ -179,7 +205,7 @@ export function ManagementScreen({
           </label>
           <div className="management-counts">
             <span>검색 결과 {management?.people.length ?? 0}명</span>
-            <span title="간이 등록 등으로 연락처나 구독 정보가 아직 부족한 신청자 수">
+            <span title="간이 등록 등으로 또래·연락처·구독 정보가 아직 부족한 신청자 수">
               정보 보완 필요 {management?.draftCount ?? 0}명
             </span>
           </div>

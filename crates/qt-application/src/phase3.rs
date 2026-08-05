@@ -226,7 +226,8 @@ pub fn load_people_management<R: PeopleManagementRepository>(
     let mut summaries = Vec::with_capacity(records.len());
     for record in records {
         let person = record.person;
-        if person.status == PersonStatus::Draft {
+        let display_status = management_person_status(&person).to_owned();
+        if needs_profile_completion(&person) {
             draft_count += 1;
         }
         if person.status == PersonStatus::Archived {
@@ -244,7 +245,7 @@ pub fn load_people_management<R: PeopleManagementRepository>(
             name: person.name,
             cohort: person.cohort,
             phone: person.phone,
-            status: person_status(person.status).into(),
+            status: display_status,
             person_note: person.person_note,
             subscription_count: record
                 .subscriptions
@@ -270,6 +271,7 @@ pub fn load_person_detail<R: PeopleManagementRepository>(
     let record = repository
         .load_person(person_id)?
         .ok_or(ApplicationError::MissingDeskRecord)?;
+    let display_status = management_person_status(&record.person).to_owned();
     let mut subscriptions = record
         .subscriptions
         .iter()
@@ -313,7 +315,7 @@ pub fn load_person_detail<R: PeopleManagementRepository>(
         name: record.person.name,
         cohort: record.person.cohort,
         phone: record.person.phone,
-        status: person_status(record.person.status).into(),
+        status: display_status,
         person_note: record.person.person_note,
         subscriptions,
         distributions,
@@ -702,6 +704,19 @@ fn person_status(status: PersonStatus) -> &'static str {
     }
 }
 
+fn needs_profile_completion(person: &Person) -> bool {
+    person.status == PersonStatus::Draft
+        || (person.status == PersonStatus::Active && person.cohort.is_none())
+}
+
+fn management_person_status(person: &Person) -> &'static str {
+    if person.status == PersonStatus::Active && person.cohort.is_none() {
+        "정보 보완 필요"
+    } else {
+        person_status(person.status)
+    }
+}
+
 fn source_label(source: SubscriptionSource) -> &'static str {
     match source {
         SubscriptionSource::GoogleForm => "Google Forms",
@@ -865,6 +880,53 @@ mod tests {
                 Err(ApplicationError::InvalidCurrentDate)
             ));
         }
+    }
+
+    #[test]
+    fn treats_an_active_person_without_a_cohort_as_needing_profile_completion() {
+        let person = Person {
+            id: "person-without-cohort".into(),
+            name: "가상 신청자".into(),
+            cohort: None,
+            phone: Some("010-0000-0000".into()),
+            normalized_phone: Some("01000000000".into()),
+            status: PersonStatus::Active,
+            person_note: None,
+            created_at: "2026-07-26T10:00:00+09:00".into(),
+            updated_at: "2026-07-26T10:00:00+09:00".into(),
+        };
+
+        assert!(needs_profile_completion(&person));
+        assert_eq!(management_person_status(&person), "정보 보완 필요");
+    }
+
+    #[test]
+    fn counts_missing_cohort_in_the_management_profile_completion_total() {
+        let now = "2026-07-26T10:00:00+09:00".to_owned();
+        let person = Person {
+            id: "person-without-cohort".into(),
+            name: "가상 신청자".into(),
+            cohort: None,
+            phone: None,
+            normalized_phone: None,
+            status: PersonStatus::Active,
+            person_note: None,
+            created_at: now.clone(),
+            updated_at: now,
+        };
+        let mut repository = MemoryRepository {
+            records: vec![ManagedPersonRecord {
+                person,
+                subscriptions: vec![],
+                distributions: vec![],
+            }],
+            ..Default::default()
+        };
+
+        let management = load_people_management(&mut repository, "", false).unwrap();
+
+        assert_eq!(management.draft_count, 1);
+        assert_eq!(management.people[0].status, "정보 보완 필요");
     }
 
     #[test]
