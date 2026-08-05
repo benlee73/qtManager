@@ -1853,6 +1853,10 @@ kbd {
     font-size: 21px;
   }
 
+  .issue-picker > div {
+    grid-template-columns: 32px 190px 32px;
+  }
+
   .summary-grid {
     width: clamp(320px, 42vw, 410px);
     flex-basis: 410px;

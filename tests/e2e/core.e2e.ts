@@ -687,15 +687,22 @@ describe("QT Manager desktop flow", () => {
       { timeoutMsg: "바깥 영역을 눌러 메뉴가 닫히지 않았습니다." },
     );
 
-    await browser.$('[data-testid="person-row"]').click();
-    expect(
-      await browser.execute(() =>
-        document
-          .querySelector('[data-testid="person-row"]')
-          ?.getAttribute("aria-selected"),
-      ),
-    ).toBe("true");
-    await browser.$('[data-testid="person-row"]').click();
+    const firstPersonRow = browser.$('[data-testid="person-row"]');
+    // The row selection is React state. Wait for the outside-click render to
+    // settle before asserting the first toggle so WebKit does not read the
+    // previous aria-selected value during a rapid sequence.
+    await browser.waitUntil(
+      async () =>
+        (await firstPersonRow.getAttribute("aria-selected")) === "false",
+      { timeoutMsg: "메뉴를 닫은 뒤 신청자 행 상태가 안정되지 않았습니다." },
+    );
+    await firstPersonRow.click();
+    await browser.waitUntil(
+      async () =>
+        (await firstPersonRow.getAttribute("aria-selected")) === "true",
+      { timeoutMsg: "신청자 행을 선택하지 못했습니다." },
+    );
+    await firstPersonRow.click();
     await browser.waitUntil(
       async () =>
         (await browser.execute(() =>
