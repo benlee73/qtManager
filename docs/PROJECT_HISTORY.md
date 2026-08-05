@@ -70,7 +70,8 @@
 - 신청자 관리의 간결한 목록, 상세 스크롤, 직접 메모·연결 확인할 일 입력,
   구독 시작·끝 호 표시, 도움말 카드·동기화 목차를 반영했다.
 - 다크·라이트 시각 캡처, 단위·통합 테스트와 macOS Tauri E2E를 갱신했다.
-- Windows 실제 장치 검증은 아직 완료로 표시하지 않는다.
+- GitHub Actions 호스팅 macOS·Windows 릴리스 후보 검증은 완료했지만, Windows
+  실제 장치 검증은 아직 완료로 표시하지 않는다.
 
 ### Phase 4 — 인수인계 (2026-07-27, 완료)
 
@@ -177,6 +178,18 @@ PROJECT_SPEC.md의 해당 요구사항과 현재 결정 요약을 함께 확인�
   않는 원칙을 적용했다.
 
 ## 5. 전체 변경 이력
+
+### 2026-08-05
+
+- Actions 무료 한도 초기화 후 `release-candidate` 실행
+  [30972110172](https://github.com/benlee73/qtManager/actions/runs/30972110172)를
+  `macos-15`·`windows-2025`에서 실행했다.
+- 두 OS에서 `just check`와 Tauri E2E(9개 통과·2개 선택 제외)가 성공했다.
+- macOS Universal DMG의 `arm64`·`x86_64` 포함 여부와 `hdiutil verify` 무결성을
+  확인했고, Windows NSIS를 생성해 `/S` 무인 설치·설치 후 5초 실행 스모크까지
+  확인했다.
+- 결과 아티팩트는 Actions에 업로드했다. 이 검증은 호스팅 Windows x64 기준이며,
+  실제 Windows 10·11 및 Intel Mac 설치 확인은 별도 장비에서 진행해야 한다.
 
 ### 2026-08-04
 

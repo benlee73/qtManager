@@ -4,13 +4,26 @@
 
 ## 자동 검증
 
-- [ ] `package.json`, Cargo workspace, Tauri 설정 버전이 일치한다.
-- [ ] `just check`가 macOS와 Windows에서 통과한다.
-- [ ] `just e2e`의 전체 핵심 흐름이 macOS와 Windows에서 통과한다.
-- [ ] macOS Universal 앱에 `arm64`, `x86_64`가 모두 포함된다.
-- [ ] macOS DMG 무결성 검사와 Windows NSIS 설치 파일 생성 검사가 통과한다.
-- [ ] Windows NSIS 무인 설치 후 설치된 앱의 5초 실행 스모크 검사가 통과한다.
-- [ ] 런타임 원격 리소스와 동적 개인정보 로그 기록이 없음을 자동 검사한다.
+- [x] `package.json`, Cargo workspace, Tauri 설정 버전이 일치한다.
+- [x] `just check`가 macOS와 Windows에서 통과한다.
+- [x] `just e2e`의 전체 핵심 흐름이 macOS와 Windows에서 통과한다.
+- [x] macOS Universal 앱에 `arm64`, `x86_64`가 모두 포함된다.
+- [x] macOS DMG 무결성 검사와 Windows NSIS 설치 파일 생성 검사가 통과한다.
+- [x] Windows NSIS 무인 설치 후 설치된 앱의 5초 실행 스모크 검사가 통과한다.
+- [x] 런타임 원격 리소스와 동적 개인정보 로그 기록이 없음을 자동 검사한다.
+
+### 2026-08-05 호스팅 릴리스 후보 결과
+
+- GitHub Actions [`release-candidate` 실행 30972110172](https://github.com/benlee73/qtManager/actions/runs/30972110172)가 `macos-15`와 `windows-2025`에서 모두 성공했다.
+- macOS는 `just check`, Tauri E2E 9개 통과·2개 선택 제외, Universal DMG 생성과
+  `lipo` 아키텍처(`arm64`, `x86_64`)·`hdiutil verify` 무결성 검사를 통과했다.
+- Windows 호스팅 x64는 `just check`, Edge 기반 Tauri E2E 9개 통과·2개 선택 제외,
+  NSIS 생성, `/S` 무인 설치, 설치 실행 파일 확인과 5초 실행 스모크를 통과했다.
+- 두 설치 파일은 Actions 아티팩트로 업로드됐다. 테스트 로그와 패키지에는 운영
+  개인정보를 포함하지 않는다.
+- 위 결과는 호스팅된 Windows x64와 macOS CI 검증이다. 실제 Windows 10·11 기기,
+  Intel Mac 기기의 수동 설치·SmartScreen/Gatekeeper·배율 확인은 아래 항목을
+  별도로 완료해야 한다.
 
 ## 실제 릴리스 후보 확인
 

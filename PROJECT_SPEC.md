@@ -1280,7 +1280,7 @@ UI / Desktop / XLSX / SQLite / OS
 | Phase 3 | 완료 | 신청자 관리·구독 갱신·Google 응답 붙여넣기·도움말 |
 | Phase 3.5 | 완료 | 좌측 레일·테마·스크롤·관리 상세·기록 용어 정비 |
 | Phase 4 | 완료 | XLSX 교체·병합·복원·왕복 검증 |
-| Phase 5 | 대부분 완료 | 패키징·릴리스 자동화 완료, Intel/Windows 실제 장치 설치 경험 확인 중 |
+| Phase 5 | 대부분 완료 | macOS·Windows 호스팅 CI의 패키징·E2E·설치 스모크 완료, Intel Mac·Windows 10·11 실제 장치 확인 중 |
 
 Phase별 상세 구현 기록과 날짜별 변경은 역사 문서에서 확인한다.
 
