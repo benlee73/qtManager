@@ -607,6 +607,18 @@ describe("QT Manager desktop flow", () => {
     await clickButtonByText("보관함");
     await waitForText(".memo-archive-dialog", edited);
     await browser.execute(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(
+          () => document.querySelector(".memo-archive-dialog") === null,
+        )) === true,
+      { timeoutMsg: "Escape로 메모 보관함을 닫지 못했습니다." },
+    );
+    await clickButtonByText("보관함");
+    await waitForText(".memo-archive-dialog", edited);
+    await browser.execute(() => {
       document
         .querySelector<HTMLButtonElement>(
           ".memo-archive-dialog .memo-archive-actions .quiet-button",
@@ -1442,6 +1454,65 @@ describe("QT Manager desktop flow", () => {
     );
     await clickButtonByText("현장 배부");
     await waitForText('[data-testid="selected-issue"]', "월호");
+  });
+
+  it("orders management distribution history by QT issue when timestamps match", async () => {
+    const applicant = `가상이력${Date.now()}`;
+    const personId = await invokeTauri<string>("register_person_command", {
+      request: {
+        name: applicant,
+        cohort: "00",
+        phone: null,
+        personNote: null,
+        issueYear: 2026,
+        issueMonth: 1,
+        quantity: 1,
+        appliedAt: null,
+        memo: null,
+        confirmDuplicate: true,
+      },
+    });
+    const detail = await invokeTauri<{
+      subscriptions: { id: string }[];
+    }>("load_person_detail_command", { personId });
+    const subscriptionId = detail.subscriptions[0]?.id;
+    if (!subscriptionId)
+      throw new Error("배부 이력 fixture 구독을 찾지 못했습니다.");
+    for (const issueMonth of [1, 3, 5, 7, 9]) {
+      await invokeTauri("record_distribution_command", {
+        request: {
+          issueYear: 2026,
+          issueMonth,
+          subscriptionId,
+          quantity: 1,
+          note: null,
+        },
+      });
+    }
+
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
+        ?.click();
+    });
+    await waitForText("h2", "신청자 관리");
+    await setInput('[data-testid="management-search"]', applicant);
+    await selectManagementPerson(applicant);
+    await waitForText('[data-testid="person-detail"]', applicant);
+    const issues = await browser.execute(() =>
+      [
+        ...document.querySelectorAll<HTMLElement>(
+          ".distribution-history-row strong",
+        ),
+      ].map((row) => row.textContent?.trim() ?? ""),
+    );
+    expect(issues).toEqual([
+      "2026년 9~10월호",
+      "2026년 7~8월호",
+      "2026년 5~6월호",
+      "2026년 3~4월호",
+      "2026년 1~2월호",
+    ]);
   });
 
   // 새 메모 화면으로 대체된 이전 신청자 관리 기록 시나리오다.

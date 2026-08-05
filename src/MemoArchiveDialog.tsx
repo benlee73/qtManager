@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 import type { MemoView } from "./phase2";
 
 export function MemoArchiveDialog({
@@ -15,6 +17,16 @@ export function MemoArchiveDialog({
   onRestore: (memo: MemoView) => void;
   onDelete: (memo: MemoView) => void;
 }) {
+  useEffect(() => {
+    const closeWithEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", closeWithEscape);
+    return () => window.removeEventListener("keydown", closeWithEscape);
+  }, [onClose]);
+
   return (
     <div
       className="modal-backdrop"

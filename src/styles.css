@@ -1725,7 +1725,7 @@ kbd {
 
 .memo-detail-editor {
   width: 100%;
-  min-height: 9rem;
+  min-height: 7rem;
   max-height: 16rem;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1742,7 +1742,7 @@ kbd {
 .memo-detail-content {
   display: flex;
   width: 100%;
-  min-height: 9rem;
+  min-height: 7rem;
   max-height: 16rem;
   align-items: flex-start;
   justify-content: flex-start;

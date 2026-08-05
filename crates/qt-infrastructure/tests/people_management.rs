@@ -2,9 +2,9 @@ use std::cell::Cell;
 
 use qt_application::{
     Clock, DistributionDeskRepository, IdGenerator, PeopleManagementRepository,
-    RegisterPersonRequest, RenewSubscriptionRequest, RuntimeServices, UpdatePersonRequest,
-    load_people_management, load_person_detail, register_person, renew_subscription,
-    set_person_archived, update_person,
+    RecordDistributionRequest, RegisterPersonRequest, RenewSubscriptionRequest, RuntimeServices,
+    UpdatePersonRequest, load_people_management, load_person_detail, record_distribution,
+    register_person, renew_subscription, set_person_archived, update_person,
 };
 use qt_domain::{ChangeLog, CheckItem, CheckItemStatus, Issue};
 use qt_infrastructure::SqliteCoreRepository;
@@ -118,6 +118,80 @@ fn persists_registration_profile_completion_renewal_archive_and_history_across_r
     assert_eq!(
         detail.subscriptions[0].start_issue,
         Issue::new(2027, 7).unwrap().display_name()
+    );
+}
+
+#[test]
+fn orders_distribution_history_by_issue_when_imported_times_match() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join("management.sqlite");
+    let runtime = FixedRuntime(Cell::new(0));
+    let services = RuntimeServices {
+        clock: &runtime,
+        ids: &runtime,
+    };
+
+    let mut repository = SqliteCoreRepository::open(&path).unwrap();
+    PeopleManagementRepository::migrate(&mut repository).unwrap();
+    qt_application::DistributionDeskRepository::save_operator(
+        &mut repository,
+        "가상담당자",
+        &runtime.now(),
+    )
+    .unwrap();
+    let person_id = register_person(
+        &mut repository,
+        &services,
+        RegisterPersonRequest {
+            name: "가상이력".into(),
+            cohort: Some("00".into()),
+            phone: None,
+            person_note: None,
+            issue_year: 2026,
+            issue_month: 1,
+            quantity: 1,
+            applied_at: None,
+            memo: None,
+            confirm_duplicate: false,
+        },
+    )
+    .unwrap();
+    let subscription_id =
+        load_person_detail(&mut repository, &person_id, Issue::new(2026, 1).unwrap())
+            .unwrap()
+            .subscriptions[0]
+            .id
+            .clone();
+
+    for issue_month in [1, 3, 5, 7] {
+        record_distribution(
+            &mut repository,
+            &services,
+            RecordDistributionRequest {
+                issue_year: 2026,
+                issue_month,
+                subscription_id: subscription_id.clone(),
+                quantity: Some(1),
+                note: None,
+            },
+        )
+        .unwrap();
+    }
+
+    let detail =
+        load_person_detail(&mut repository, &person_id, Issue::new(2026, 7).unwrap()).unwrap();
+    assert_eq!(
+        detail
+            .distributions
+            .iter()
+            .map(|item| item.issue.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "2026년 7~8월호",
+            "2026년 5~6월호",
+            "2026년 3~4월호",
+            "2026년 1~2월호",
+        ],
     );
 }
 

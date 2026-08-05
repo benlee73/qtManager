@@ -145,7 +145,11 @@ impl PeopleManagementRepository for SqliteCoreRepository {
                 FROM distributions d
                 JOIN subscriptions s ON s.id = d.subscription_id
                 WHERE s.person_id = ?1
-                ORDER BY d.distributed_at, d.rowid
+                ORDER BY d.issue_year DESC,
+                         d.issue_month DESC,
+                         d.distributed_at DESC,
+                         d.updated_at DESC,
+                         d.rowid DESC
                 ",
             )
             .map_err(port_error)?;

@@ -283,9 +283,20 @@ pub fn load_person_detail<R: PeopleManagementRepository>(
             .then_with(|| right_issue.cmp(left_issue))
     });
     let subscriptions = subscriptions.into_iter().map(|(_, item)| item).collect();
-    let mut distributions = record
-        .distributions
-        .iter()
+    // Imported 2026 records often share the same 처리 시각. Sort by the QT
+    // issue first so the history remains chronological even when timestamps
+    // cannot distinguish the original handout order.
+    let mut distributions = record.distributions.iter().collect::<Vec<_>>();
+    distributions.sort_by(|left, right| {
+        right
+            .issue
+            .cmp(&left.issue)
+            .then_with(|| right.distributed_at.cmp(&left.distributed_at))
+            .then_with(|| right.updated_at.cmp(&left.updated_at))
+            .then_with(|| right.id.cmp(&left.id))
+    });
+    let distributions = distributions
+        .into_iter()
         .map(|item| DistributionView {
             issue: item.issue.display_name(),
             quantity: item.quantity,
@@ -293,7 +304,6 @@ pub fn load_person_detail<R: PeopleManagementRepository>(
             reversed: item.reversal_of.is_some(),
         })
         .collect::<Vec<_>>();
-    distributions.sort_by(|left, right| right.distributed_at.cmp(&left.distributed_at));
     let check_items = repository
         .list_person_check_items(person_id)?
         .into_iter()
@@ -1040,6 +1050,109 @@ mod tests {
         assert_eq!(detail.check_items.len(), 2);
         assert_eq!(detail.check_items[0].status, "확인 필요");
         assert_eq!(detail.check_items[1].status, "확인 완료");
+    }
+
+    #[test]
+    fn orders_distribution_history_by_issue_when_imported_timestamps_are_equal() {
+        let runtime = FixedRuntime(Cell::new(0));
+        let now = runtime.now();
+        let person = Person {
+            id: "person-history".into(),
+            name: "가상 이력".into(),
+            cohort: Some("00".into()),
+            phone: None,
+            normalized_phone: None,
+            status: PersonStatus::Active,
+            person_note: None,
+            created_at: now.clone(),
+            updated_at: now.clone(),
+        };
+        let subscription = annual_subscription(NewSubscription {
+            id: "subscription-history".into(),
+            person_id: person.id.clone(),
+            start_issue: Issue::new(2026, 1).unwrap(),
+            quantity: 1,
+            applied_at: None,
+            source: SubscriptionSource::Manual,
+            memo: None,
+            now: &now,
+        })
+        .unwrap();
+        let subscription_id = subscription.id.clone();
+        let distribution = |id: &str, issue: Issue, quantity: u32, at: &str| Distribution {
+            id: id.into(),
+            subscription_id: subscription_id.clone(),
+            issue,
+            quantity,
+            distributed_at: at.into(),
+            note: None,
+            reversal_of: None,
+            created_at: at.into(),
+            updated_at: at.into(),
+        };
+        let imported_at = "2026-07-27T09:23:00+09:00";
+        let mut repository = MemoryRepository {
+            records: vec![ManagedPersonRecord {
+                person,
+                subscriptions: vec![subscription],
+                distributions: vec![
+                    distribution(
+                        "distribution-1-2",
+                        Issue::new(2026, 1).unwrap(),
+                        1,
+                        imported_at,
+                    ),
+                    distribution(
+                        "distribution-7-8",
+                        Issue::new(2026, 7).unwrap(),
+                        1,
+                        imported_at,
+                    ),
+                    distribution(
+                        "distribution-5-6-old",
+                        Issue::new(2026, 5).unwrap(),
+                        1,
+                        imported_at,
+                    ),
+                    distribution(
+                        "distribution-5-6-new",
+                        Issue::new(2026, 5).unwrap(),
+                        2,
+                        "2026-07-28T09:23:00+09:00",
+                    ),
+                    distribution(
+                        "distribution-3-4",
+                        Issue::new(2026, 3).unwrap(),
+                        1,
+                        imported_at,
+                    ),
+                ],
+            }],
+            ..Default::default()
+        };
+
+        let detail = load_person_detail(
+            &mut repository,
+            "person-history",
+            Issue::new(2026, 7).unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            detail
+                .distributions
+                .iter()
+                .map(|item| item.issue.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "2026년 7~8월호",
+                "2026년 5~6월호",
+                "2026년 5~6월호",
+                "2026년 3~4월호",
+                "2026년 1~2월호",
+            ],
+        );
+        assert_eq!(detail.distributions[1].quantity, 2);
     }
 
     #[test]
