@@ -77,6 +77,23 @@ def verify_release_metadata() -> None:
         raise AssertionError(f"릴리스 버전 불일치: {sorted(versions)}")
     if tauri["identifier"] != "kr.or.malgunsaem.qtmanager":
         raise AssertionError("배포 식별자가 예고 없이 바뀌었습니다.")
+    windows = tauri.get("app", {}).get("windows", [])
+    main_window = next(
+        (window for window in windows if window.get("label") == "main"), None
+    )
+    expected_window = {
+        "width": 1000,
+        "height": 720,
+        "minWidth": 900,
+        "minHeight": 640,
+        "resizable": True,
+    }
+    if main_window is None or any(
+        main_window.get(key) != value for key, value in expected_window.items()
+    ):
+        raise AssertionError(
+            "메인 창 계약이 1000x720(최소 900x640, 크기 조절 가능)과 다릅니다."
+        )
     if tauri["bundle"].get("active") is not True:
         raise AssertionError("Tauri 설치 패키지 생성이 비활성화되어 있습니다.")
     icons = tauri["bundle"].get("icon", [])

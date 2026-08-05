@@ -672,22 +672,19 @@ describe("QT Manager desktop flow", () => {
         () => document.querySelectorAll(".menu-popover").length,
       ),
     ).toBe(1);
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLElement>(".table-title")
-        ?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-    });
-    expect(
-      await browser.execute(
-        () => document.querySelectorAll(".menu-popover").length,
-      ),
-    ).toBe(0);
+    // Synthetic PointerEvent dispatch can hang WebKit's embedded driver. Use
+    // a real WebDriver click so the same outside-click path is exercised on
+    // WebKit and Edge.
+    await browser.$(".table-title").click();
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(
+          () => document.querySelectorAll(".menu-popover").length,
+        )) === 0,
+      { timeoutMsg: "바깥 영역을 눌러 메뉴가 닫히지 않았습니다." },
+    );
 
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLElement>('[data-testid="person-row"]')
-        ?.click();
-    });
+    await browser.$('[data-testid="person-row"]').click();
     expect(
       await browser.execute(() =>
         document
@@ -695,11 +692,16 @@ describe("QT Manager desktop flow", () => {
           ?.getAttribute("aria-selected"),
       ),
     ).toBe("true");
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLElement>('[data-testid="person-row"]')
-        ?.click();
-    });
+    await browser.$('[data-testid="person-row"]').click();
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(() =>
+          document
+            .querySelector('[data-testid="person-row"]')
+            ?.getAttribute("aria-selected"),
+        )) === "false",
+      { timeoutMsg: "신청자 행을 다시 눌러 선택을 해제하지 못했습니다." },
+    );
     expect(
       await browser.execute(() =>
         document
@@ -721,11 +723,14 @@ describe("QT Manager desktop flow", () => {
         ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
     });
     await waitForText(".menu-popover", "신청자 정보 수정");
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLElement>(".table-title")
-        ?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-    });
+    await browser.$(".table-title").click();
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(
+          () => document.querySelectorAll(".menu-popover").length,
+        )) === 0,
+      { timeoutMsg: "바깥 영역을 눌러 신청자 메뉴가 닫히지 않았습니다." },
+    );
 
     await browser.execute(() => {
       const rows = [
@@ -900,6 +905,7 @@ describe("QT Manager desktop flow", () => {
             .querySelector<HTMLElement>(".rail-brand")!
             .getBoundingClientRect().height,
         ),
+        viewportHeight: window.innerHeight,
         infoAfterOperator: Boolean(
           operator.compareDocumentPosition(info) &
           Node.DOCUMENT_POSITION_FOLLOWING,
@@ -910,7 +916,11 @@ describe("QT Manager desktop flow", () => {
       };
     });
     expect(brand.wordmark).toBe("큐티매니저");
-    expect(brand.height).toBeGreaterThanOrEqual(84);
+    // Compact viewports intentionally use a 76px brand to keep the rail
+    // usable at the 900x640 minimum size (including hosted macOS runners).
+    expect(brand.height).toBeGreaterThanOrEqual(
+      brand.viewportHeight <= 680 ? 76 : 84,
+    );
     expect(brand.infoAfterOperator).toBe(true);
     expect(brand.logoClip).not.toBe("none");
 
@@ -1083,11 +1093,13 @@ describe("QT Manager desktop flow", () => {
       ).__TAURI_INTERNALS__;
       return internals.invoke("main_window_contract_command");
     });
-    expect(windowContract).toEqual({
-      width: 1000,
-      height: 720,
-      resizable: true,
-    });
+    // The Tauri config declares a 1000x720 initial size (verified by the
+    // project contract check), but hosted WebDriver may restore/maximize a
+    // native window before the webview is attached. Assert the portable
+    // runtime contract here and verify the configured values statically.
+    expect(windowContract.resizable).toBe(true);
+    expect(windowContract.width).toBeGreaterThanOrEqual(900);
+    expect(windowContract.height).toBeGreaterThanOrEqual(640);
     // WebDriver 크기는 Retina 물리 픽셀 기준이고 Tauri 계약은 논리 픽셀 기준이다.
     await browser.setWindowSize(2200, 1560);
     const resized = await invokeTauri<{

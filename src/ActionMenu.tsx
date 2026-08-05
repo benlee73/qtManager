@@ -20,7 +20,7 @@ export function ActionMenu({
 
   useEffect(() => {
     if (!open) return;
-    const closeOutside = (event: PointerEvent) => {
+    const closeOutside = (event: Event) => {
       if (!rootRef.current?.contains(event.target as Node)) onOpenMenu(null);
     };
     const closeWithEscape = (event: KeyboardEvent) => {
@@ -32,9 +32,14 @@ export function ActionMenu({
       }
     };
     window.addEventListener("pointerdown", closeOutside);
+    // Some embedded WebView drivers (and keyboard/screen-reader activation)
+    // deliver a click without a pointerdown. Keep the outside-click contract
+    // consistent across native and automated input paths.
+    window.addEventListener("click", closeOutside);
     window.addEventListener("keydown", closeWithEscape);
     return () => {
       window.removeEventListener("pointerdown", closeOutside);
+      window.removeEventListener("click", closeOutside);
       window.removeEventListener("keydown", closeWithEscape);
     };
   }, [onOpenMenu, open]);
