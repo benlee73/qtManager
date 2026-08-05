@@ -42,6 +42,7 @@ describe("HelpPanel", () => {
     expect(markup).toContain("도움말 2026-08-04");
     expect(markup).not.toContain("인터넷 없이 보는 사용법");
     expect(markup).toContain('class="help-step-copy"');
+    expect(markup).toContain('class="shortcut-list"');
     expect(markup).toContain('data-testid="help-backdrop"');
   });
 });

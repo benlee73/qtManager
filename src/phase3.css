@@ -1085,6 +1085,8 @@
   grid-template-columns: 10rem 1fr;
   padding: 0.6rem 0;
   border-bottom: 1px solid var(--line);
+  font-size: var(--font-sm);
+  line-height: 1.45;
 }
 
 .shortcut-list dt {
@@ -1121,11 +1123,13 @@
 
 .support-paths dt {
   color: var(--text-muted);
+  font-size: var(--font-sm);
 }
 
 .support-paths dd {
   min-width: 0;
   margin: 0;
+  font-size: var(--font-sm);
   overflow-wrap: anywhere;
   white-space: normal;
   line-height: 1.35;

@@ -252,6 +252,84 @@ describe("QT Manager desktop flow", () => {
     );
   });
 
+  it("keeps help shortcut and support details one step smaller than body text", async () => {
+    await browser.execute(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }));
+    });
+    await waitForText("#help-title", "QT Manager 도움말");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLAnchorElement>('[data-testid="help-nav-shortcuts"]')
+        ?.click();
+    });
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(() =>
+          document
+            .querySelector<HTMLElement>('[data-testid="help-nav-shortcuts"]')
+            ?.getAttribute("aria-current"),
+        )) === "location",
+      { timeoutMsg: "도움말 단축키 섹션으로 이동하지 않았습니다." },
+    );
+    expect(
+      await browser.execute(() => {
+        const shortcutList = document.querySelector<HTMLElement>(
+          ".shortcut-list > div",
+        );
+        return shortcutList ? getComputedStyle(shortcutList).fontSize : "";
+      }),
+    ).toBe("13px");
+    await browser.saveScreenshot("test-results/ui-help-shortcuts-dark.png");
+
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLAnchorElement>('[data-testid="help-nav-app-info"]')
+        ?.click();
+    });
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(() =>
+          document
+            .querySelector<HTMLElement>('[data-testid="help-nav-app-info"]')
+            ?.getAttribute("aria-current"),
+        )) === "location",
+      { timeoutMsg: "도움말 앱 정보 섹션으로 이동하지 않았습니다." },
+    );
+    await waitForText('[data-testid="support-info"]', "0.1.0");
+    expect(
+      await browser.execute(() => {
+        const supportLabel = document.querySelector<HTMLElement>(
+          '[data-testid="support-info"] dt',
+        );
+        const supportValue = document.querySelector<HTMLElement>(
+          '[data-testid="support-info"] dd',
+        );
+        return {
+          supportLabelFontSize: supportLabel
+            ? getComputedStyle(supportLabel).fontSize
+            : "",
+          supportValueFontSize: supportValue
+            ? getComputedStyle(supportValue).fontSize
+            : "",
+        };
+      }),
+    ).toEqual({
+      supportLabelFontSize: "13px",
+      supportValueFontSize: "13px",
+    });
+    await browser.saveScreenshot("test-results/ui-help-support-dark.png");
+    await browser.execute(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(() =>
+          Boolean(document.querySelector("#help-title")),
+        )) === false,
+      { timeoutMsg: "도움말 단축키 검증 후 닫히지 않았습니다." },
+    );
+  });
+
   // 이전 기록 타입의 UI 회귀 시나리오는 새 메모 화면으로 대체했다. 구버전
   // check_items/pinned_notes 어댑터는 Rust 통합 테스트에서 계속 검증한다.
   it.skip("creates linked and general check items, transitions all states, and keeps pinned notes periodless", async () => {
