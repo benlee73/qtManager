@@ -1,0 +1,35 @@
+import { describe, expect, it } from "vitest";
+
+import { validateDraftInput } from "./draftValidation";
+
+const validInput = {
+  name: "현장 신청자",
+  cohort: "00",
+  phone: "",
+  quantity: 1,
+};
+
+describe("현장 간이 등록 입력", () => {
+  it("requires a name while allowing the cohort to be omitted", () => {
+    expect(validateDraftInput({ ...validInput, cohort: "" })).toBeNull();
+    expect(validateDraftInput({ ...validInput, name: "   " })).toBe(
+      "이름을 입력하세요.",
+    );
+  });
+
+  it("accepts only a two-digit cohort when it is provided", () => {
+    expect(validateDraftInput({ ...validInput, cohort: "09" })).toBeNull();
+    expect(validateDraftInput({ ...validInput, cohort: "9" })).toBe(
+      "또래는 두 자리 숫자만 입력할 수 있습니다.",
+    );
+    expect(validateDraftInput({ ...validInput, cohort: "9a" })).toBe(
+      "또래는 두 자리 숫자만 입력할 수 있습니다.",
+    );
+  });
+
+  it("rejects a non-positive quantity", () => {
+    expect(validateDraftInput({ ...validInput, quantity: 0 })).toBe(
+      "수량은 1권 이상 입력하세요.",
+    );
+  });
+});

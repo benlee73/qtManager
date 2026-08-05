@@ -410,6 +410,11 @@ function PersonFields({ person }: { person?: PersonDetail }) {
             maxLength={2}
             placeholder="94"
             defaultValue={person?.cohort ?? ""}
+            onInput={(event) => {
+              const input = event.currentTarget;
+              const digits = input.value.replace(/[^0-9]/g, "").slice(0, 2);
+              if (digits !== input.value) input.value = digits;
+            }}
           />
         </Field>
       </div>

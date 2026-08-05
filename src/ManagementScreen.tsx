@@ -205,7 +205,7 @@ export function ManagementScreen({
           </label>
           <div className="management-counts">
             <span>검색 결과 {management?.people.length ?? 0}명</span>
-            <span title="간이 등록 등으로 또래·연락처·구독 정보가 아직 부족한 신청자 수">
+            <span title="현장 간이 등록 상태가 아직 보완되지 않은 신청자 수">
               정보 보완 필요 {management?.draftCount ?? 0}명
             </span>
           </div>

@@ -605,6 +605,8 @@
   border-radius: 0.55rem;
   color: var(--text);
   background: var(--panel-high);
+  font: inherit;
+  font-size: var(--font-sm);
   text-align: left;
   line-height: 1.5;
   white-space: pre-wrap;

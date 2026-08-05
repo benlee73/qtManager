@@ -32,7 +32,7 @@ describe("HelpPanel", () => {
     expect(markup).not.toContain("정식 등록");
     expect(markup).toContain("정보 보완이나 보관 상태는 작은 표시");
     expect(markup).toContain("정보 보완 필요 N명");
-    expect(markup).toContain("입금 상태와는 무관합니다");
+    expect(markup).toContain("일반 등록자의 또래 누락만으로는");
     expect(markup).toContain('data-testid="help-nav-people"');
     expect(markup).toContain('aria-current="location"');
     expect(markup).toContain('data-testid="help-notes"');

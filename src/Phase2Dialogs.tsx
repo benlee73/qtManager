@@ -1,6 +1,7 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import type { ReversibleAction } from "./actionHistory";
+import { validateDraftInput } from "./draftValidation";
 import { distributionAllocations } from "./distributionView";
 import {
   type DeskPerson,
@@ -45,6 +46,14 @@ export function Phase2DialogContent({
   ) => Promise<boolean>;
   recordAction: (action: ReversibleAction) => void;
 }) {
+  const [draftError, setDraftError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!draftError) return;
+    const timeout = window.setTimeout(() => setDraftError(null), 7000);
+    return () => window.clearTimeout(timeout);
+  }, [draftError]);
+
   if (dialog.type === "operator") {
     return (
       <FormDialog title="현재 담당자 설정" onClose={onClose}>
@@ -75,28 +84,48 @@ export function Phase2DialogContent({
       <FormDialog title="현장 간이 등록" onClose={onClose}>
         <form
           data-testid="draft-form"
+          noValidate
           onSubmit={(event) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
+            const input = {
+              name: String(data.get("name") ?? ""),
+              cohort: String(data.get("cohort") ?? ""),
+              phone: String(data.get("phone") ?? ""),
+              quantity: Number(data.get("quantity")),
+            };
+            const validationError = validateDraftInput(input);
+            if (validationError) {
+              setDraftError(validationError);
+              if (!input.name.trim()) {
+                (
+                  event.currentTarget.elements.namedItem(
+                    "name",
+                  ) as HTMLInputElement | null
+                )?.focus();
+              }
+              return;
+            }
+            setDraftError(null);
             void mutate(
-              () =>
-                createDraft(issue, {
-                  name: String(data.get("name") ?? ""),
-                  cohort: String(data.get("cohort") ?? ""),
-                  phone: String(data.get("phone") ?? ""),
-                  quantity: Number(data.get("quantity")),
-                }),
+              () => createDraft(issue, input),
               "현장 신청자를 추가했습니다. 목록에서 바로 배부할 수 있습니다.",
             );
           }}
         >
           <p className="dialog-description">
-            이름 또는 또래만 알아도 등록할 수 있습니다. 현재 호부터 연속 6개 호
-            구독으로 기록합니다.
+            이름은 반드시 입력해야 합니다. 또래와 연락처는 나중에 보완할 수
+            있으며, 현재 호부터 연속 6개 호 구독으로 기록합니다.
           </p>
           <div className="field-grid">
             <Field label="이름">
-              <input name="name" autoFocus placeholder="모르면 비워두세요" />
+              <input
+                name="name"
+                required
+                autoFocus
+                placeholder="이름을 입력하세요"
+                onChange={() => setDraftError(null)}
+              />
             </Field>
             <Field label="또래">
               <input
@@ -105,11 +134,22 @@ export function Phase2DialogContent({
                 pattern="[0-9]{2}"
                 maxLength={2}
                 placeholder="94"
+                onInput={(event) => {
+                  const input = event.currentTarget;
+                  const digits = input.value.replace(/[^0-9]/g, "").slice(0, 2);
+                  if (digits !== input.value) input.value = digits;
+                  setDraftError(null);
+                }}
               />
             </Field>
           </div>
           <Field label="연락처">
-            <input name="phone" inputMode="tel" placeholder="선택 입력" />
+            <input
+              name="phone"
+              inputMode="tel"
+              placeholder="선택 입력"
+              onChange={() => setDraftError(null)}
+            />
           </Field>
           <Field label="매 호 받을 수량">
             <input
@@ -118,8 +158,18 @@ export function Phase2DialogContent({
               min={1}
               defaultValue={1}
               required
+              onChange={() => setDraftError(null)}
             />
           </Field>
+          {draftError && (
+            <p
+              className="form-error draft-form-error"
+              role="alert"
+              data-testid="draft-form-error"
+            >
+              {draftError}
+            </p>
+          )}
           <SubmitButton busy={busy}>간이 등록</SubmitButton>
         </form>
       </FormDialog>

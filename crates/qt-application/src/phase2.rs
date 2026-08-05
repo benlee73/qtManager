@@ -688,18 +688,13 @@ where
 {
     let name = request.name.trim();
     let cohort = clean_optional(request.cohort);
-    if name.is_empty() && cohort.is_none() {
-        return Err(qt_domain::DomainError::DraftIdentityRequired.into());
+    if name.is_empty() {
+        return Err(qt_domain::DomainError::DraftNameRequired.into());
     }
     let now = services.clock.now();
     let person = Person {
         id: services.ids.next_id(),
-        // SQLite v2는 이름을 필수로 두므로, 이름을 모르는 간이 등록은 명시적인 표시값을 쓴다.
-        name: if name.is_empty() {
-            "이름 미상".into()
-        } else {
-            name.into()
-        },
+        name: name.into(),
         cohort,
         normalized_phone: request.phone.as_deref().map(normalize_phone),
         phone: clean_optional(request.phone),
@@ -2041,6 +2036,52 @@ mod tests {
         assert_eq!(repository.purchase_summary(issue).unwrap(), (0, 0));
         assert_eq!(repository.records[0].subscriptions[0].quantity, 1);
         assert_eq!(repository.purchases.len(), 2);
+    }
+
+    #[test]
+    fn draft_requires_name_but_allows_missing_cohort() {
+        let mut repository = MemoryRepository {
+            operator: Some("담당자".into()),
+            ..Default::default()
+        };
+        let ids = SequenceIds(Cell::new(0));
+        let services = RuntimeServices {
+            clock: &FixedClock,
+            ids: &ids,
+        };
+        create_draft(
+            &mut repository,
+            &services,
+            CreateDraftRequest {
+                name: "현장 단체".into(),
+                cohort: None,
+                phone: None,
+                issue_year: 2026,
+                issue_month: 7,
+                quantity: 1,
+            },
+        )
+        .unwrap();
+        assert_eq!(repository.records[0].person.name, "현장 단체");
+        assert_eq!(repository.records[0].person.cohort, None);
+
+        let error = create_draft(
+            &mut repository,
+            &services,
+            CreateDraftRequest {
+                name: "  ".into(),
+                cohort: Some("94".into()),
+                phone: None,
+                issue_year: 2026,
+                issue_month: 7,
+                quantity: 1,
+            },
+        )
+        .expect_err("이름이 없는 간이 등록은 거부되어야 합니다.");
+        assert!(matches!(
+            error,
+            ApplicationError::Domain(qt_domain::DomainError::DraftNameRequired)
+        ));
     }
 
     #[test]

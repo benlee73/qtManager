@@ -41,13 +41,8 @@ impl Person {
 
     pub fn validate_draft(&self) -> Result<(), DomainError> {
         required_id(&self.id, "person_id")?;
-        let has_name = !self.name.trim().is_empty();
-        let has_cohort = self
-            .cohort
-            .as_deref()
-            .is_some_and(|cohort| !cohort.trim().is_empty());
-        if !has_name && !has_cohort {
-            return Err(DomainError::DraftIdentityRequired);
+        if self.name.trim().is_empty() {
+            return Err(DomainError::DraftNameRequired);
         }
         if let Some(cohort) = &self.cohort
             && (cohort.len() != 2 || !cohort.bytes().all(|value| value.is_ascii_digit()))
@@ -317,10 +312,10 @@ mod tests {
     }
 
     #[test]
-    fn draft_requires_name_or_cohort_and_preserves_leading_zero() {
+    fn draft_requires_name_and_preserves_optional_leading_zero_cohort() {
         let mut person = Person {
             id: "person-1".into(),
-            name: String::new(),
+            name: "현장 신청자".into(),
             cohort: Some("00".into()),
             phone: None,
             normalized_phone: None,
@@ -331,10 +326,9 @@ mod tests {
         };
         assert_eq!(person.validate_draft(), Ok(()));
         person.cohort = None;
-        assert_eq!(
-            person.validate_draft(),
-            Err(DomainError::DraftIdentityRequired)
-        );
+        assert_eq!(person.validate_draft(), Ok(()));
+        person.name.clear();
+        assert_eq!(person.validate_draft(), Err(DomainError::DraftNameRequired));
     }
 
     #[test]

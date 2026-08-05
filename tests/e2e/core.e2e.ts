@@ -50,6 +50,24 @@ describe("QT Manager desktop flow", () => {
         .querySelector<HTMLButtonElement>('[data-testid="open-draft"]')
         ?.click();
     });
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLFormElement>('[data-testid="draft-form"]')
+        ?.requestSubmit();
+    });
+    await waitForText('[data-testid="draft-form-error"]', "이름을 입력하세요.");
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(
+          () =>
+            document.querySelector('[data-testid="draft-form-error"]') === null,
+        )) === true,
+      {
+        timeout: 8_000,
+        interval: 250,
+        timeoutMsg: "간이 등록 입력 오류가 자동으로 사라지지 않았습니다.",
+      },
+    );
     await setInput("input[name='name']", applicant);
     await setInput("input[name='cohort']", "00");
     await setInput("input[name='quantity']", "2");
@@ -1250,7 +1268,7 @@ describe("QT Manager desktop flow", () => {
     });
     expect(layout.deskLeft).toBe(76);
     expect(layout.stickyInputHeight).toBeLessThanOrEqual(94);
-    expect(layout.fontMedium).toBe("13px");
+    expect(layout.fontMedium).toBe("14px");
     expect(layout.brandGap).toBeGreaterThanOrEqual(4);
     expect(layout.placeholderAlpha).toBeLessThanOrEqual(0.65);
     expect(layout.hasOperatorStatus).toBe(false);

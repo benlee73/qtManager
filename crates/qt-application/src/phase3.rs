@@ -706,15 +706,10 @@ fn person_status(status: PersonStatus) -> &'static str {
 
 fn needs_profile_completion(person: &Person) -> bool {
     person.status == PersonStatus::Draft
-        || (person.status == PersonStatus::Active && person.cohort.is_none())
 }
 
 fn management_person_status(person: &Person) -> &'static str {
-    if person.status == PersonStatus::Active && person.cohort.is_none() {
-        "정보 보완 필요"
-    } else {
-        person_status(person.status)
-    }
+    person_status(person.status)
 }
 
 fn source_label(source: SubscriptionSource) -> &'static str {
@@ -883,7 +878,7 @@ mod tests {
     }
 
     #[test]
-    fn treats_an_active_person_without_a_cohort_as_needing_profile_completion() {
+    fn does_not_require_profile_completion_for_an_active_person_without_a_cohort() {
         let person = Person {
             id: "person-without-cohort".into(),
             name: "가상 신청자".into(),
@@ -896,12 +891,12 @@ mod tests {
             updated_at: "2026-07-26T10:00:00+09:00".into(),
         };
 
-        assert!(needs_profile_completion(&person));
-        assert_eq!(management_person_status(&person), "정보 보완 필요");
+        assert!(!needs_profile_completion(&person));
+        assert_eq!(management_person_status(&person), "정식 등록");
     }
 
     #[test]
-    fn counts_missing_cohort_in_the_management_profile_completion_total() {
+    fn excludes_an_active_person_without_a_cohort_from_profile_completion_total() {
         let now = "2026-07-26T10:00:00+09:00".to_owned();
         let person = Person {
             id: "person-without-cohort".into(),
@@ -925,8 +920,8 @@ mod tests {
 
         let management = load_people_management(&mut repository, "", false).unwrap();
 
-        assert_eq!(management.draft_count, 1);
-        assert_eq!(management.people[0].status, "정보 보완 필요");
+        assert_eq!(management.draft_count, 0);
+        assert_eq!(management.people[0].status, "정식 등록");
     }
 
     #[test]

@@ -86,8 +86,8 @@ pub enum DomainError {
     EmptyContent,
     #[error("제목은 비어 있을 수 없습니다.")]
     EmptyTitle,
-    #[error("간이 등록에는 이름 또는 또래 중 하나가 필요합니다.")]
-    DraftIdentityRequired,
+    #[error("간이 등록에는 이름이 필요합니다.")]
+    DraftNameRequired,
 }
 
 #[cfg(test)]
