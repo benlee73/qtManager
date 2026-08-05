@@ -26,6 +26,10 @@ describe("QT Manager desktop flow", () => {
     await refreshApp(
       "E2E 테스트 상태를 초기화한 뒤 화면을 새로 열지 못했습니다.",
     );
+    // The search input is rendered before the async desk refresh completes.
+    // Wait for either the operator dialog or an already persisted operator so
+    // the first test action cannot race the initial database load.
+    await configureOperatorIfNeeded();
   });
 
   it("registers an on-site applicant, partially distributes, completes and undoes", async () => {
@@ -39,7 +43,6 @@ describe("QT Manager desktop flow", () => {
       { timeoutMsg: "QT Manager 현장 배부 화면이 준비되지 않았습니다." },
     );
 
-    await configureOperatorIfNeeded();
     const applicant = `가상현장${Date.now()}`;
 
     await browser.execute(() => {
@@ -872,7 +875,6 @@ describe("QT Manager desktop flow", () => {
       localStorage.removeItem("qt-manager-theme");
     });
     await refreshApp("새로고침 뒤 기본 테마가 적용되지 않았습니다.");
-    await configureOperatorIfNeeded();
     expect(
       await browser.execute(() => document.documentElement.dataset.theme),
     ).toBe("dark");
@@ -2432,6 +2434,20 @@ describe("QT Manager desktop flow", () => {
 });
 
 async function configureOperatorIfNeeded() {
+  await browser.waitUntil(
+    async () =>
+      browser.execute(() => {
+        const dialogTitle =
+          document.querySelector("#dialog-title")?.textContent?.trim() ?? "";
+        const operator =
+          document.querySelector<HTMLElement>(".rail-operator")?.title ?? "";
+        return (
+          dialogTitle.includes("현재 담당자 설정") ||
+          (operator !== "" && operator !== "담당자 설정")
+        );
+      }),
+    { timeoutMsg: "담당자 상태가 초기화되지 않았습니다." },
+  );
   const title = await textOf("#dialog-title");
   if (!title.includes("현재 담당자 설정")) return;
   await setInput("input[name='name']", "가상담당자");
