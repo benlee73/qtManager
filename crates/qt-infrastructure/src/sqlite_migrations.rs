@@ -216,6 +216,77 @@ CREATE INDEX idx_pinned_notes_status_pinned
     ON pinned_notes(status, is_pinned DESC, updated_at DESC);
 ";
 
+const VERSION_4: &str = "
+CREATE TABLE memos (
+    id TEXT PRIMARY KEY,
+    person_id TEXT REFERENCES people(id),
+    content TEXT NOT NULL CHECK(length(trim(content)) > 0),
+    status TEXT NOT NULL CHECK(status IN ('active', 'archived')),
+    operator_name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    archived_at TEXT,
+    legacy_source TEXT,
+    legacy_title TEXT
+);
+
+CREATE INDEX idx_memos_status_updated ON memos(status, updated_at DESC, id DESC);
+CREATE INDEX idx_memos_person_status ON memos(person_id, status, updated_at DESC, id DESC);
+
+INSERT INTO memos(
+    id, person_id, content, status, operator_name, created_at, updated_at,
+    archived_at, legacy_source, legacy_title
+)
+SELECT
+    'legacy-person:' || id,
+    id,
+    trim(person_note),
+    'active',
+    '이전 데이터',
+    created_at,
+    updated_at,
+    NULL,
+    'person_note',
+    NULL
+FROM people
+WHERE person_note IS NOT NULL AND length(trim(person_note)) > 0;
+
+INSERT INTO memos(
+    id, person_id, content, status, operator_name, created_at, updated_at,
+    archived_at, legacy_source, legacy_title
+)
+SELECT
+    'legacy-check:' || id,
+    person_id,
+    trim(content),
+    CASE WHEN status = 'needs_check' THEN 'active' ELSE 'archived' END,
+    operator_name,
+    created_at,
+    updated_at,
+    CASE WHEN status = 'needs_check' THEN NULL ELSE COALESCE(checked_at, updated_at) END,
+    'check_item',
+    NULL
+FROM check_items;
+
+INSERT INTO memos(
+    id, person_id, content, status, operator_name, created_at, updated_at,
+    archived_at, legacy_source, legacy_title
+)
+SELECT
+    'legacy-pinned:' || id,
+    NULL,
+    CASE WHEN length(trim(content)) > 0 THEN trim(title) || char(10) || trim(content)
+         ELSE trim(title) END,
+    status,
+    operator_name,
+    created_at,
+    updated_at,
+    archived_at,
+    CASE WHEN is_pinned = 1 THEN 'pinned_note:pinned' ELSE 'pinned_note' END,
+    title
+FROM pinned_notes;
+";
+
 pub(crate) fn configure(connection: &Connection) -> Result<(), PortError> {
     connection
         .pragma_update(None, "foreign_keys", "ON")
@@ -256,7 +327,12 @@ pub(crate) fn migrate(connection: &mut Connection) -> Result<MigrationReport, Po
     }
 
     let mut newly_applied = 0;
-    for (version, sql) in [(1_u16, VERSION_1), (2_u16, VERSION_2), (3_u16, VERSION_3)] {
+    for (version, sql) in [
+        (1_u16, VERSION_1),
+        (2_u16, VERSION_2),
+        (3_u16, VERSION_3),
+        (4_u16, VERSION_4),
+    ] {
         let exists: bool = transaction
             .query_row(
                 "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = ?1)",
@@ -296,7 +372,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn version_three_preserves_linked_items_person_notes_and_legacy_periods() {
+    fn version_four_preserves_legacy_records_as_memos() {
         let mut connection = Connection::open_in_memory().unwrap();
         connection
             .execute_batch(
@@ -335,7 +411,7 @@ mod tests {
 
         let report = migrate(&mut connection).unwrap();
 
-        assert_eq!(report.newly_applied, 1);
+        assert_eq!(report.newly_applied, 2);
         let person_note: String = connection
             .query_row(
                 "SELECT person_note FROM people WHERE id = 'person-1'",
@@ -368,5 +444,17 @@ mod tests {
             )
             .unwrap();
         assert_eq!(periods, ("2026-07-01".into(), "2026-09-30".into()));
+        let memo_count: i64 = connection
+            .query_row("SELECT COUNT(*) FROM memos", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(memo_count, 3);
+        let memo_status: String = connection
+            .query_row(
+                "SELECT status FROM memos WHERE id = 'legacy-check:item-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(memo_status, "archived");
     }
 }

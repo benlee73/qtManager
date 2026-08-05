@@ -2,7 +2,10 @@ use qt_application::{
     ImportMode, MergePersonResolution, PortError, RestorePointView, StatePinnedNote, StateSetting,
     StateSnapshot, StateTransferRepository, merge_snapshots,
 };
-use qt_domain::{ChangeLog, CheckItem, CheckItemStatus, Issue, OneTimePurchase, PinnedNoteStatus};
+use qt_domain::{
+    ChangeLog, CheckItem, CheckItemStatus, Issue, Memo, MemoStatus, OneTimePurchase,
+    PinnedNoteStatus,
+};
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 
 use crate::{
@@ -164,7 +167,7 @@ impl StateTransferRepository for SqliteStateTransfer<'_> {
 }
 
 fn load_snapshot(connection: &Connection) -> Result<StateSnapshot, PortError> {
-    Ok(StateSnapshot {
+    let mut snapshot = StateSnapshot {
         settings: query_all(
             connection,
             "SELECT key, value, created_at, updated_at FROM app_settings ORDER BY key",
@@ -205,7 +208,21 @@ fn load_snapshot(connection: &Connection) -> Result<StateSnapshot, PortError> {
             "SELECT id, occurred_at, operator_name, action_type, entity_type, entity_id, summary, before_json, after_json FROM change_logs ORDER BY occurred_at, id",
             change_from_row,
         )?,
-    })
+    };
+    let memos = query_all(
+        connection,
+        "SELECT id, person_id, content, status, operator_name, created_at, updated_at, archived_at, legacy_source, legacy_title FROM memos ORDER BY id",
+        memo_from_row,
+    )?;
+    if !memos.is_empty() {
+        for person in &mut snapshot.people {
+            person.person_note = None;
+        }
+        snapshot.check_items.clear();
+        snapshot.pinned_notes.clear();
+        snapshot_from_memos(&mut snapshot, memos);
+    }
+    Ok(snapshot)
 }
 
 fn query_all<T>(
@@ -229,6 +246,7 @@ fn replace_snapshot(
         "import_rows",
         "import_batches",
         "change_logs",
+        "memos",
         "check_items",
         "pinned_notes",
         "distributions",
@@ -286,6 +304,9 @@ fn replace_snapshot(
     }
     for note in &snapshot.pinned_notes {
         insert_pinned_note(transaction, note)?;
+    }
+    for memo in snapshot_memos(snapshot) {
+        insert_memo(transaction, &memo)?;
     }
     for change in &snapshot.changes {
         upsert_change(transaction, change)?;
@@ -396,6 +417,27 @@ fn insert_pinned_note(
     Ok(())
 }
 
+fn insert_memo(transaction: &Transaction<'_>, value: &Memo) -> Result<(), PortError> {
+    transaction
+        .execute(
+            "INSERT INTO memos(id, person_id, content, status, operator_name, created_at, updated_at, archived_at, legacy_source, legacy_title) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                value.id,
+                value.person_id,
+                value.content,
+                memo_status(value.status),
+                value.operator_name,
+                value.created_at,
+                value.updated_at,
+                value.archived_at,
+                value.legacy_source,
+                value.legacy_title,
+            ],
+        )
+        .map_err(sql_error)?;
+    Ok(())
+}
+
 fn setting_from_row(row: &Row<'_>) -> rusqlite::Result<StateSetting> {
     Ok(StateSetting {
         key: row.get(0)?,
@@ -455,6 +497,149 @@ fn pinned_note_from_row(row: &Row<'_>) -> rusqlite::Result<StatePinnedNote> {
     })
 }
 
+fn memo_from_row(row: &Row<'_>) -> rusqlite::Result<Memo> {
+    Ok(Memo {
+        id: row.get(0)?,
+        person_id: row.get(1)?,
+        content: row.get(2)?,
+        status: match row.get::<_, String>(3)?.as_str() {
+            "active" => MemoStatus::Active,
+            "archived" => MemoStatus::Archived,
+            value => return Err(enum_error("memo status", value)),
+        },
+        operator_name: row.get(4)?,
+        created_at: row.get(5)?,
+        updated_at: row.get(6)?,
+        archived_at: row.get(7)?,
+        legacy_source: row.get(8)?,
+        legacy_title: row.get(9)?,
+    })
+}
+
+fn snapshot_from_memos(snapshot: &mut StateSnapshot, memos: Vec<Memo>) {
+    for memo in memos {
+        match memo.legacy_source.as_deref() {
+            Some("person_note") => {
+                if let Some(person_id) = memo.person_id.as_deref()
+                    && let Some(person) = snapshot
+                        .people
+                        .iter_mut()
+                        .find(|person| person.id == person_id)
+                {
+                    person.person_note = Some(memo.content);
+                }
+            }
+            Some("pinned_note") | Some("pinned_note:pinned") => {
+                let title = memo.legacy_title.unwrap_or_else(|| "메모".to_string());
+                let content = memo
+                    .content
+                    .strip_prefix(&title)
+                    .unwrap_or(&memo.content)
+                    .trim_start_matches('\n')
+                    .to_string();
+                snapshot.pinned_notes.push(StatePinnedNote {
+                    id: memo.id,
+                    title,
+                    content,
+                    is_pinned: memo.legacy_source.as_deref() == Some("pinned_note:pinned"),
+                    status: if memo.status == MemoStatus::Archived {
+                        PinnedNoteStatus::Archived
+                    } else {
+                        PinnedNoteStatus::Active
+                    },
+                    operator_name: memo.operator_name,
+                    created_at: memo.created_at,
+                    updated_at: memo.updated_at,
+                    archived_at: memo.archived_at,
+                    legacy_active_from: None,
+                    legacy_active_until: None,
+                });
+            }
+            _ => {
+                snapshot.check_items.push(CheckItem {
+                    id: memo.id,
+                    person_id: memo.person_id,
+                    content: memo.content,
+                    status: if memo.status == MemoStatus::Archived {
+                        CheckItemStatus::Archived
+                    } else {
+                        CheckItemStatus::NeedsCheck
+                    },
+                    operator_name: memo.operator_name,
+                    created_at: memo.created_at,
+                    updated_at: memo.updated_at,
+                    checked_at: memo.archived_at,
+                });
+            }
+        }
+    }
+}
+
+fn snapshot_memos(snapshot: &StateSnapshot) -> Vec<Memo> {
+    let mut memos = Vec::new();
+    for person in &snapshot.people {
+        if let Some(content) = person
+            .person_note
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+        {
+            memos.push(Memo {
+                id: format!("legacy-person:{}", person.id),
+                person_id: Some(person.id.clone()),
+                content: content.to_string(),
+                status: MemoStatus::Active,
+                operator_name: "가져온 기록".into(),
+                created_at: person.created_at.clone(),
+                updated_at: person.updated_at.clone(),
+                archived_at: None,
+                legacy_source: Some("person_note".into()),
+                legacy_title: None,
+            });
+        }
+    }
+    for item in &snapshot.check_items {
+        memos.push(Memo {
+            id: item.id.clone(),
+            person_id: item.person_id.clone(),
+            content: item.content.clone(),
+            status: if item.status == CheckItemStatus::Archived {
+                MemoStatus::Archived
+            } else {
+                MemoStatus::Active
+            },
+            operator_name: item.operator_name.clone(),
+            created_at: item.created_at.clone(),
+            updated_at: item.updated_at.clone(),
+            archived_at: item.checked_at.clone(),
+            legacy_source: Some("check_item".into()),
+            legacy_title: None,
+        });
+    }
+    for note in &snapshot.pinned_notes {
+        memos.push(Memo {
+            id: note.id.clone(),
+            person_id: None,
+            content: note.content.clone(),
+            status: if note.status == PinnedNoteStatus::Archived {
+                MemoStatus::Archived
+            } else {
+                MemoStatus::Active
+            },
+            operator_name: note.operator_name.clone(),
+            created_at: note.created_at.clone(),
+            updated_at: note.updated_at.clone(),
+            archived_at: note.archived_at.clone(),
+            legacy_source: Some(if note.is_pinned {
+                "pinned_note:pinned".into()
+            } else {
+                "pinned_note".into()
+            }),
+            legacy_title: Some(note.title.clone()),
+        });
+    }
+    memos
+}
+
 fn check_status(value: CheckItemStatus) -> &'static str {
     match value {
         CheckItemStatus::NeedsCheck => "needs_check",
@@ -466,6 +651,13 @@ fn pinned_status(value: PinnedNoteStatus) -> &'static str {
     match value {
         PinnedNoteStatus::Active => "active",
         PinnedNoteStatus::Archived => "archived",
+    }
+}
+
+fn memo_status(value: MemoStatus) -> &'static str {
+    match value {
+        MemoStatus::Active => "active",
+        MemoStatus::Archived => "archived",
     }
 }
 fn enum_error(field: &str, value: &str) -> rusqlite::Error {

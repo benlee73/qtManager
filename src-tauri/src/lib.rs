@@ -2,20 +2,21 @@ use std::{fs, path::PathBuf, process::Command};
 
 use qt_application::{
     AppLogger, ApplicationsPreview, ApplyStateImportRequest, Clock, CreateCheckItemRequest,
-    CreateDraftRequest, CreatePinnedNoteRequest, DistributionDesk, DuplicateCandidate, IdGenerator,
-    ImportApplicationsRequest, ImportApplicationsResult, ImportMode, ImportPreview,
-    MergePersonResolution, PeopleManagement, PersonDetail, Phase0Report, Phase1Report,
-    PreviewApplicationsRequest, RecordDistributionRequest, RecordPurchaseRequest,
+    CreateDraftRequest, CreateMemoRequest, CreatePinnedNoteRequest, DistributionDesk,
+    DuplicateCandidate, IdGenerator, ImportApplicationsRequest, ImportApplicationsResult,
+    ImportMode, ImportPreview, MergePersonResolution, PeopleManagement, PersonDetail, Phase0Report,
+    Phase1Report, PreviewApplicationsRequest, RecordDistributionRequest, RecordPurchaseRequest,
     RegisterPersonRequest, RenewSubscriptionRequest, RestorePointView, RunPhase0Probe,
     RunPhase1Probe, RuntimeServices, StateCounts, UndoDistributionRequest, UndoDistributionResult,
-    UpdateCheckItemRequest, UpdateCheckItemStatusRequest, UpdatePersonRequest,
-    UpdatePinnedNoteRequest, apply_state_import, cancel_latest_purchase, create_check_item,
-    create_draft, create_pinned_note, delete_check_item, delete_pinned_note, export_state,
-    import_applications, issue_containing_date, load_distribution_desk, load_people_management,
-    load_person_detail, preview_applications, preview_duplicates, preview_state_import,
-    record_distribution, record_purchase, register_person, renew_subscription, save_operator,
-    set_person_archived, undo_last_distribution, undo_state_import, update_check_item,
-    update_check_item_status, update_person, update_pinned_note,
+    UpdateCheckItemRequest, UpdateCheckItemStatusRequest, UpdateMemoRequest,
+    UpdateMemoStatusRequest, UpdatePersonRequest, UpdatePinnedNoteRequest, apply_state_import,
+    cancel_latest_purchase, create_check_item, create_draft, create_memo, create_pinned_note,
+    delete_check_item, delete_memo, delete_pinned_note, export_state, import_applications,
+    issue_containing_date, load_distribution_desk, load_people_management, load_person_detail,
+    preview_applications, preview_duplicates, preview_state_import, record_distribution,
+    record_purchase, register_person, renew_subscription, save_operator, set_person_archived,
+    undo_last_distribution, undo_state_import, update_check_item, update_check_item_status,
+    update_memo, update_memo_status, update_person, update_pinned_note,
 };
 use qt_domain::Issue;
 use qt_infrastructure::{
@@ -358,6 +359,104 @@ fn create_check_item_command(
         logger.info("check_item_create_completed");
     } else {
         logger.error("check_item_create_failed");
+    }
+    result
+}
+
+#[tauri::command]
+fn create_memo_command(
+    app: tauri::AppHandle,
+    request: CreateMemoRequest,
+) -> Result<String, String> {
+    let mut repository = open_operational_repository(&app)?;
+    let runtime = SystemRuntime;
+    let logger = event_logger(&app);
+    logger.info("memo_create_started");
+    let result = create_memo(
+        &mut repository,
+        &RuntimeServices {
+            clock: &runtime,
+            ids: &runtime,
+        },
+        request,
+    )
+    .map_err(|error| error.to_string());
+    if result.is_ok() {
+        logger.info("memo_create_completed");
+    } else {
+        logger.error("memo_create_failed");
+    }
+    result
+}
+
+#[tauri::command]
+fn update_memo_command(app: tauri::AppHandle, request: UpdateMemoRequest) -> Result<(), String> {
+    let mut repository = open_operational_repository(&app)?;
+    let runtime = SystemRuntime;
+    let logger = event_logger(&app);
+    logger.info("memo_update_started");
+    let result = update_memo(
+        &mut repository,
+        &RuntimeServices {
+            clock: &runtime,
+            ids: &runtime,
+        },
+        request,
+    )
+    .map_err(|error| error.to_string());
+    if result.is_ok() {
+        logger.info("memo_update_completed");
+    } else {
+        logger.error("memo_update_failed");
+    }
+    result
+}
+
+#[tauri::command]
+fn update_memo_status_command(
+    app: tauri::AppHandle,
+    request: UpdateMemoStatusRequest,
+) -> Result<(), String> {
+    let mut repository = open_operational_repository(&app)?;
+    let runtime = SystemRuntime;
+    let logger = event_logger(&app);
+    logger.info("memo_status_update_started");
+    let result = update_memo_status(
+        &mut repository,
+        &RuntimeServices {
+            clock: &runtime,
+            ids: &runtime,
+        },
+        request,
+    )
+    .map_err(|error| error.to_string());
+    if result.is_ok() {
+        logger.info("memo_status_update_completed");
+    } else {
+        logger.error("memo_status_update_failed");
+    }
+    result
+}
+
+#[tauri::command]
+fn delete_memo_command(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    let mut repository = open_operational_repository(&app)?;
+    let runtime = SystemRuntime;
+    let logger = event_logger(&app);
+    logger.info("memo_delete_started");
+    let result = delete_memo(
+        &mut repository,
+        &RuntimeServices {
+            clock: &runtime,
+            ids: &runtime,
+        },
+        &id,
+    )
+    .map_err(|error| error.to_string());
+    if result.is_ok() {
+        logger.info("memo_delete_completed");
+    } else {
+        logger.error("memo_delete_failed");
     }
     result
 }
@@ -856,7 +955,7 @@ pub fn run() {
             logger.info("database_migration_started");
             match open_operational_repository(app.handle()) {
                 Ok(_) => {
-                    logger.info("database_schema_version_3");
+                    logger.info("database_schema_version_4");
                     logger.info("database_migration_completed");
                 }
                 Err(error) => {
@@ -879,6 +978,10 @@ pub fn run() {
             undo_distribution_command,
             create_draft_command,
             create_check_item_command,
+            create_memo_command,
+            update_memo_command,
+            update_memo_status_command,
+            delete_memo_command,
             update_check_item_status_command,
             update_check_item_command,
             delete_check_item_command,

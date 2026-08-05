@@ -88,6 +88,48 @@ pub fn person_matches_search(person: &Person, query: &str) -> bool {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum MemoStatus {
+    Active,
+    Archived,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Memo {
+    pub id: String,
+    pub person_id: Option<String>,
+    pub content: String,
+    pub status: MemoStatus,
+    pub operator_name: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub archived_at: Option<String>,
+    #[serde(default)]
+    pub legacy_source: Option<String>,
+    #[serde(default)]
+    pub legacy_title: Option<String>,
+}
+
+impl Memo {
+    pub fn validate(&self) -> Result<(), DomainError> {
+        required_id(&self.id, "memo_id")?;
+        if self.content.trim().is_empty() {
+            return Err(DomainError::EmptyContent);
+        }
+        if self.operator_name.trim().is_empty() {
+            return Err(DomainError::EmptyRequiredId("operator_name"));
+        }
+        timestamp(&self.created_at, "created_at")?;
+        timestamp(&self.updated_at, "updated_at")
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.status == MemoStatus::Active
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum CheckItemStatus {
     NeedsCheck,
     Checked,
@@ -332,5 +374,27 @@ mod tests {
         assert_eq!(item.validate(), Ok(()));
         item.status = CheckItemStatus::Archived;
         assert_eq!(item.validate(), Ok(()));
+    }
+
+    #[test]
+    fn memo_has_only_active_and_archived_lifecycle() {
+        let mut memo = Memo {
+            id: "memo-1".into(),
+            person_id: Some("person-1".into()),
+            content: "다음 배부 때 수량 확인".into(),
+            status: MemoStatus::Active,
+            operator_name: "가상담당자".into(),
+            created_at: "2026-07-24T10:00:00+09:00".into(),
+            updated_at: "2026-07-24T10:00:00+09:00".into(),
+            archived_at: None,
+            legacy_source: None,
+            legacy_title: None,
+        };
+        assert!(memo.is_active());
+        assert_eq!(memo.validate(), Ok(()));
+        memo.status = MemoStatus::Archived;
+        memo.archived_at = Some("2026-07-24T11:00:00+09:00".into());
+        assert!(!memo.is_active());
+        assert_eq!(memo.validate(), Ok(()));
     }
 }

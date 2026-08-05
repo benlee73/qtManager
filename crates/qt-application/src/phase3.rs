@@ -1,6 +1,6 @@
 use qt_domain::{
-    ChangeLog, CheckItem, CheckItemStatus, Distribution, Issue, Person, PersonStatus, Subscription,
-    SubscriptionSource, SubscriptionStatus, normalize_phone,
+    ChangeLog, CheckItem, CheckItemStatus, Distribution, Issue, Memo, MemoStatus, Person,
+    PersonStatus, Subscription, SubscriptionSource, SubscriptionStatus, normalize_phone,
 };
 use serde::{Deserialize, Serialize};
 
@@ -23,6 +23,9 @@ pub trait PeopleManagementRepository {
     ) -> Result<Vec<ManagedPersonRecord>, PortError>;
     fn load_person(&self, id: &str) -> Result<Option<ManagedPersonRecord>, PortError>;
     fn list_person_check_items(&self, _person_id: &str) -> Result<Vec<CheckItem>, PortError> {
+        Ok(Vec::new())
+    }
+    fn list_person_memos(&self, _person_id: &str) -> Result<Vec<Memo>, PortError> {
         Ok(Vec::new())
     }
     fn duplicate_candidates(
@@ -79,6 +82,7 @@ pub struct PersonDetail {
     pub subscriptions: Vec<SubscriptionView>,
     pub distributions: Vec<DistributionView>,
     pub check_items: Vec<LinkedCheckItemView>,
+    pub memos: Vec<LinkedMemoView>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -109,6 +113,15 @@ pub struct SubscriptionView {
 pub struct LinkedCheckItemView {
     pub id: String,
     pub summary: String,
+    pub status: String,
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkedMemoView {
+    pub id: String,
+    pub content: String,
     pub status: String,
     pub updated_at: String,
 }
@@ -284,6 +297,17 @@ pub fn load_person_detail<R: PeopleManagementRepository>(
         .into_iter()
         .map(linked_check_item_view)
         .collect();
+    let memos = repository
+        .list_person_memos(person_id)?
+        .into_iter()
+        .filter(|memo| memo.status == MemoStatus::Active)
+        .map(|memo| LinkedMemoView {
+            id: memo.id,
+            content: memo.content,
+            status: "활성".into(),
+            updated_at: memo.updated_at,
+        })
+        .collect();
     Ok(PersonDetail {
         id: record.person.id,
         name: record.person.name,
@@ -294,6 +318,7 @@ pub fn load_person_detail<R: PeopleManagementRepository>(
         subscriptions,
         distributions,
         check_items,
+        memos,
     })
 }
 

@@ -26,7 +26,7 @@ type HelpTopic =
 const topics: { id: HelpTopic; label: string }[] = [
   { id: "quick-start", label: "빠른 시작" },
   { id: "distribution", label: "검색과 배부" },
-  { id: "notes", label: "확인할 일·메모" },
+  { id: "notes", label: "메모" },
   { id: "people", label: "신규 신청과 갱신" },
   { id: "purchase", label: "개별 구매" },
   { id: "handover", label: "데이터 백업·복원" },
@@ -275,45 +275,48 @@ export function HelpPanel({
 
             <HelpSection
               id="notes"
-              title="확인할 일·고정 메모"
+              title="메모"
               sectionRef={(element) => registerSection("notes", element)}
             >
               <div className="help-card-grid">
-                <HelpCard title="확인할 일">
+                <HelpCard title="메모 추가와 연결">
                   <HelpList>
                     <li>
-                      체크박스가 비어 있으면 확인 필요, 체크하면 확인
-                      완료입니다.
+                      메모는 현장 배부 오른쪽 입력란에서 바로 추가할 수
+                      있습니다.
                     </li>
                     <li>
-                      현장 배부 화면의 신청자 행에서 점 세 개 또는 우클릭으로
-                      만들면 해당 신청자와 연결됩니다.
+                      신청자 행의 점 세 개 또는 우클릭에서 추가하면 그 신청자와
+                      연결됩니다.
                     </li>
                     <li>
-                      긴 내용은 여러 줄로 표시되며 카드 하단의 ‘전문 보기’에서
-                      전체 내용을 확인합니다.
+                      신청자 관리의 상세·정보 수정 화면에서도 연락처 아래에 연결
+                      메모를 추가하고 수정할 수 있습니다.
                     </li>
                     <li>
-                      신청자 상세와 정보 수정창에서 연결된 항목을
-                      수정·체크·보관·삭제할 수 있습니다.
-                    </li>
-                    <li>
-                      우측 입력란은 신청자와 연결하지 않는 일반 항목입니다.
+                      연결하지 않은 메모에는 별도 유형 표시가 붙지 않습니다.
                     </li>
                   </HelpList>
                 </HelpCard>
-                <HelpCard title="고정 메모">
+                <HelpCard title="읽기와 보관">
                   <HelpList>
-                    <li>책 위치처럼 여러 주 동안 볼 운영 정보를 적습니다.</li>
-                    <li>기간을 입력하지 않고 고정·해제·보관합니다.</li>
-                    <li>보관함에서 확인하고 다시 복원할 수 있습니다.</li>
+                    <li>카드에는 긴 내용도 여러 줄로 모두 표시됩니다.</li>
+                    <li>
+                      카드를 두 번 클릭하면 전문·수정·보관·삭제 화면이 열립니다.
+                    </li>
+                    <li>
+                      보관은 처리 완료 표시이며 보관함에서 다시 복원할 수
+                      있습니다.
+                    </li>
+                    <li>
+                      삭제는 확인 후 영구 삭제되므로 보관을 먼저 권장합니다.
+                    </li>
                   </HelpList>
                 </HelpCard>
               </div>
               <p className="help-note">
-                확인할 일과 고정 메모의 추가·완료·보관·삭제는 저장 직후
-                되돌리기와 다시 실행을 지원합니다. 새 동작을 하면 이전 다시 실행
-                대기는 사라집니다.
+                메모 추가·수정·보관·복원은 저장 직후 되돌리기와 다시 실행을
+                지원합니다. 새 동작을 하면 이전 다시 실행 대기는 사라집니다.
               </p>
             </HelpSection>
 
@@ -355,9 +358,8 @@ export function HelpPanel({
                       포함된 호를 기준으로 현재·예정·지난·보관을 나눕니다.
                     </li>
                     <li>
-                      상세에서 신청자 메모를 바로 저장하고, 해당 신청자에게
-                      연결된 확인할 일을 바로 추가하거나 수정·체크·보관·삭제할
-                      수 있습니다.
+                      상세에서 메모를 바로 추가하고, 해당 신청자에 연결된 메모를
+                      수정·보관·삭제할 수 있습니다.
                     </li>
                   </HelpList>
                 </HelpCard>
@@ -451,7 +453,7 @@ export function HelpPanel({
                   </div>
                   <div>
                     <dt>⌘/Ctrl + Shift + M</dt>
-                    <dd>확인할 일 입력으로 이동</dd>
+                    <dd>메모 입력으로 이동</dd>
                   </div>
                   <div>
                     <dt>⌘/Ctrl + Z</dt>

@@ -38,7 +38,7 @@ export type DeskPerson = {
   lastIssue: string | null;
   endDate: string | null;
   isLastIssue: boolean;
-  hasCheckItem: boolean;
+  hasMemo?: boolean;
   canDistribute: boolean;
 };
 
@@ -94,6 +94,16 @@ export type CheckItemView = {
   personName: string | null;
 };
 
+export type MemoView = {
+  id: string;
+  personId: string | null;
+  content: string;
+  operatorName: string;
+  updatedAt: string;
+  status: "활성" | "보관";
+  personName: string | null;
+};
+
 export type PinnedNoteView = {
   id: string;
   title: string;
@@ -114,10 +124,13 @@ export type DistributionDesk = {
     remainingQuantity: number;
   };
   people: DeskPerson[];
-  checkItems: CheckItemView[];
-  pinnedNotes: PinnedNoteView[];
-  archivedCheckItems: CheckItemView[];
-  archivedPinnedNotes: PinnedNoteView[];
+  /** 구버전 호환 필드. 새 화면은 memos만 사용한다. */
+  checkItems?: CheckItemView[];
+  pinnedNotes?: PinnedNoteView[];
+  archivedCheckItems?: CheckItemView[];
+  archivedPinnedNotes?: PinnedNoteView[];
+  memos?: MemoView[];
+  archivedMemos?: MemoView[];
   purchaseCount: number;
   purchasedQuantity: number;
   canUndoDistribution: boolean;
@@ -208,6 +221,26 @@ export function createCheckItem(personId: string | null, content: string) {
   return invoke<string>("create_check_item_command", {
     request: { personId, content },
   });
+}
+
+export function createMemo(personId: string | null, content: string) {
+  return invoke<string>("create_memo_command", {
+    request: { personId, content },
+  });
+}
+
+export function updateMemo(id: string, content: string) {
+  return invoke<void>("update_memo_command", { request: { id, content } });
+}
+
+export function updateMemoStatus(id: string, archived: boolean) {
+  return invoke<void>("update_memo_status_command", {
+    request: { id, archived },
+  });
+}
+
+export function deleteMemo(id: string) {
+  return invoke<void>("delete_memo_command", { id });
 }
 
 export function updateCheckItemStatus(

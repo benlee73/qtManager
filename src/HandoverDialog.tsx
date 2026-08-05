@@ -249,7 +249,7 @@ export function HandoverDialog({
               <span>구독 {preview.counts.subscriptions}건</span>
               <span>배부 {preview.counts.distributions}건</span>
               <span>
-                기록 {preview.counts.checkItems + preview.counts.pinnedNotes}건
+                메모 {preview.counts.checkItems + preview.counts.pinnedNotes}건
               </span>
             </div>
             <div className="merge-counts">

@@ -3,18 +3,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { EditDialog, RegisterDialog, RenewDialog } from "./Phase3Dialogs";
 import { ApplicationImportDialog } from "./ApplicationImportDialog";
 import { HandoverDialog } from "./HandoverDialog";
-import { createLinkedCheckItemHandlers } from "./linkedCheckItemActions";
-import {
-  ManagementPersonList,
-  PersonDetailPanel,
-  type PersonDetailPanelProps,
-} from "./ManagementDetail";
+import { ManagementPersonList, PersonDetailPanel } from "./ManagementDetail";
 import {
   createManagementLoader,
   type ManagementSelection,
 } from "./managementLoader";
 import type { ReversibleAction } from "./actionHistory";
-import { createCheckItem, type Issue, updateCheckItemStatus } from "./phase2";
+import {
+  createMemo,
+  deleteMemo,
+  type Issue,
+  updateMemo,
+  updateMemoStatus,
+} from "./phase2";
 import {
   type PeopleManagement,
   type PersonDetail,
@@ -102,17 +103,6 @@ export function ManagementScreen({
       setBusy(false);
     }
   }
-
-  const mutateLinkedCheckItem = (
-    work: () => Promise<unknown>,
-    success: string,
-  ) => mutate(work, success, { closeDialog: false });
-
-  const linkedCheckItemHandlers = createLinkedCheckItemHandlers({
-    mutate: mutateLinkedCheckItem,
-    recordAction,
-    label: "신청자 연결",
-  });
 
   return (
     <main className="app-shell management-shell">
@@ -205,53 +195,57 @@ export function ManagementScreen({
           busy={busy}
           onEdit={(person) => setDialog({ type: "edit", person })}
           onRenew={(person) => setDialog({ type: "renew", person })}
-          onSavePersonNote={(person, note) => {
-            const previous: PersonInput = {
-              name: person.name,
-              cohort: person.cohort ?? "",
-              phone: person.phone ?? "",
-              personNote: person.personNote ?? "",
-            };
-            const next: PersonInput = { ...previous, personNote: note };
-            return mutate(
-              () =>
-                updatePerson(person.id, { ...next, confirmDuplicate: true }),
-              "신청자 메모를 저장했습니다.",
+          onCreateMemo={(personId, content) => {
+            let createdId = "";
+            return mutate(async () => {
+              createdId = await createMemo(personId, content);
+            }, "메모를 저장했습니다.").then((saved) => {
+              if (saved) {
+                recordAction({
+                  description: "연결 메모 추가",
+                  undo: () => updateMemoStatus(createdId, true),
+                  redo: () => updateMemoStatus(createdId, false),
+                });
+              }
+              return saved;
+            });
+          }}
+          onUpdateMemo={(memo, content) =>
+            mutate(
+              () => updateMemo(memo.id, content),
+              "메모를 수정했습니다.",
             ).then((saved) => {
               if (saved) {
                 recordAction({
-                  description: `${person.name} 신청자 메모 수정`,
-                  undo: () =>
-                    updatePerson(person.id, {
-                      ...previous,
-                      confirmDuplicate: true,
-                    }),
-                  redo: () =>
-                    updatePerson(person.id, {
-                      ...next,
-                      confirmDuplicate: true,
-                    }),
+                  description: "메모 수정",
+                  undo: () => updateMemo(memo.id, memo.content),
+                  redo: () => updateMemo(memo.id, content),
                 });
               }
               return saved;
-            });
-          }}
-          onCreateCheckItem={(personId, content) => {
-            let createdId = "";
-            return mutate(async () => {
-              createdId = await createCheckItem(personId, content);
-            }, "신청자 확인할 일을 저장했습니다.").then((saved) => {
+            })
+          }
+          onArchiveMemo={(memo, archived) =>
+            mutate(
+              () => updateMemoStatus(memo.id, archived),
+              archived ? "메모를 보관했습니다." : "메모를 복원했습니다.",
+            ).then((saved) => {
               if (saved) {
                 recordAction({
-                  description: "신청자 확인할 일 추가",
-                  undo: () => updateCheckItemStatus(createdId, "archived"),
-                  redo: () => updateCheckItemStatus(createdId, "needs_check"),
+                  description: archived ? "메모 보관" : "메모 복원",
+                  undo: () => updateMemoStatus(memo.id, !archived),
+                  redo: () => updateMemoStatus(memo.id, archived),
                 });
               }
               return saved;
-            });
+            })
+          }
+          onDeleteMemo={(memo) => {
+            if (!window.confirm("이 메모를 삭제할까요?")) {
+              return Promise.resolve(false);
+            }
+            return mutate(() => deleteMemo(memo.id), "메모를 삭제했습니다.");
           }}
-          {...linkedCheckItemHandlers}
           onToggleArchived={(person) =>
             void mutate(
               () => setPersonArchived(person.id, person.status !== "보관됨"),
@@ -302,6 +296,8 @@ export function ManagementScreen({
               : dialog.person
           }
           busy={busy}
+          mutate={mutate}
+          recordAction={recordAction}
           onClose={() => setDialog(null)}
           onSaved={(work, input) =>
             mutate(work, "QT 신청자 정보를 수정했습니다.").then((saved) => {
@@ -329,7 +325,6 @@ export function ManagementScreen({
               return saved;
             })
           }
-          {...linkedCheckItemHandlers}
         />
       )}
       {dialog?.type === "renew" && (
@@ -348,36 +343,91 @@ export function ManagementScreen({
 export function ManagementEditDialog({
   person,
   busy,
+  mutate,
+  recordAction,
   onClose,
   onSaved,
-  onUpdateCheckItem,
-  onToggleCheckItem,
-  onArchiveCheckItem,
-  onDeleteCheckItem,
 }: {
   person: PersonDetail;
   busy: boolean;
+  mutate?: (
+    work: () => Promise<unknown>,
+    success: string,
+    options?: { closeDialog?: boolean },
+  ) => Promise<boolean>;
+  recordAction?: (action: ReversibleAction) => void;
   onClose: () => void;
   onSaved: (
     work: () => Promise<unknown>,
     input: PersonInput,
   ) => Promise<boolean>;
-  onUpdateCheckItem: PersonDetailPanelProps["onUpdateCheckItem"];
-  onToggleCheckItem: PersonDetailPanelProps["onToggleCheckItem"];
-  onArchiveCheckItem: PersonDetailPanelProps["onArchiveCheckItem"];
-  onDeleteCheckItem: PersonDetailPanelProps["onDeleteCheckItem"];
 }) {
+  const runMutate = mutate ?? (async () => false);
+  const record = recordAction ?? (() => undefined);
   return (
     <EditDialog
       person={person}
-      checkItems={person.checkItems}
+      memos={person.memos ?? []}
       busy={busy}
       onClose={onClose}
       onSaved={onSaved}
-      onUpdateCheckItem={onUpdateCheckItem}
-      onToggleCheckItem={onToggleCheckItem}
-      onArchiveCheckItem={onArchiveCheckItem}
-      onDeleteCheckItem={onDeleteCheckItem}
+      onCreateMemo={(content) => {
+        let createdId = "";
+        return runMutate(
+          async () => {
+            createdId = await createMemo(person.id, content);
+          },
+          "메모를 저장했습니다.",
+          { closeDialog: false },
+        ).then((saved) => {
+          if (saved && createdId) {
+            record({
+              description: "연결 메모 추가",
+              undo: () => updateMemoStatus(createdId, true),
+              redo: () => updateMemoStatus(createdId, false),
+            });
+          }
+          return saved;
+        });
+      }}
+      onUpdateMemo={(memo, content) =>
+        runMutate(() => updateMemo(memo.id, content), "메모를 수정했습니다.", {
+          closeDialog: false,
+        }).then((saved) => {
+          if (saved) {
+            record({
+              description: "메모 수정",
+              undo: () => updateMemo(memo.id, memo.content),
+              redo: () => updateMemo(memo.id, content),
+            });
+          }
+          return saved;
+        })
+      }
+      onArchiveMemo={(memo, archived) =>
+        runMutate(
+          () => updateMemoStatus(memo.id, archived),
+          archived ? "메모를 보관했습니다." : "메모를 복원했습니다.",
+          { closeDialog: false },
+        ).then((saved) => {
+          if (saved) {
+            record({
+              description: archived ? "메모 보관" : "메모 복원",
+              undo: () => updateMemoStatus(memo.id, !archived),
+              redo: () => updateMemoStatus(memo.id, archived),
+            });
+          }
+          return saved;
+        })
+      }
+      onDeleteMemo={(memo) => {
+        if (!window.confirm("이 메모를 삭제할까요?")) {
+          return Promise.resolve(false);
+        }
+        return runMutate(() => deleteMemo(memo.id), "메모를 삭제했습니다.", {
+          closeDialog: false,
+        });
+      }}
     />
   );
 }

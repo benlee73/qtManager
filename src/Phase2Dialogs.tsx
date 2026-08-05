@@ -6,63 +6,25 @@ import {
   type DeskPerson,
   type DistributionAllocation,
   type Issue,
-  type CheckItemView,
   cancelLatestPurchase,
   cancelPersonDistribution,
-  createCheckItem,
+  createMemo,
   createDraft,
-  createPinnedNote,
   distributeAllocations,
   recordPurchase,
   setOperator,
   undoDistributionAllocations,
-  updateCheckItemStatus,
-  updatePinnedNote,
+  updateMemoStatus,
 } from "./phase2";
 
 export type Phase2Dialog =
   | { type: "operator" }
   | { type: "draft" }
-  | { type: "check-item"; personId: string | null }
-  | { type: "check-item-detail"; item: CheckItemView }
-  | { type: "pinned-note" }
+  | { type: "memo"; personId: string | null }
   | { type: "purchase" }
   | { type: "partial"; person: DeskPerson }
   | { type: "cancel-distribution"; person: DeskPerson }
   | null;
-
-export function CheckItemDetail({
-  item,
-  onClose,
-}: {
-  item: CheckItemView;
-  onClose: () => void;
-}) {
-  return (
-    <FormDialog title="확인할 일" onClose={onClose}>
-      <article className="check-item-detail" data-testid="check-item-detail">
-        <p className="check-item-detail-content">{item.summary}</p>
-        <dl>
-          <div>
-            <dt>연결된 신청자</dt>
-            <dd>{item.personName ?? "일반 확인할 일"}</dd>
-          </div>
-          <div>
-            <dt>상태</dt>
-            <dd>{item.status}</dd>
-          </div>
-          <div>
-            <dt>마지막 수정</dt>
-            <dd>{displayDate(item.updatedAt)}</dd>
-          </div>
-        </dl>
-        <button className="secondary-button" type="button" onClick={onClose}>
-          닫기
-        </button>
-      </article>
-    </FormDialog>
-  );
-}
 
 export function Phase2DialogContent({
   dialog,
@@ -163,84 +125,37 @@ export function Phase2DialogContent({
       </FormDialog>
     );
   }
-  if (dialog.type === "check-item") {
+  if (dialog.type === "memo") {
     return (
-      <FormDialog title="확인할 일 추가" onClose={onClose}>
+      <FormDialog title="메모 추가" onClose={onClose}>
         <form
           onSubmit={(event) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
             let createdId = "";
             void mutate(async () => {
-              createdId = await createCheckItem(
+              createdId = await createMemo(
                 dialog.personId,
                 String(data.get("content") ?? ""),
               );
-            }, "확인할 일을 저장했습니다.").then((saved) => {
+            }, "메모를 저장했습니다.").then((saved) => {
               if (saved && createdId) {
                 recordAction({
-                  description: "확인할 일 추가",
-                  undo: () => updateCheckItemStatus(createdId, "archived"),
-                  redo: () => updateCheckItemStatus(createdId, "needs_check"),
+                  description: "메모 추가",
+                  undo: () => updateMemoStatus(createdId, true),
+                  redo: () => updateMemoStatus(createdId, false),
                 });
               }
             });
           }}
         >
           <p className="dialog-description">
-            신청 누락 확인처럼 곧 처리할 일을 적습니다. 완료하기 전까지 기본
-            화면에 남습니다.
+            처리할 내용이나 신청자에게만 적용되는 참고사항을 한 곳에 기록합니다.
           </p>
-          <Field label="확인할 내용">
-            <textarea name="content" required autoFocus rows={5} />
+          <Field label="메모 내용">
+            <textarea name="content" required autoFocus rows={6} />
           </Field>
-          <SubmitButton busy={busy}>확인할 일 저장</SubmitButton>
-        </form>
-      </FormDialog>
-    );
-  }
-  if (dialog.type === "check-item-detail") {
-    return <CheckItemDetail item={dialog.item} onClose={onClose} />;
-  }
-  if (dialog.type === "pinned-note") {
-    return (
-      <FormDialog title="고정 메모" onClose={onClose}>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            const data = new FormData(event.currentTarget);
-            let createdId = "";
-            void mutate(async () => {
-              createdId = await createPinnedNote({
-                title: String(data.get("title") ?? ""),
-                content: String(data.get("content") ?? ""),
-                isPinned: data.get("isPinned") === "on",
-              });
-            }, "고정 메모를 저장했습니다.").then((saved) => {
-              if (saved && createdId) {
-                recordAction({
-                  description: "고정 메모 추가",
-                  undo: () => updatePinnedNote(createdId, { archived: true }),
-                  redo: () => updatePinnedNote(createdId, { archived: false }),
-                });
-              }
-            });
-          }}
-        >
-          <p className="dialog-description">
-            책 보관 위치처럼 여러 주 또는 몇 달 동안 확인할 안내를 적습니다.
-          </p>
-          <Field label="제목">
-            <input name="title" required autoFocus />
-          </Field>
-          <Field label="내용">
-            <textarea name="content" required rows={4} />
-          </Field>
-          <label className="check-field">
-            <input name="isPinned" type="checkbox" defaultChecked /> 기본 화면에
-            고정
-          </label>
-          <SubmitButton busy={busy}>고정 메모 저장</SubmitButton>
+          <SubmitButton busy={busy}>메모 저장</SubmitButton>
         </form>
       </FormDialog>
     );
@@ -440,8 +355,4 @@ function SubmitButton({
       {busy ? "저장 중…" : children}
     </button>
   );
-}
-
-function displayDate(value: string) {
-  return value.replace("T", " ").slice(0, 16);
 }

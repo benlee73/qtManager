@@ -1,6 +1,6 @@
 use qt_domain::{
-    ChangeLog, CheckItem, CheckItemStatus, Distribution, DistributionStatus, Issue,
-    OneTimePurchase, Person, PersonStatus, PinnedNote, PinnedNoteStatus, Subscription,
+    ChangeLog, CheckItem, CheckItemStatus, Distribution, DistributionStatus, Issue, Memo,
+    MemoStatus, OneTimePurchase, Person, PersonStatus, PinnedNote, PinnedNoteStatus, Subscription,
     SubscriptionSource, SubscriptionStatus, assess_distribution, plan_distribution,
 };
 use serde::{Deserialize, Serialize};
@@ -26,7 +26,7 @@ pub struct DeskRecord {
     pub person: Person,
     pub subscriptions: Vec<Subscription>,
     pub distributions: Vec<Distribution>,
-    pub has_check_item: bool,
+    pub has_memo: bool,
 }
 
 pub trait DistributionDeskRepository {
@@ -70,6 +70,20 @@ pub trait DistributionDeskRepository {
     }
     fn save_pinned_note(&mut self, note: &PinnedNote, change: &ChangeLog) -> Result<(), PortError>;
     fn delete_pinned_note(&mut self, id: &str, change: &ChangeLog) -> Result<(), PortError>;
+    /// 새 메모 API. 기존 확인할 일·고정 메모 포트는 구버전 데이터와 이전
+    /// reconciliation을 읽기 위한 호환 경계로 남겨 둔다.
+    fn list_memos(&self) -> Result<Vec<Memo>, PortError> {
+        Ok(Vec::new())
+    }
+    fn list_archived_memos(&self) -> Result<Vec<Memo>, PortError> {
+        Ok(Vec::new())
+    }
+    fn save_memo(&mut self, _memo: &Memo, _change: &ChangeLog) -> Result<(), PortError> {
+        Err(PortError::new("메모 저장 포트가 구현되지 않았습니다."))
+    }
+    fn delete_memo(&mut self, _id: &str, _change: &ChangeLog) -> Result<(), PortError> {
+        Err(PortError::new("메모 삭제 포트가 구현되지 않았습니다."))
+    }
     fn save_purchase(
         &mut self,
         purchase: &OneTimePurchase,
@@ -94,6 +108,8 @@ pub struct DistributionDesk {
     pub pinned_notes: Vec<PinnedNoteView>,
     pub archived_check_items: Vec<CheckItemView>,
     pub archived_pinned_notes: Vec<PinnedNoteView>,
+    pub memos: Vec<MemoView>,
+    pub archived_memos: Vec<MemoView>,
     pub purchase_count: u32,
     pub purchased_quantity: u32,
     pub can_undo_distribution: bool,
@@ -146,7 +162,8 @@ pub struct DeskPerson {
     pub last_issue: Option<String>,
     pub end_date: Option<String>,
     pub is_last_issue: bool,
-    pub has_check_item: bool,
+    #[serde(rename = "hasMemo")]
+    pub has_memo: bool,
     pub can_distribute: bool,
 }
 
@@ -181,6 +198,18 @@ pub struct PinnedNoteView {
     pub title: String,
     pub content: String,
     pub is_pinned: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoView {
+    pub id: String,
+    pub person_id: Option<String>,
+    pub content: String,
+    pub operator_name: String,
+    pub updated_at: String,
+    pub status: String,
+    pub person_name: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -224,6 +253,27 @@ pub struct CreateDraftRequest {
 pub struct CreateCheckItemRequest {
     pub person_id: Option<String>,
     pub content: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateMemoRequest {
+    pub person_id: Option<String>,
+    pub content: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateMemoRequest {
+    pub id: String,
+    pub content: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateMemoStatusRequest {
+    pub id: String,
+    pub archived: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -356,6 +406,33 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
         .into_iter()
         .map(&to_pinned_note_view)
         .collect();
+    let to_memo_view = |memo: Memo| MemoView {
+        id: memo.id,
+        person_name: memo
+            .person_id
+            .as_ref()
+            .and_then(|id| person_names.get(id))
+            .cloned(),
+        person_id: memo.person_id,
+        content: memo.content,
+        operator_name: memo.operator_name,
+        updated_at: memo.updated_at,
+        status: match memo.status {
+            MemoStatus::Active => "활성",
+            MemoStatus::Archived => "보관",
+        }
+        .into(),
+    };
+    let memos = repository
+        .list_memos()?
+        .into_iter()
+        .map(&to_memo_view)
+        .collect();
+    let archived_memos = repository
+        .list_archived_memos()?
+        .into_iter()
+        .map(&to_memo_view)
+        .collect();
     let (purchase_count, purchased_quantity) = repository.purchase_summary(selected_issue)?;
     let can_undo_distribution = repository
         .latest_reversible_distribution(selected_issue)?
@@ -371,6 +448,8 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
         pinned_notes,
         archived_check_items,
         archived_pinned_notes,
+        memos,
+        archived_memos,
         purchase_count,
         purchased_quantity,
         can_undo_distribution,
@@ -417,7 +496,7 @@ fn desk_person(record: DeskRecord, issue: Issue) -> Result<DeskPerson, Applicati
         last_issue: None,
         end_date: None,
         is_last_issue: false,
-        has_check_item: record.has_check_item,
+        has_memo: record.has_memo,
         can_distribute: false,
     };
     let Some(subscription) = selected else {
@@ -696,6 +775,158 @@ where
     let id = item.id.clone();
     repository.save_check_item(&item, &change)?;
     Ok(id)
+}
+
+pub fn create_memo<R, C, I>(
+    repository: &mut R,
+    services: &RuntimeServices<'_, C, I>,
+    request: CreateMemoRequest,
+) -> Result<String, ApplicationError>
+where
+    R: DistributionDeskRepository,
+    C: Clock,
+    I: IdGenerator,
+{
+    let now = services.clock.now();
+    let memo = Memo {
+        id: services.ids.next_id(),
+        person_id: request.person_id,
+        content: request.content.trim().into(),
+        status: MemoStatus::Active,
+        operator_name: required_operator(repository)?,
+        created_at: now.clone(),
+        updated_at: now.clone(),
+        archived_at: None,
+        legacy_source: None,
+        legacy_title: None,
+    };
+    memo.validate()?;
+    let id = memo.id.clone();
+    let change = change_log(
+        services.ids.next_id(),
+        &now,
+        &memo.operator_name,
+        "memo_created",
+        "memo",
+        &memo.id,
+        if memo.person_id.is_some() {
+            "신청자 연결 메모 추가"
+        } else {
+            "메모 추가"
+        },
+    );
+    repository.save_memo(&memo, &change)?;
+    Ok(id)
+}
+
+pub fn update_memo<R, C, I>(
+    repository: &mut R,
+    services: &RuntimeServices<'_, C, I>,
+    request: UpdateMemoRequest,
+) -> Result<(), ApplicationError>
+where
+    R: DistributionDeskRepository,
+    C: Clock,
+    I: IdGenerator,
+{
+    let mut memo = repository
+        .list_memos()?
+        .into_iter()
+        .chain(repository.list_archived_memos()?)
+        .find(|memo| memo.id == request.id)
+        .ok_or(ApplicationError::MissingDeskRecord)?;
+    memo.content = request.content.trim().into();
+    memo.validate()?;
+    let now = services.clock.now();
+    memo.updated_at = now.clone();
+    let change = change_log(
+        services.ids.next_id(),
+        &now,
+        &required_operator(repository)?,
+        "memo_updated",
+        "memo",
+        &memo.id,
+        "메모 수정",
+    );
+    repository.save_memo(&memo, &change)?;
+    Ok(())
+}
+
+pub fn update_memo_status<R, C, I>(
+    repository: &mut R,
+    services: &RuntimeServices<'_, C, I>,
+    request: UpdateMemoStatusRequest,
+) -> Result<(), ApplicationError>
+where
+    R: DistributionDeskRepository,
+    C: Clock,
+    I: IdGenerator,
+{
+    let mut memo = repository
+        .list_memos()?
+        .into_iter()
+        .chain(repository.list_archived_memos()?)
+        .find(|memo| memo.id == request.id)
+        .ok_or(ApplicationError::MissingDeskRecord)?;
+    let now = services.clock.now();
+    memo.status = if request.archived {
+        MemoStatus::Archived
+    } else {
+        MemoStatus::Active
+    };
+    memo.archived_at = request.archived.then(|| now.clone());
+    memo.updated_at = now.clone();
+    let change = change_log(
+        services.ids.next_id(),
+        &now,
+        &required_operator(repository)?,
+        if request.archived {
+            "memo_archived"
+        } else {
+            "memo_restored"
+        },
+        "memo",
+        &memo.id,
+        if request.archived {
+            "메모 보관"
+        } else {
+            "메모 복원"
+        },
+    );
+    repository.save_memo(&memo, &change)?;
+    Ok(())
+}
+
+pub fn delete_memo<R, C, I>(
+    repository: &mut R,
+    services: &RuntimeServices<'_, C, I>,
+    id: &str,
+) -> Result<(), ApplicationError>
+where
+    R: DistributionDeskRepository,
+    C: Clock,
+    I: IdGenerator,
+{
+    let exists = repository
+        .list_memos()?
+        .into_iter()
+        .chain(repository.list_archived_memos()?)
+        .any(|memo| memo.id == id);
+    if !exists {
+        return Err(ApplicationError::MissingDeskRecord);
+    }
+    let now = services.clock.now();
+    let change = change_log(
+        services.ids.next_id(),
+        &now,
+        &required_operator(repository)?,
+        "memo_deleted",
+        "memo",
+        id,
+        "메모 삭제",
+    );
+    repository.delete_memo(id, &change)?;
+    Ok(())
 }
 
 pub fn update_check_item_status<R, C, I>(
@@ -1140,6 +1371,7 @@ mod tests {
         records: Vec<DeskRecord>,
         check_items: Vec<CheckItem>,
         pinned_notes: Vec<PinnedNote>,
+        memos: Vec<Memo>,
         distributions: Vec<Distribution>,
         purchases: Vec<OneTimePurchase>,
     }
@@ -1217,7 +1449,7 @@ mod tests {
                 person: person.clone(),
                 subscriptions: vec![subscription.clone()],
                 distributions: vec![],
-                has_check_item: false,
+                has_memo: false,
             });
             Ok(())
         }
@@ -1277,6 +1509,31 @@ mod tests {
         }
         fn delete_pinned_note(&mut self, id: &str, _change: &ChangeLog) -> Result<(), PortError> {
             self.pinned_notes.retain(|note| note.id != id);
+            Ok(())
+        }
+        fn list_memos(&self) -> Result<Vec<Memo>, PortError> {
+            Ok(self
+                .memos
+                .iter()
+                .filter(|memo| memo.status == MemoStatus::Active)
+                .cloned()
+                .collect())
+        }
+        fn list_archived_memos(&self) -> Result<Vec<Memo>, PortError> {
+            Ok(self
+                .memos
+                .iter()
+                .filter(|memo| memo.status == MemoStatus::Archived)
+                .cloned()
+                .collect())
+        }
+        fn save_memo(&mut self, memo: &Memo, _change: &ChangeLog) -> Result<(), PortError> {
+            self.memos.retain(|current| current.id != memo.id);
+            self.memos.push(memo.clone());
+            Ok(())
+        }
+        fn delete_memo(&mut self, id: &str, _change: &ChangeLog) -> Result<(), PortError> {
+            self.memos.retain(|memo| memo.id != id);
             Ok(())
         }
         fn save_purchase(
@@ -1354,7 +1611,7 @@ mod tests {
             }],
             person,
             distributions: vec![],
-            has_check_item: true,
+            has_memo: true,
         }
     }
 
@@ -1784,5 +2041,63 @@ mod tests {
         assert_eq!(repository.purchase_summary(issue).unwrap(), (0, 0));
         assert_eq!(repository.records[0].subscriptions[0].quantity, 1);
         assert_eq!(repository.purchases.len(), 2);
+    }
+
+    #[test]
+    fn memo_lifecycle_supports_linked_create_edit_archive_restore_and_delete() {
+        let mut repository = MemoryRepository {
+            operator: Some("담당자".into()),
+            ..Default::default()
+        };
+        let ids = SequenceIds(Cell::new(0));
+        let services = RuntimeServices {
+            clock: &FixedClock,
+            ids: &ids,
+        };
+        let memo_id = create_memo(
+            &mut repository,
+            &services,
+            CreateMemoRequest {
+                person_id: Some("person-1".into()),
+                content: "권수 확인".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(repository.memos[0].person_id.as_deref(), Some("person-1"));
+        update_memo(
+            &mut repository,
+            &services,
+            UpdateMemoRequest {
+                id: memo_id.clone(),
+                content: "권수와 시작 호 확인".into(),
+            },
+        )
+        .unwrap();
+        update_memo_status(
+            &mut repository,
+            &services,
+            UpdateMemoStatusRequest {
+                id: memo_id.clone(),
+                archived: true,
+            },
+        )
+        .unwrap();
+        assert!(repository.list_memos().unwrap().is_empty());
+        assert_eq!(repository.list_archived_memos().unwrap().len(), 1);
+        update_memo_status(
+            &mut repository,
+            &services,
+            UpdateMemoStatusRequest {
+                id: memo_id.clone(),
+                archived: false,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            repository.list_memos().unwrap()[0].content,
+            "권수와 시작 호 확인"
+        );
+        delete_memo(&mut repository, &services, &memo_id).unwrap();
+        assert!(repository.memos.is_empty());
     }
 }

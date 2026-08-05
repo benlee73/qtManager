@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ActionMenu } from "./ActionMenu";
 import { AppNavigation } from "./AppNavigation";
-import { ArchiveDialog } from "./ArchiveDialog";
-import { CheckItemCard } from "./CheckItemCard";
+import { MemoArchiveDialog } from "./MemoArchiveDialog";
+import { MemoCard } from "./MemoCard";
+import { MemoDetailDialog } from "./MemoDetailDialog";
 import { HelpPanel } from "./HelpPanel";
 import { ChevronLeftIcon, ChevronRightIcon, RedoIcon, UndoIcon } from "./Icons";
-import { createLinkedCheckItemHandlers } from "./linkedCheckItemActions";
 import { ManagementScreen } from "./ManagementScreen";
 import { NotificationStack } from "./Notifications";
 import { PersonFilterMenu } from "./PersonFilterMenu";
@@ -29,9 +29,8 @@ import {
   type DistributionDesk,
   type Issue,
   cancelLatestPurchase,
-  createCheckItem,
-  deleteCheckItem,
-  deletePinnedNote,
+  createMemo,
+  deleteMemo,
   distributeAllocations,
   isTextEntryTarget,
   loadDesk,
@@ -39,8 +38,8 @@ import {
   recommendedIssue,
   undoDistribution,
   undoDistributionAllocations,
-  updateCheckItemStatus,
-  updatePinnedNote,
+  updateMemo,
+  updateMemoStatus,
 } from "./phase2";
 import {
   type PersonDetail,
@@ -73,13 +72,16 @@ export default function App() {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [dialog, setDialog] = useState<Phase2Dialog>(null);
   const [editPerson, setEditPerson] = useState<PersonDetail | null>(null);
+  const [memoDetail, setMemoDetail] = useState<
+    import("./phase2").MemoView | null
+  >(null);
   const [deleteTarget, setDeleteTarget] = useState<{
-    type: "check-item" | "pinned-note";
+    type: "memo";
     id: string;
     label: string;
   } | null>(null);
   const [busy, setBusy] = useState(false);
-  const quickItemDraft = useTextDraft("quick-check-item");
+  const quickItemDraft = useTextDraft("quick-memo");
   const [undoStack, setUndoStack] = useState<ReversibleAction[]>([]);
   const [redoStack, setRedoStack] = useState<ReversibleAction[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -152,16 +154,6 @@ export default function App() {
     setUndoStack([]);
     setRedoStack([]);
   }, []);
-
-  const linkedCheckItemHandlers = useMemo(
-    () =>
-      createLinkedCheckItemHandlers({
-        mutate,
-        recordAction,
-        onDeleted: () => setEditPerson(null),
-      }),
-    [mutate, recordAction],
-  );
 
   const undoAction = useCallback(async () => {
     const action = undoStack.at(-1);
@@ -393,13 +385,13 @@ export default function App() {
     if (!quickItemDraft.value.trim()) return;
     let createdId = "";
     void mutate(async () => {
-      createdId = await createCheckItem(null, quickItemDraft.value);
-    }, "일반 확인할 일을 추가했습니다.").then((saved) => {
+      createdId = await createMemo(null, quickItemDraft.value);
+    }, "메모를 추가했습니다.").then((saved) => {
       if (saved) {
         recordAction({
-          description: "확인할 일 추가",
-          undo: () => updateCheckItemStatus(createdId, "archived"),
-          redo: () => updateCheckItemStatus(createdId, "needs_check"),
+          description: "메모 추가",
+          undo: () => updateMemoStatus(createdId, true),
+          redo: () => updateMemoStatus(createdId, false),
         });
         quickItemDraft.clear();
         quickItemRef.current?.focus();
@@ -635,9 +627,9 @@ export default function App() {
                     setDialog({ type: "cancel-distribution", person })
                   }
                   onPartial={() => setDialog({ type: "partial", person })}
-                  onCheckItem={() =>
+                  onMemo={() =>
                     setDialog({
-                      type: "check-item",
+                      type: "memo",
                       personId: person.personId,
                     })
                   }
@@ -668,9 +660,7 @@ export default function App() {
 
           <aside className="notes-panel">
             <header>
-              <div>
-                <h2>확인할 일</h2>
-              </div>
+              <h2>메모</h2>
               <div>
                 <button
                   className="archive-button"
@@ -679,11 +669,7 @@ export default function App() {
                 >
                   보관함
                 </button>
-                <span className="count-badge">
-                  {desk?.checkItems.filter(
-                    (item) => item.status === "확인 필요",
-                  ).length ?? 0}
-                </span>
+                <span className="count-badge">{desk?.memos?.length ?? 0}</span>
               </div>
             </header>
             <form
@@ -694,7 +680,7 @@ export default function App() {
               }}
             >
               <label className="sr-only" htmlFor="quick-item">
-                새 확인할 일
+                새 메모
               </label>
               <textarea
                 id="quick-item"
@@ -704,208 +690,58 @@ export default function App() {
                 onChange={(event) =>
                   quickItemDraft.setValue(event.target.value)
                 }
-                placeholder="확인할 내용을 입력하세요…"
+                placeholder="메모를 입력하세요…"
               />
               <div>
                 <button
                   type="submit"
-                  data-testid="add-general-check-item"
+                  data-testid="add-memo"
                   disabled={busy || !quickItemDraft.value.trim()}
                 >
                   추가
                 </button>
               </div>
             </form>
-            <div className="check-item-list">
-              {desk?.checkItems.map((item) => (
-                <CheckItemCard
-                  key={item.id}
-                  item={item}
-                  busy={busy}
-                  onToggle={(checked) => {
-                    void mutate(
-                      () =>
-                        updateCheckItemStatus(
-                          item.id,
-                          checked ? "checked" : "needs_check",
-                        ),
-                      checked
-                        ? "확인할 일을 완료했습니다."
-                        : "확인할 일을 다시 확인하도록 바꿨습니다.",
-                    ).then((saved) => {
-                      if (saved) {
-                        recordAction({
-                          description: checked
-                            ? "확인할 일 완료"
-                            : "확인할 일 다시 열기",
-                          undo: () =>
-                            updateCheckItemStatus(
-                              item.id,
-                              checked ? "needs_check" : "checked",
-                            ),
-                          redo: () =>
-                            updateCheckItemStatus(
-                              item.id,
-                              checked ? "checked" : "needs_check",
-                            ),
-                        });
-                      }
-                    });
-                  }}
-                  onArchive={() => {
-                    const previous =
-                      item.status === "확인 완료" ? "checked" : "needs_check";
-                    void mutate(
-                      () => updateCheckItemStatus(item.id, "archived"),
-                      "확인할 일을 보관했습니다.",
-                    ).then((saved) => {
-                      if (saved) {
-                        recordAction({
-                          description: "확인할 일 보관",
-                          undo: () => updateCheckItemStatus(item.id, previous),
-                          redo: () =>
-                            updateCheckItemStatus(item.id, "archived"),
-                        });
-                      }
-                    });
-                  }}
-                  onDelete={() =>
-                    setDeleteTarget({
-                      type: "check-item",
-                      id: item.id,
-                      label: "확인할 일",
-                    })
-                  }
-                  onOpenDetail={() =>
-                    setDialog({ type: "check-item-detail", item })
-                  }
+            <div className="memo-list">
+              {(desk?.memos ?? []).map((memo) => (
+                <MemoCard
+                  key={memo.id}
+                  memo={memo}
+                  onOpenDetail={setMemoDetail}
                 />
               ))}
+              {(desk?.memos?.length ?? 0) === 0 && (
+                <p className="memo-empty">활성 메모가 없습니다.</p>
+              )}
             </div>
-            <section className="pinned-section">
-              <div className="pinned-heading">
-                <h3>고정 메모</h3>
-                <button
-                  type="button"
-                  aria-label="고정 메모 추가"
-                  onClick={() => setDialog({ type: "pinned-note" })}
-                >
-                  +
-                </button>
-              </div>
-              <div className="pinned-list">
-                {desk?.pinnedNotes.map((note) => (
-                  <article
-                    className="pinned-note"
-                    key={note.id}
-                    data-note-id={note.id}
-                  >
-                    <div>
-                      <p title={note.title}>
-                        {note.isPinned && (
-                          <span aria-label="상단 고정">📌</span>
-                        )}
-                        {note.title}
-                      </p>
-                      <ActionMenu
-                        id={`pinned-${note.id}`}
-                        label="고정 메모 메뉴"
-                        openMenu={openMenu}
-                        onOpenMenu={setOpenMenu}
-                        className="note-menu"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const nextPinned = !note.isPinned;
-                            void mutate(
-                              () =>
-                                updatePinnedNote(note.id, {
-                                  isPinned: nextPinned,
-                                }),
-                              note.isPinned
-                                ? "상단 고정을 해제했습니다."
-                                : "메모를 상단에 고정했습니다.",
-                            ).then((saved) => {
-                              if (saved) {
-                                recordAction({
-                                  description: nextPinned
-                                    ? "고정 메모 상단 고정"
-                                    : "고정 메모 고정 해제",
-                                  undo: () =>
-                                    updatePinnedNote(note.id, {
-                                      isPinned: !nextPinned,
-                                    }),
-                                  redo: () =>
-                                    updatePinnedNote(note.id, {
-                                      isPinned: nextPinned,
-                                    }),
-                                });
-                              }
-                            });
-                          }}
-                        >
-                          {note.isPinned ? "고정 해제" : "상단 고정"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void mutate(
-                              () =>
-                                updatePinnedNote(note.id, { archived: true }),
-                              "고정 메모를 보관했습니다.",
-                            ).then((saved) => {
-                              if (saved) {
-                                recordAction({
-                                  description: "고정 메모 보관",
-                                  undo: () =>
-                                    updatePinnedNote(note.id, {
-                                      archived: false,
-                                    }),
-                                  redo: () =>
-                                    updatePinnedNote(note.id, {
-                                      archived: true,
-                                    }),
-                                });
-                              }
-                            });
-                          }}
-                        >
-                          보관
-                        </button>
-                        <button
-                          className="danger-menu-item"
-                          type="button"
-                          onClick={() =>
-                            setDeleteTarget({
-                              type: "pinned-note",
-                              id: note.id,
-                              label: "고정 메모",
-                            })
-                          }
-                        >
-                          삭제
-                        </button>
-                      </ActionMenu>
-                    </div>
-                    <b title={note.content}>{note.content}</b>
-                  </article>
-                ))}
-              </div>
-            </section>
           </aside>
         </div>
       </main>
 
       <NotificationStack notifications={notifications} onDismiss={dismiss} />
       {archiveOpen && desk && (
-        <ArchiveDialog
-          checkItems={desk.archivedCheckItems}
-          pinnedNotes={desk.archivedPinnedNotes}
+        <MemoArchiveDialog
+          memos={desk.archivedMemos ?? []}
           busy={busy}
           onClose={() => setArchiveOpen(false)}
-          mutate={mutate}
-          recordAction={recordAction}
+          onOpen={(memo) => {
+            setArchiveOpen(false);
+            setMemoDetail(memo);
+          }}
+          onRestore={(memo) => {
+            void mutate(
+              () => updateMemoStatus(memo.id, false),
+              "메모를 복원했습니다.",
+            ).then((saved) => {
+              if (saved) {
+                recordAction({
+                  description: "메모 복원",
+                  undo: () => updateMemoStatus(memo.id, true),
+                  redo: () => updateMemoStatus(memo.id, false),
+                });
+              }
+            });
+          }}
         />
       )}
       {dialog && (
@@ -921,9 +757,7 @@ export default function App() {
       {editPerson && (
         <EditDialog
           person={editPerson}
-          checkItems={(desk?.checkItems ?? []).filter(
-            (item) => item.personId === editPerson.id,
-          )}
+          memos={editPerson.memos ?? []}
           busy={busy}
           onClose={() => setEditPerson(null)}
           onSaved={(work, input) =>
@@ -953,7 +787,102 @@ export default function App() {
               return saved;
             })
           }
-          {...linkedCheckItemHandlers}
+          onCreateMemo={(content) => {
+            let createdId = "";
+            return mutate(async () => {
+              createdId = await createMemo(editPerson.id, content);
+            }, "메모를 저장했습니다.").then((saved) => {
+              if (saved && createdId) {
+                recordAction({
+                  description: "연결 메모 추가",
+                  undo: () => updateMemoStatus(createdId, true),
+                  redo: () => updateMemoStatus(createdId, false),
+                });
+              }
+              return saved;
+            });
+          }}
+          onUpdateMemo={(memo, content) =>
+            mutate(
+              () => updateMemo(memo.id, content),
+              "메모를 수정했습니다.",
+            ).then((saved) => {
+              if (saved) {
+                recordAction({
+                  description: "메모 수정",
+                  undo: () => updateMemo(memo.id, memo.content),
+                  redo: () => updateMemo(memo.id, content),
+                });
+              }
+              return saved;
+            })
+          }
+          onArchiveMemo={(memo, archived) =>
+            mutate(
+              () => updateMemoStatus(memo.id, archived),
+              archived ? "메모를 보관했습니다." : "메모를 복원했습니다.",
+            ).then((saved) => {
+              if (saved) {
+                recordAction({
+                  description: archived ? "메모 보관" : "메모 복원",
+                  undo: () => updateMemoStatus(memo.id, !archived),
+                  redo: () => updateMemoStatus(memo.id, archived),
+                });
+              }
+              return saved;
+            })
+          }
+          onDeleteMemo={(memo) => {
+            if (!window.confirm("이 메모를 삭제할까요?")) {
+              return Promise.resolve(false);
+            }
+            return mutate(() => deleteMemo(memo.id), "메모를 삭제했습니다.");
+          }}
+        />
+      )}
+      {memoDetail && (
+        <MemoDetailDialog
+          memo={memoDetail}
+          busy={busy}
+          onClose={() => setMemoDetail(null)}
+          onSave={(content) =>
+            mutate(
+              () => updateMemo(memoDetail.id, content),
+              "메모를 수정했습니다.",
+            ).then((saved) => {
+              if (saved) {
+                recordAction({
+                  description: "메모 수정",
+                  undo: () => updateMemo(memoDetail.id, memoDetail.content),
+                  redo: () => updateMemo(memoDetail.id, content),
+                });
+              }
+              return saved;
+            })
+          }
+          onArchive={(archived) =>
+            mutate(
+              () => updateMemoStatus(memoDetail.id, archived),
+              archived ? "메모를 보관했습니다." : "메모를 복원했습니다.",
+            ).then((saved) => {
+              if (saved) {
+                recordAction({
+                  description: archived ? "메모 보관" : "메모 복원",
+                  undo: () => updateMemoStatus(memoDetail.id, !archived),
+                  redo: () => updateMemoStatus(memoDetail.id, archived),
+                });
+                setMemoDetail(null);
+              }
+              return saved;
+            })
+          }
+          onDelete={() =>
+            setDeleteTarget({
+              type: "memo",
+              id: memoDetail.id,
+              label: "메모",
+            })
+          }
         />
       )}
       {deleteTarget && (
@@ -963,13 +892,13 @@ export default function App() {
           onClose={() => setDeleteTarget(null)}
           onDelete={() =>
             void mutate(
-              () =>
-                deleteTarget.type === "check-item"
-                  ? deleteCheckItem(deleteTarget.id)
-                  : deletePinnedNote(deleteTarget.id),
-              `${deleteTarget.label}을 삭제했습니다.`,
+              () => deleteMemo(deleteTarget.id),
+              `${deleteTarget.label}를 삭제했습니다.`,
             ).then((saved) => {
-              if (saved) setDeleteTarget(null);
+              if (saved) {
+                setDeleteTarget(null);
+                setMemoDetail(null);
+              }
             })
           }
         />
@@ -1006,7 +935,7 @@ export function PersonRow({
   onDistribute,
   onCancelDistribution,
   onPartial,
-  onCheckItem,
+  onMemo,
   onEdit,
   rowRef,
 }: {
@@ -1019,7 +948,7 @@ export function PersonRow({
   onDistribute: () => void;
   onCancelDistribution: () => void;
   onPartial: () => void;
-  onCheckItem: () => void;
+  onMemo: () => void;
   onEdit: () => void;
   rowRef?: (element: HTMLElement | null) => void;
 }) {
@@ -1040,6 +969,9 @@ export function PersonRow({
       }}
       onContextMenu={(event) => {
         event.preventDefault();
+        // 우클릭한 행도 현재 작업 대상이 되도록 선택을 맞춘다. 이미
+        // 선택된 행에서는 토글하지 않아 우클릭이 선택 해제로 이어지지 않는다.
+        if (!selected) onSelect();
         onOpenMenu(`person-${person.personId}`);
       }}
       data-testid="person-row"
@@ -1049,11 +981,11 @@ export function PersonRow({
         <b title={`${person.name} · ${person.phone ?? "연락처 없음"}`}>
           {person.name}
         </b>
-        {person.hasCheckItem && (
+        {person.hasMemo && (
           <span
             className="person-check-indicator"
-            aria-label="확인할 일 있음"
-            title="연결된 확인할 일이 있습니다"
+            aria-label="메모 있음"
+            title="연결된 메모가 있습니다"
           />
         )}
       </div>
@@ -1113,8 +1045,8 @@ export function PersonRow({
           onOpenMenu={onOpenMenu}
           className="row-menu"
         >
-          <button type="button" onClick={onCheckItem}>
-            확인할 일 추가
+          <button type="button" onClick={onMemo}>
+            메모 추가
           </button>
           <button type="button" onClick={onEdit}>
             신청자 정보 수정
@@ -1198,7 +1130,7 @@ function DeleteConfirmDialog({
       >
         <div className="dialog-heading">
           <div>
-            <h2 id="delete-dialog-title">{label}을 삭제할까요?</h2>
+            <h2 id="delete-dialog-title">{label}를 삭제할까요?</h2>
             <p>
               목록과 인수인계 데이터에서 영구 삭제되며 변경 이력만 남습니다.
             </p>

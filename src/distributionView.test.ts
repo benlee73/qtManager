@@ -4,7 +4,6 @@ import type { DeskPerson } from "./phase2";
 import {
   ALL_PERSON_FILTERS,
   DEFAULT_PERSON_FILTERS,
-  checkItemOwnerLabel,
   distributionAllocations,
   filterPeople,
   filterSelectionDescription,
@@ -13,13 +12,6 @@ import {
   subscriptionPeriodText,
   subscriptionHeadline,
 } from "./distributionView";
-
-describe("check item owner label", () => {
-  it("uses only the linked applicant name and keeps unlinked work general", () => {
-    expect(checkItemOwnerLabel("가상 신청자")).toBe("가상 신청자");
-    expect(checkItemOwnerLabel(null)).toBe("일반");
-  });
-});
 
 function person(
   distributionStatus: string,
@@ -41,7 +33,7 @@ function person(
     lastIssue: null,
     endDate: "2026-12-31",
     isLastIssue: false,
-    hasCheckItem: false,
+    hasMemo: false,
     canDistribute: subscriptionStatus !== "구독 만료",
   };
 }

@@ -28,6 +28,7 @@ impl SqliteCoreRepository {
             "import_batches",
             "distributions",
             "one_time_purchases",
+            "memos",
             "subscriptions",
             "check_items",
             "pinned_notes",

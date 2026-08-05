@@ -8,7 +8,7 @@ pub use distribution::{
     assess_distribution, plan_distribution,
 };
 pub use issue::Issue;
-pub use records::{ChangeLog, CheckItem, CheckItemStatus, Person, PersonStatus};
+pub use records::{ChangeLog, CheckItem, CheckItemStatus, Memo, MemoStatus, Person, PersonStatus};
 pub use records::{
     OneTimePurchase, PinnedNote, PinnedNoteStatus, normalize_phone, normalize_search_text,
     person_matches_search,
@@ -20,8 +20,8 @@ pub use subscription::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const STATE_XLSX_FORMAT_VERSION: u16 = 1;
-pub const DATABASE_SCHEMA_VERSION: u16 = 3;
+pub const STATE_XLSX_FORMAT_VERSION: u16 = 2;
+pub const DATABASE_SCHEMA_VERSION: u16 = 4;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

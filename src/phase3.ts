@@ -32,13 +32,21 @@ export type LinkedCheckItem = {
   updatedAt: string;
 };
 
+export type LinkedMemo = {
+  id: string;
+  content: string;
+  status: "활성" | "보관";
+  updatedAt: string;
+};
+
 export type PersonDetail = {
   id: string;
   name: string;
   cohort: string | null;
   phone: string | null;
   status: string;
-  personNote: string | null;
+  /** 구버전 데이터 호환용. 새 화면은 memos를 사용한다. */
+  personNote?: string | null;
   subscriptions: {
     id: string;
     startIssue: string;
@@ -56,7 +64,9 @@ export type PersonDetail = {
     distributedAt: string;
     reversed: boolean;
   }[];
-  checkItems: LinkedCheckItem[];
+  /** 구버전 확인할 일 응답 호환용 */
+  checkItems?: LinkedCheckItem[];
+  memos?: LinkedMemo[];
 };
 
 export type DuplicateCandidate = {
@@ -71,7 +81,8 @@ export type PersonInput = {
   name: string;
   cohort: string;
   phone: string;
-  personNote: string;
+  /** 구버전 API 호환용. 새 입력 경로에서는 사용하지 않는다. */
+  personNote?: string;
 };
 
 export function loadManagement(query: string, includeArchived: boolean) {

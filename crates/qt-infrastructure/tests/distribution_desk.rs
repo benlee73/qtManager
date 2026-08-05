@@ -118,7 +118,7 @@ fn persists_and_searches_complete_distribution_desk_flow_after_reopen() {
         load_distribution_desk(&mut reopened, &FixedClock, issue, "12345678", false).unwrap();
     assert_eq!(restored.people[0].distribution_status, "일부 배부");
     assert_eq!(restored.people[0].remaining_quantity, 1);
-    assert!(restored.people[0].has_check_item);
+    assert!(restored.people[0].has_memo);
     assert_eq!(restored.check_items.len(), 1);
     assert_eq!(
         restored.check_items[0].person_name.as_deref(),

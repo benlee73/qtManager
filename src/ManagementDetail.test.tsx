@@ -103,13 +103,20 @@ const detail: PersonDetail = {
       updatedAt: "2026-08-01T10:00:00+09:00",
     },
   ],
-};
-
-const linkedCheckItemActions = {
-  onUpdateCheckItem: vi.fn(async () => true),
-  onToggleCheckItem: vi.fn(async () => true),
-  onArchiveCheckItem: vi.fn(async () => true),
-  onDeleteCheckItem: vi.fn(),
+  memos: [
+    {
+      id: "memo-needed",
+      content: "다음 배부 때 수량 확인",
+      status: "활성",
+      updatedAt: "2026-08-02T10:00:00+09:00",
+    },
+    {
+      id: "memo-done",
+      content: "연락처 확인 완료",
+      status: "활성",
+      updatedAt: "2026-08-01T10:00:00+09:00",
+    },
+  ],
 };
 
 describe("ManagementPersonList", () => {
@@ -137,7 +144,7 @@ describe("ManagementPersonList", () => {
 });
 
 describe("PersonDetailPanel", () => {
-  it("shows the complete phone, note tooltip, and linked check states", () => {
+  it("shows the complete phone and linked memo content", () => {
     const markup = renderToStaticMarkup(
       <PersonDetailPanel
         detail={detail}
@@ -145,46 +152,30 @@ describe("PersonDetailPanel", () => {
         onEdit={vi.fn()}
         onRenew={vi.fn()}
         onToggleArchived={vi.fn()}
-        onSavePersonNote={vi.fn(async () => true)}
-        onCreateCheckItem={vi.fn(async () => true)}
-        {...linkedCheckItemActions}
       />,
     );
 
     expect(markup).toContain("010-0000-0000");
     expect(markup).not.toContain("정식 등록");
-    expect(markup).toContain('data-testid="person-note"');
-    expect(markup).toContain('data-testid="person-note-help"');
-    expect(markup).toMatch(
-      /data-testid="person-note-help"[\s\S]*role="tooltip"[\s\S]*필요할 때 이 사람에게만 적용되는 내용을 적습니다\./,
-    );
-    expect(markup).not.toContain("아직 없음");
-    expect(markup).toContain('data-testid="linked-check-items"');
+    expect(markup).toContain('data-testid="linked-memos"');
     expect(markup).toContain("다음 배부 때 수량 확인");
     expect(markup).toContain("연락처 확인 완료");
-    expect(markup).toContain('aria-label="연결된 확인할 일 수정"');
-    expect(markup).toContain('aria-label="연결된 확인할 일 보관"');
-    expect(markup).toContain('aria-label="연결된 확인할 일 삭제"');
-    expect(markup).toContain('checked=""');
-    expect(markup).toContain('data-testid="person-note-input"');
-    expect(markup).toContain('data-testid="person-check-item-form"');
+    expect(markup).toContain('data-testid="person-memo-form"');
+    expect(markup).toContain("메모");
   });
 
-  it("does not add an empty-state sentence to the linked check section", () => {
+  it("does not add an empty-state sentence to the linked memo section", () => {
     const markup = renderToStaticMarkup(
       <PersonDetailPanel
-        detail={{ ...detail, checkItems: [] }}
+        detail={{ ...detail, checkItems: [], memos: [] }}
         busy={false}
         onEdit={vi.fn()}
         onRenew={vi.fn()}
         onToggleArchived={vi.fn()}
-        onSavePersonNote={vi.fn(async () => true)}
-        onCreateCheckItem={vi.fn(async () => true)}
-        {...linkedCheckItemActions}
       />,
     );
 
-    expect(markup).not.toContain("연결된 확인할 일이 없습니다.");
+    expect(markup).not.toContain("연결된 메모가 없습니다.");
     expect(markup).not.toContain('class="person-note empty"');
   });
 
@@ -196,9 +187,6 @@ describe("PersonDetailPanel", () => {
         onEdit={vi.fn()}
         onRenew={vi.fn()}
         onToggleArchived={vi.fn()}
-        onSavePersonNote={vi.fn(async () => true)}
-        onCreateCheckItem={vi.fn(async () => true)}
-        {...linkedCheckItemActions}
       />,
     );
 
@@ -218,9 +206,6 @@ describe("PersonDetailPanel", () => {
         onEdit={vi.fn()}
         onRenew={vi.fn()}
         onToggleArchived={vi.fn()}
-        onSavePersonNote={vi.fn(async () => true)}
-        onCreateCheckItem={vi.fn(async () => true)}
-        {...linkedCheckItemActions}
       />,
     );
 
@@ -285,21 +270,22 @@ describe("ManagementScreen heading actions", () => {
 });
 
 describe("ManagementEditDialog", () => {
-  it("keeps the selected person's linked check content and state visible", () => {
+  it("keeps the selected person's linked memo content visible", () => {
     const markup = renderToStaticMarkup(
       <ManagementEditDialog
         person={detail}
         busy={false}
         onClose={vi.fn()}
         onSaved={vi.fn(async () => true)}
-        {...linkedCheckItemActions}
       />,
     );
 
-    expect(markup).toContain('aria-label="연결된 확인할 일"');
+    expect(markup).toContain('data-testid="linked-memos-editor"');
     expect(markup).toContain("다음 배부 때 수량 확인");
-    expect(markup).toContain("확인 필요");
     expect(markup).toContain("연락처 확인 완료");
-    expect(markup).toContain("확인 완료");
+    expect(markup).toContain("메모");
+    expect(markup).not.toContain("linked-memo-actions");
+    expect(markup).not.toContain(">보관<");
+    expect(markup).not.toContain(">삭제<");
   });
 });

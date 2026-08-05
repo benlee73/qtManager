@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use qt_application::{CoreRepository, DeskRecord, DistributionDeskRepository, PortError};
 use qt_domain::{
-    ChangeLog, CheckItem, CheckItemStatus, Distribution, Issue, OneTimePurchase, Person,
-    PinnedNote, PinnedNoteStatus, Subscription,
+    ChangeLog, CheckItem, CheckItemStatus, Distribution, Issue, Memo, MemoStatus, OneTimePurchase,
+    Person, PinnedNote, PinnedNoteStatus, Subscription,
 };
 use rusqlite::{OptionalExtension, Row, params};
 
@@ -70,7 +70,7 @@ impl DistributionDeskRepository for SqliteCoreRepository {
 
         let mut subscriptions = subscriptions_by_person(&self.connection, query)?;
         let mut distributions = distributions_by_subscription(&self.connection, query, issue)?;
-        let item_people = needs_check_people(&self.connection)?;
+        let item_people = active_memo_people(&self.connection)?;
         Ok(people
             .into_iter()
             .map(|person| {
@@ -81,12 +81,12 @@ impl DistributionDeskRepository for SqliteCoreRepository {
                         distributions.remove(&subscription.id).unwrap_or_default()
                     })
                     .collect();
-                let has_check_item = item_people.contains_key(&person.id);
+                let has_memo = item_people.contains_key(&person.id);
                 DeskRecord {
                     person,
                     subscriptions: person_subscriptions,
                     distributions: person_distributions,
-                    has_check_item,
+                    has_memo,
                 }
             })
             .collect())
@@ -334,6 +334,97 @@ impl DistributionDeskRepository for SqliteCoreRepository {
         transaction.commit().map_err(port_error)
     }
 
+    fn list_memos(&self) -> Result<Vec<Memo>, PortError> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "
+                SELECT id, person_id, content, status, operator_name, created_at,
+                       updated_at, archived_at, legacy_source, legacy_title
+                FROM memos
+                WHERE status = 'active'
+                ORDER BY updated_at DESC, id DESC
+                ",
+            )
+            .map_err(port_error)?;
+        statement
+            .query_map([], memo_from_row)
+            .map_err(port_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(port_error)
+    }
+
+    fn list_archived_memos(&self) -> Result<Vec<Memo>, PortError> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "
+                SELECT id, person_id, content, status, operator_name, created_at,
+                       updated_at, archived_at, legacy_source, legacy_title
+                FROM memos
+                WHERE status = 'archived'
+                ORDER BY updated_at DESC, id DESC
+                ",
+            )
+            .map_err(port_error)?;
+        statement
+            .query_map([], memo_from_row)
+            .map_err(port_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(port_error)
+    }
+
+    fn save_memo(&mut self, memo: &Memo, change: &ChangeLog) -> Result<(), PortError> {
+        memo.validate()
+            .map_err(|error| PortError::new(error.to_string()))?;
+        change
+            .validate()
+            .map_err(|error| PortError::new(error.to_string()))?;
+        let transaction = self.connection.transaction().map_err(port_error)?;
+        transaction
+            .execute(
+                "
+                INSERT INTO memos(
+                    id, person_id, content, status, operator_name, created_at, updated_at,
+                    archived_at, legacy_source, legacy_title
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                ON CONFLICT(id) DO UPDATE SET
+                    person_id = excluded.person_id,
+                    content = excluded.content,
+                    status = excluded.status,
+                    operator_name = excluded.operator_name,
+                    updated_at = excluded.updated_at,
+                    archived_at = excluded.archived_at,
+                    legacy_source = excluded.legacy_source,
+                    legacy_title = excluded.legacy_title
+                ",
+                params![
+                    memo.id,
+                    memo.person_id,
+                    memo.content,
+                    memo_status(memo.status),
+                    memo.operator_name,
+                    memo.created_at,
+                    memo.updated_at,
+                    memo.archived_at,
+                    memo.legacy_source,
+                    memo.legacy_title,
+                ],
+            )
+            .map_err(port_error)?;
+        upsert_change(&transaction, change)?;
+        transaction.commit().map_err(port_error)
+    }
+
+    fn delete_memo(&mut self, id: &str, change: &ChangeLog) -> Result<(), PortError> {
+        let transaction = self.connection.transaction().map_err(port_error)?;
+        upsert_change(&transaction, change)?;
+        transaction
+            .execute("DELETE FROM memos WHERE id = ?1", params![id])
+            .map_err(port_error)?;
+        transaction.commit().map_err(port_error)
+    }
+
     fn save_purchase(
         &mut self,
         purchase: &OneTimePurchase,
@@ -517,12 +608,15 @@ fn search_predicate(alias: &str) -> String {
     )
 }
 
-fn needs_check_people(
+fn active_memo_people(
     connection: &rusqlite::Connection,
 ) -> Result<HashMap<String, bool>, PortError> {
     let mut statement = connection
         .prepare(
-            "SELECT DISTINCT person_id FROM check_items
+            "SELECT DISTINCT person_id FROM memos
+             WHERE status = 'active' AND person_id IS NOT NULL
+             UNION
+             SELECT DISTINCT person_id FROM check_items
              WHERE status = 'needs_check' AND person_id IS NOT NULL",
         )
         .map_err(port_error)?;
@@ -532,6 +626,25 @@ fn needs_check_people(
         .collect::<Result<Vec<_>, _>>()
         .map_err(port_error)?;
     Ok(ids.into_iter().map(|id| (id, true)).collect())
+}
+
+pub(crate) fn memo_from_row(row: &Row<'_>) -> rusqlite::Result<Memo> {
+    Ok(Memo {
+        id: row.get(0)?,
+        person_id: row.get(1)?,
+        content: row.get(2)?,
+        status: match row.get::<_, String>(3)?.as_str() {
+            "active" => MemoStatus::Active,
+            "archived" => MemoStatus::Archived,
+            value => return Err(invalid_enum("memo status", value)),
+        },
+        operator_name: row.get(4)?,
+        created_at: row.get(5)?,
+        updated_at: row.get(6)?,
+        archived_at: row.get(7)?,
+        legacy_source: row.get(8)?,
+        legacy_title: row.get(9)?,
+    })
 }
 
 pub(crate) fn check_item_from_row(row: &Row<'_>) -> rusqlite::Result<CheckItem> {
@@ -605,6 +718,13 @@ fn pinned_note_status(status: PinnedNoteStatus) -> &'static str {
     match status {
         PinnedNoteStatus::Active => "active",
         PinnedNoteStatus::Archived => "archived",
+    }
+}
+
+fn memo_status(status: MemoStatus) -> &'static str {
+    match status {
+        MemoStatus::Active => "active",
+        MemoStatus::Archived => "archived",
     }
 }
 

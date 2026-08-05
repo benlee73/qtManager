@@ -34,6 +34,9 @@ struct RowValues<'a> {
 }
 
 impl RowValues<'_> {
+    fn has(&self, name: &str) -> bool {
+        self.positions.contains_key(name)
+    }
     fn cell(&self, name: &str) -> Result<&Data, PortError> {
         let index = self.positions.get(name).ok_or_else(|| {
             PortError::new(format!("{} 시트의 {name} 열이 없습니다.", self.sheet))
@@ -61,6 +64,14 @@ impl RowValues<'_> {
                 "{} 시트의 {name} 값이 문자열이 아닙니다.",
                 self.sheet
             ))),
+        }
+    }
+
+    fn optional_if_present(&self, name: &str) -> Result<Option<String>, PortError> {
+        if self.has(name) {
+            self.optional(name)
+        } else {
+            Ok(None)
         }
     }
     fn integer(&self, name: &str) -> Result<i64, PortError> {
@@ -97,7 +108,7 @@ fn parse_person(row: &RowValues<'_>) -> Result<Person, PortError> {
         phone: row.optional("연락처")?,
         normalized_phone: row.optional("normalized_phone")?,
         status: parse_person_status(&row.text("상태")?)?,
-        person_note: row.optional("신청자메모")?,
+        person_note: row.optional_if_present("신청자메모")?,
         created_at: row.text("created_at")?,
         updated_at: row.text("updated_at")?,
     };
@@ -199,6 +210,90 @@ fn parse_pinned_note(row: &RowValues<'_>) -> Result<StatePinnedNote, PortError> 
         legacy_active_until: row.optional("legacy_active_until")?,
     })
 }
+
+fn parse_memo(row: &RowValues<'_>) -> Result<Memo, PortError> {
+    let value = Memo {
+        id: row.text("memo_id")?,
+        person_id: row.optional("person_id")?,
+        content: row.text("내용")?,
+        status: match row.text("상태")?.as_str() {
+            "active" => MemoStatus::Active,
+            "archived" => MemoStatus::Archived,
+            value => return Err(PortError::new(format!("알 수 없는 메모 상태: {value}"))),
+        },
+        operator_name: row.text("operator_name")?,
+        created_at: row.text("created_at")?,
+        updated_at: row.text("updated_at")?,
+        archived_at: row.optional("archived_at")?,
+        legacy_source: row.optional_if_present("legacy_source")?,
+        legacy_title: row.optional_if_present("legacy_title")?,
+    };
+    value
+        .validate()
+        .map_err(|error| PortError::new(error.to_string()))?;
+    Ok(value)
+}
+
+fn snapshot_from_memos(snapshot: &mut StateSnapshot, memos: Vec<Memo>) -> Result<(), PortError> {
+    for memo in memos {
+        match memo.legacy_source.as_deref() {
+            Some("person_note") => {
+                if let Some(person_id) = memo.person_id.as_deref()
+                    && let Some(person) = snapshot.people.iter_mut().find(|p| p.id == person_id)
+                {
+                    person.person_note = Some(memo.content);
+                }
+            }
+            Some("pinned_note") | Some("pinned_note:pinned") => {
+                let title = memo
+                    .legacy_title
+                    .clone()
+                    .or_else(|| memo.content.lines().next().map(str::to_owned))
+                    .unwrap_or_else(|| "메모".into());
+                let content = memo
+                    .content
+                    .strip_prefix(&title)
+                    .unwrap_or(&memo.content)
+                    .trim_start_matches('\n')
+                    .to_owned();
+                snapshot.pinned_notes.push(StatePinnedNote {
+                    id: memo.id.strip_prefix("legacy-pinned:").unwrap_or(&memo.id).into(),
+                    title,
+                    content,
+                    is_pinned: memo.legacy_source.as_deref() == Some("pinned_note:pinned"),
+                    status: if memo.status == MemoStatus::Active {
+                        PinnedNoteStatus::Active
+                    } else {
+                        PinnedNoteStatus::Archived
+                    },
+                    operator_name: memo.operator_name,
+                    created_at: memo.created_at,
+                    updated_at: memo.updated_at,
+                    archived_at: memo.archived_at,
+                    legacy_active_from: None,
+                    legacy_active_until: None,
+                });
+            }
+            _ => {
+                snapshot.check_items.push(CheckItem {
+                    id: memo.id.strip_prefix("legacy-check:").unwrap_or(&memo.id).into(),
+                    person_id: memo.person_id,
+                    content: memo.content,
+                    status: if memo.status == MemoStatus::Active {
+                        CheckItemStatus::NeedsCheck
+                    } else {
+                        CheckItemStatus::Archived
+                    },
+                    operator_name: memo.operator_name,
+                    created_at: memo.created_at,
+                    updated_at: memo.updated_at.clone(),
+                    checked_at: memo.archived_at,
+                });
+            }
+        }
+    }
+    Ok(())
+}
 fn parse_change(row: &RowValues<'_>) -> Result<ChangeLog, PortError> {
     let value = ChangeLog {
         id: row.text("change_id")?,
@@ -271,19 +366,26 @@ fn validate_relations(snapshot: &StateSnapshot) -> Result<(), PortError> {
     Ok(())
 }
 
-fn require_sheets(workbook: &Xlsx<std::io::BufReader<std::fs::File>>) -> Result<(), PortError> {
-    for name in [
+fn require_sheets(
+    workbook: &Xlsx<std::io::BufReader<std::fs::File>>,
+    legacy: bool,
+) -> Result<(), PortError> {
+    let mut required = vec![
         INFO,
         SETTINGS,
         PEOPLE,
         SUBSCRIPTIONS,
         DISTRIBUTIONS,
         PURCHASES,
-        CHECK_ITEMS,
-        PINNED_NOTES,
         CHANGES,
         ISSUE_REPORT,
-    ] {
+    ];
+    if legacy {
+        required.extend([CHECK_ITEMS, PINNED_NOTES]);
+    } else {
+        required.push(MEMOS);
+    }
+    for name in required {
         if !workbook.sheet_names().iter().any(|value| value == name) {
             return Err(PortError::new(format!("필수 시트가 없습니다: {name}")));
         }
@@ -372,25 +474,12 @@ fn parse_source(value: &str) -> Result<SubscriptionSource, PortError> {
         _ => Err(PortError::new("구독 출처 값이 올바르지 않습니다.")),
     }
 }
-fn check_status(value: CheckItemStatus) -> &'static str {
-    match value {
-        CheckItemStatus::NeedsCheck => "needs_check",
-        CheckItemStatus::Checked => "checked",
-        CheckItemStatus::Archived => "archived",
-    }
-}
 fn parse_check_status(value: &str) -> Result<CheckItemStatus, PortError> {
     match value {
         "needs_check" => Ok(CheckItemStatus::NeedsCheck),
         "checked" => Ok(CheckItemStatus::Checked),
         "archived" => Ok(CheckItemStatus::Archived),
         _ => Err(PortError::new("확인할 일 상태 값이 올바르지 않습니다.")),
-    }
-}
-fn pinned_status(value: PinnedNoteStatus) -> &'static str {
-    match value {
-        PinnedNoteStatus::Active => "active",
-        PinnedNoteStatus::Archived => "archived",
     }
 }
 fn parse_pinned_status(value: &str) -> Result<PinnedNoteStatus, PortError> {
@@ -431,8 +520,7 @@ mod tests {
             SUBSCRIPTIONS,
             DISTRIBUTIONS,
             PURCHASES,
-            CHECK_ITEMS,
-            PINNED_NOTES,
+            MEMOS,
             CHANGES,
             ISSUE_REPORT,
         ] {
@@ -452,15 +540,14 @@ mod tests {
         info.write_string(0, 0, "항목").unwrap();
         info.write_string(0, 1, "값").unwrap();
         info.write_string(1, 0, "format_version").unwrap();
-        info.write_number(1, 1, 2).unwrap();
+        info.write_number(1, 1, 99).unwrap();
         for sheet in [
             SETTINGS,
             PEOPLE,
             SUBSCRIPTIONS,
             DISTRIBUTIONS,
             PURCHASES,
-            CHECK_ITEMS,
-            PINNED_NOTES,
+            MEMOS,
             CHANGES,
             ISSUE_REPORT,
         ] {
@@ -473,4 +560,3 @@ mod tests {
         assert!(error.to_string().contains("지원하지 않는 XLSX 형식 버전"));
     }
 }
-

@@ -21,10 +21,6 @@ export const DEFAULT_PERSON_FILTERS: PersonFilter[] = [
   "partial",
 ];
 
-export function checkItemOwnerLabel(personName: string | null) {
-  return personName ?? "일반";
-}
-
 export const ALL_PERSON_FILTERS: PersonFilter[] = [...PERSON_FILTERS];
 
 export function personFilter(person: DeskPerson): PersonFilter {

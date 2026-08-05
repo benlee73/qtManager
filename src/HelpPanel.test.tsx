@@ -22,9 +22,8 @@ describe("HelpPanel", () => {
 
     expect(markup).toContain("오늘이 포함된 호");
     expect(markup).toContain("현장 배부 화면에서 선택한 QT 호");
-    expect(markup).toContain("연결된 확인할 일");
-    expect(markup).toContain("신청자 메모");
-    expect(markup).toContain("상세에서 신청자 메모를 바로 저장하고");
+    expect(markup).toContain("메모 추가와 연결");
+    expect(markup).toContain("신청자에 연결된 메모를 수정·보관·삭제");
     expect(markup).toContain("신청자 관리 목록에서는 숨기고");
     expect(markup).toContain("상세 또는 정보 수정 화면에서 전체 전화번호");
     expect(markup).toContain("신청자 관리 상단에는 제목 하나만 표시됩니다.");
@@ -37,8 +36,8 @@ describe("HelpPanel", () => {
     expect(markup).toContain('data-testid="help-nav-people"');
     expect(markup).toContain('aria-current="location"');
     expect(markup).toContain('data-testid="help-notes"');
-    expect(markup).toContain("현장 배부 화면의 신청자 행");
-    expect(markup).not.toContain("신청자 행의 점 세 개 또는 우클릭");
+    expect(markup).toContain("현장 배부 오른쪽 입력란");
+    expect(markup).toContain("신청자 행의 점 세 개 또는 우클릭");
     expect(markup).toContain('class="help-card"');
     expect(markup).toContain("도움말 2026-08-04");
     expect(markup).not.toContain("인터넷 없이 보는 사용법");

@@ -20,7 +20,7 @@ const person: DeskPerson = {
   lastIssue: "2026년 11~12월호",
   endDate: "2026-12-31",
   isLastIssue: false,
-  hasCheckItem: true,
+  hasMemo: true,
   canDistribute: true,
 };
 
@@ -37,14 +37,14 @@ describe("PersonRow", () => {
         onDistribute={vi.fn()}
         onCancelDistribution={vi.fn()}
         onPartial={vi.fn()}
-        onCheckItem={vi.fn()}
+        onMemo={vi.fn()}
         onEdit={vi.fn()}
       />,
     );
 
     expect(markup).toContain('class="person-check-indicator"');
-    expect(markup).toContain('aria-label="확인할 일 있음"');
-    expect(markup).not.toContain("<small>확인할 일 있음</small>");
+    expect(markup).toContain('aria-label="메모 있음"');
+    expect(markup).not.toContain("<small>메모 있음</small>");
   });
 
   it("shows the last QT issue instead of a calendar end date", () => {
@@ -59,7 +59,7 @@ describe("PersonRow", () => {
         onDistribute={vi.fn()}
         onCancelDistribution={vi.fn()}
         onPartial={vi.fn()}
-        onCheckItem={vi.fn()}
+        onMemo={vi.fn()}
         onEdit={vi.fn()}
       />,
     );

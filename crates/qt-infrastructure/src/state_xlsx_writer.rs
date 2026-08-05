@@ -5,8 +5,9 @@ use qt_application::{
     PortError, StatePinnedNote, StateSetting, StateSnapshot, StateWorkbookMetadata, StateWorkbookV1,
 };
 use qt_domain::{
-    ChangeLog, CheckItem, CheckItemStatus, Distribution, Issue, OneTimePurchase, Person,
-    PersonStatus, PinnedNoteStatus, ProbePerson, STATE_XLSX_FORMAT_VERSION, Subscription,
+    ChangeLog, CheckItem, CheckItemStatus, Distribution, Issue, Memo, MemoStatus,
+    OneTimePurchase, Person, PersonStatus, PinnedNoteStatus, ProbePerson,
+    STATE_XLSX_FORMAT_VERSION, Subscription,
     SubscriptionSource,
 };
 use rust_xlsxwriter::{Format, Workbook, Worksheet};
@@ -19,6 +20,8 @@ const PEOPLE: &str = "QT신청자";
 const SUBSCRIPTIONS: &str = "구독";
 const DISTRIBUTIONS: &str = "배부";
 const PURCHASES: &str = "개별구매";
+const MEMOS: &str = "메모";
+// 버전 1 파일을 읽기 위한 호환 시트 이름이다. 새 파일에는 쓰지 않는다.
 const CHECK_ITEMS: &str = "확인할일";
 const PINNED_NOTES: &str = "고정메모";
 const CHANGES: &str = "변경이력";
@@ -48,8 +51,7 @@ impl StateWorkbookV1 for XlsxStateWorkbook {
         write_subscriptions(workbook.add_worksheet(), &snapshot.subscriptions, &header)?;
         write_distributions(workbook.add_worksheet(), &snapshot.distributions, &header)?;
         write_purchases(workbook.add_worksheet(), &snapshot.purchases, &header)?;
-        write_check_items(workbook.add_worksheet(), &snapshot.check_items, &header)?;
-        write_pinned_notes(workbook.add_worksheet(), &snapshot.pinned_notes, &header)?;
+        write_memos(workbook.add_worksheet(), &snapshot_memos(snapshot), &header)?;
         write_changes(workbook.add_worksheet(), &snapshot.changes, &header)?;
         write_issue_report(workbook.add_worksheet(), snapshot, &header)?;
         workbook.save(path).map_err(xlsx_error)
@@ -57,14 +59,13 @@ impl StateWorkbookV1 for XlsxStateWorkbook {
 
     fn read_state(&self, path: &Path) -> Result<(StateWorkbookMetadata, StateSnapshot), PortError> {
         let mut workbook: Xlsx<_> = open_workbook(path).map_err(calamine_error)?;
-        require_sheets(&workbook)?;
         let info = workbook.worksheet_range(INFO).map_err(calamine_error)?;
         let info_values = key_values(&info);
         let version = info_values
             .get("format_version")
             .and_then(|value| value.parse::<u16>().ok())
             .ok_or_else(|| PortError::new("XLSX 안내 시트의 format_version이 없습니다."))?;
-        if version != STATE_XLSX_FORMAT_VERSION {
+        if version != 1 && version != STATE_XLSX_FORMAT_VERSION {
             return Err(PortError::new(format!(
                 "지원하지 않는 XLSX 형식 버전입니다: {version}"
             )));
@@ -74,16 +75,25 @@ impl StateWorkbookV1 for XlsxStateWorkbook {
             app_version: required_map(&info_values, "app_version")?,
             created_at: required_map(&info_values, "created_at")?,
         };
-        let snapshot = StateSnapshot {
+        let mut snapshot = StateSnapshot {
             settings: parse_rows(&mut workbook, SETTINGS, parse_setting)?,
             people: parse_rows(&mut workbook, PEOPLE, parse_person)?,
             subscriptions: parse_rows(&mut workbook, SUBSCRIPTIONS, parse_subscription)?,
             distributions: parse_rows(&mut workbook, DISTRIBUTIONS, parse_distribution)?,
             purchases: parse_rows(&mut workbook, PURCHASES, parse_purchase)?,
-            check_items: parse_rows(&mut workbook, CHECK_ITEMS, parse_check_item)?,
-            pinned_notes: parse_rows(&mut workbook, PINNED_NOTES, parse_pinned_note)?,
+            check_items: Vec::new(),
+            pinned_notes: Vec::new(),
             changes: parse_rows(&mut workbook, CHANGES, parse_change)?,
         };
+        if version == 1 {
+            require_sheets(&workbook, true)?;
+            snapshot.check_items = parse_rows(&mut workbook, "확인할일", parse_check_item)?;
+            snapshot.pinned_notes = parse_rows(&mut workbook, "고정메모", parse_pinned_note)?;
+        } else {
+            require_sheets(&workbook, false)?;
+            let memos = parse_rows(&mut workbook, MEMOS, parse_memo)?;
+            snapshot_from_memos(&mut snapshot, memos)?;
+        }
         validate_relations(&snapshot)?;
         Ok((metadata, snapshot))
     }
@@ -172,8 +182,7 @@ fn write_info(
         ("구독 수", counts.subscriptions.to_string()),
         ("배부 기록 수", counts.distributions.to_string()),
         ("개별구매 수", counts.purchases.to_string()),
-        ("확인할 일 수", counts.check_items.to_string()),
-        ("고정 메모 수", counts.pinned_notes.to_string()),
+        ("메모 수", snapshot_memos(snapshot).len().to_string()),
         (
             "개인정보 주의",
             "이 파일에는 이름·연락처 등 개인정보가 포함됩니다. 안전하게 전달·보관하고 사용 후 불필요한 사본은 삭제하세요.".into(),
@@ -234,7 +243,6 @@ fn write_people(
             "연락처",
             "normalized_phone",
             "상태",
-            "신청자메모",
             "created_at",
             "updated_at",
         ],
@@ -249,8 +257,7 @@ fn write_people(
         sheet
             .write_string(row, 5, person_status(value.status))
             .map_err(xlsx_error)?;
-        optional(sheet, row, 6, value.person_note.as_deref())?;
-        strings_at(sheet, row, 7, &[&value.created_at, &value.updated_at])?;
+        strings_at(sheet, row, 6, &[&value.created_at, &value.updated_at])?;
     }
     Ok(())
 }
@@ -399,29 +406,102 @@ fn write_purchases(
     Ok(())
 }
 
-fn write_check_items(
+fn snapshot_memos(snapshot: &StateSnapshot) -> Vec<Memo> {
+    let mut values = Vec::new();
+    for person in &snapshot.people {
+        if let Some(content) = person
+            .person_note
+            .as_deref()
+            .map(str::trim)
+            .filter(|content| !content.is_empty())
+        {
+            values.push(Memo {
+                id: format!("legacy-person:{}", person.id),
+                person_id: Some(person.id.clone()),
+                content: content.into(),
+                status: MemoStatus::Active,
+                operator_name: "이전 데이터".into(),
+                created_at: person.created_at.clone(),
+                updated_at: person.updated_at.clone(),
+                archived_at: None,
+                legacy_source: Some("person_note".into()),
+                legacy_title: None,
+            });
+        }
+    }
+    values.extend(snapshot.check_items.iter().map(|item| Memo {
+        id: format!("legacy-check:{}", item.id),
+        person_id: item.person_id.clone(),
+        content: item.content.clone(),
+        status: if item.status == CheckItemStatus::NeedsCheck {
+            MemoStatus::Active
+        } else {
+            MemoStatus::Archived
+        },
+        operator_name: item.operator_name.clone(),
+        created_at: item.created_at.clone(),
+        updated_at: item.updated_at.clone(),
+        archived_at: if item.status == CheckItemStatus::NeedsCheck {
+            None
+        } else {
+            item.checked_at.clone().or_else(|| Some(item.updated_at.clone()))
+        },
+        legacy_source: Some("check_item".into()),
+        legacy_title: None,
+    }));
+    values.extend(snapshot.pinned_notes.iter().map(|note| Memo {
+        id: format!("legacy-pinned:{}", note.id),
+        person_id: None,
+        content: if note.content.trim().is_empty() {
+            note.title.clone()
+        } else {
+            format!("{}\n{}", note.title.trim(), note.content.trim())
+        },
+        status: if note.status == PinnedNoteStatus::Active {
+            MemoStatus::Active
+        } else {
+            MemoStatus::Archived
+        },
+        operator_name: note.operator_name.clone(),
+        created_at: note.created_at.clone(),
+        updated_at: note.updated_at.clone(),
+        archived_at: note.archived_at.clone(),
+        legacy_source: Some(if note.is_pinned {
+            "pinned_note:pinned".into()
+        } else {
+            "pinned_note".into()
+        }),
+        legacy_title: Some(note.title.clone()),
+    }));
+    values.sort_by(|left, right| left.id.cmp(&right.id));
+    values
+}
+
+fn write_memos(
     sheet: &mut Worksheet,
-    values: &[CheckItem],
+    values: &[Memo],
     header: &Format,
 ) -> Result<(), PortError> {
     set_sheet(
         sheet,
-        CHECK_ITEMS,
+        MEMOS,
         &[
-            "check_item_id",
+            "memo_id",
             "person_id",
-            "content",
-            "status",
+            "내용",
+            "상태",
             "operator_name",
             "created_at",
             "updated_at",
-            "checked_at",
+            "archived_at",
+            "legacy_source",
+            "legacy_title",
         ],
         header,
     )?;
     for (index, value) in values.iter().enumerate() {
         let row = (index + 1) as u32;
-        sheet.write_string(row, 0, &value.id).map_err(xlsx_error)?;
+        strings(sheet, row, &[&value.id])?;
         optional(sheet, row, 1, value.person_id.as_deref())?;
         strings_at(
             sheet,
@@ -429,62 +509,24 @@ fn write_check_items(
             2,
             &[
                 &value.content,
-                check_status(value.status),
+                memo_status(value.status),
                 &value.operator_name,
                 &value.created_at,
                 &value.updated_at,
             ],
         )?;
-        optional(sheet, row, 7, value.checked_at.as_deref())?;
+        optional(sheet, row, 7, value.archived_at.as_deref())?;
+        optional(sheet, row, 8, value.legacy_source.as_deref())?;
+        optional(sheet, row, 9, value.legacy_title.as_deref())?;
     }
     Ok(())
 }
 
-fn write_pinned_notes(
-    sheet: &mut Worksheet,
-    values: &[StatePinnedNote],
-    header: &Format,
-) -> Result<(), PortError> {
-    set_sheet(
-        sheet,
-        PINNED_NOTES,
-        &[
-            "pinned_note_id",
-            "title",
-            "content",
-            "is_pinned",
-            "status",
-            "operator_name",
-            "created_at",
-            "updated_at",
-            "archived_at",
-            "legacy_active_from",
-            "legacy_active_until",
-        ],
-        header,
-    )?;
-    for (index, value) in values.iter().enumerate() {
-        let row = (index + 1) as u32;
-        strings(sheet, row, &[&value.id, &value.title, &value.content])?;
-        sheet
-            .write_boolean(row, 3, value.is_pinned)
-            .map_err(xlsx_error)?;
-        strings_at(
-            sheet,
-            row,
-            4,
-            &[
-                pinned_status(value.status),
-                &value.operator_name,
-                &value.created_at,
-                &value.updated_at,
-            ],
-        )?;
-        optional(sheet, row, 8, value.archived_at.as_deref())?;
-        optional(sheet, row, 9, value.legacy_active_from.as_deref())?;
-        optional(sheet, row, 10, value.legacy_active_until.as_deref())?;
+fn memo_status(status: MemoStatus) -> &'static str {
+    match status {
+        MemoStatus::Active => "active",
+        MemoStatus::Archived => "archived",
     }
-    Ok(())
 }
 
 fn write_changes(
@@ -577,5 +619,3 @@ fn write_issue_report(
     }
     Ok(())
 }
-
-

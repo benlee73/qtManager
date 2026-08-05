@@ -1,15 +1,14 @@
 import { type ReactNode } from "react";
+import { useState } from "react";
 import { useTextDraft } from "./drafts";
-import {
-  LinkedCheckItemsEditor,
-  type EditableCheckItem,
-} from "./LinkedCheckItemsEditor";
 
 import type {
+  LinkedMemo,
   PersonDetail,
   PersonSummary,
   SubscriptionPeriodState,
 } from "./phase3";
+import { MemoDetailDialog } from "./MemoDetailDialog";
 
 const subscriptionStateLabels: Record<SubscriptionPeriodState, string> = {
   current: "현재 구독",
@@ -94,18 +93,10 @@ export type PersonDetailPanelProps = {
   onEdit: (detail: PersonDetail) => void;
   onRenew: (detail: PersonDetail) => void;
   onToggleArchived: (detail: PersonDetail) => void;
-  onSavePersonNote: (detail: PersonDetail, note: string) => Promise<boolean>;
-  onCreateCheckItem: (personId: string, content: string) => Promise<boolean>;
-  onUpdateCheckItem: (
-    item: EditableCheckItem,
-    content: string,
-  ) => Promise<boolean>;
-  onToggleCheckItem: (
-    item: EditableCheckItem,
-    checked: boolean,
-  ) => Promise<boolean>;
-  onArchiveCheckItem: (item: EditableCheckItem) => Promise<boolean>;
-  onDeleteCheckItem: (item: EditableCheckItem) => void;
+  onCreateMemo?: (personId: string, content: string) => Promise<boolean>;
+  onUpdateMemo?: (memo: LinkedMemo, content: string) => Promise<boolean>;
+  onArchiveMemo?: (memo: LinkedMemo, archived: boolean) => Promise<boolean>;
+  onDeleteMemo?: (memo: LinkedMemo) => void | Promise<boolean>;
 };
 
 export function PersonDetailPanel(props: PersonDetailPanelProps) {
@@ -121,7 +112,7 @@ export function PersonDetailPanel(props: PersonDetailPanelProps) {
     );
   }
 
-  const detailKey = `${props.detail.id}:${props.detail.personNote ?? ""}`;
+  const detailKey = `${props.detail.id}:${(props.detail.memos ?? []).map((memo) => `${memo.id}:${memo.updatedAt}`).join("|")}`;
   return (
     <PersonDetailContent key={detailKey} {...props} detail={props.detail} />
   );
@@ -137,22 +128,16 @@ function PersonDetailContent({
   onEdit,
   onRenew,
   onToggleArchived,
-  onSavePersonNote,
-  onCreateCheckItem,
-  onUpdateCheckItem,
-  onToggleCheckItem,
-  onArchiveCheckItem,
-  onDeleteCheckItem,
+  onCreateMemo,
+  onUpdateMemo,
+  onArchiveMemo,
+  onDeleteMemo,
 }: PersonDetailContentProps) {
-  const noteDraftState = useTextDraft(
-    `person-note:${detail.id}`,
-    detail.personNote ?? "",
-  );
-  const noteDraft = noteDraftState.value;
-  const setNoteDraft = noteDraftState.setValue;
-  const checkDraftState = useTextDraft(`person-check-item:${detail.id}`);
-  const checkDraft = checkDraftState.value;
-  const setCheckDraft = checkDraftState.setValue;
+  const memoDraftState = useTextDraft(`person-memo:${detail.id}`);
+  const memoDraft = memoDraftState.value;
+  const setMemoDraft = memoDraftState.setValue;
+  const [memoDetail, setMemoDetail] = useState<LinkedMemo | null>(null);
+  const memos = detail.memos ?? [];
 
   return (
     <div className="person-detail-panel" data-testid="person-detail">
@@ -192,84 +177,46 @@ function PersonDetailContent({
         </div>
       </div>
 
-      <div className="person-note" data-testid="person-note">
-        <div className="person-note-heading">
-          <strong>신청자 메모</strong>
-          <span
-            className="info-tooltip person-note-help"
-            data-testid="person-note-help"
-          >
-            <button type="button" aria-label="신청자 메모 안내">
-              i
-            </button>
-            <span role="tooltip">
-              필요할 때 이 사람에게만 적용되는 내용을 적습니다.
-            </span>
-          </span>
-        </div>
-        <textarea
-          data-testid="person-note-input"
-          rows={2}
-          value={noteDraft}
-          onChange={(event) => setNoteDraft(event.target.value)}
-          placeholder="이 사람에게 계속 적용되는 참고사항"
-          aria-label="신청자 메모"
-        />
-        <div className="person-note-actions">
-          <button
-            className="quiet-button"
-            data-testid="save-person-note"
-            type="button"
-            disabled={busy || noteDraft === (detail.personNote ?? "")}
-            onClick={() =>
-              void onSavePersonNote(detail, noteDraft.trim()).then((saved) => {
-                if (saved) noteDraftState.clear();
-              })
-            }
-          >
-            메모 저장
-          </button>
-        </div>
-      </div>
-
-      <DetailSection title={`연결된 확인할 일 ${detail.checkItems.length}건`}>
+      <DetailSection title={`메모 ${memos.length}건`}>
         <form
           className="detail-inline-form"
-          data-testid="person-check-item-form"
+          data-testid="person-memo-form"
           onSubmit={(event) => {
             event.preventDefault();
-            const content = checkDraft.trim();
-            if (!content || busy) return;
-            void onCreateCheckItem(detail.id, content).then((saved) => {
-              if (saved) checkDraftState.clear();
+            const content = memoDraft.trim();
+            if (!content || busy || !onCreateMemo) return;
+            void onCreateMemo(detail.id, content).then((saved) => {
+              if (saved) memoDraftState.clear();
             });
           }}
         >
           <input
-            data-testid="person-check-item-input"
-            value={checkDraft}
-            onChange={(event) => setCheckDraft(event.target.value)}
-            placeholder="이 신청자에게 확인할 일을 적으세요"
-            aria-label="신청자 확인할 일"
+            data-testid="person-memo-input"
+            value={memoDraft}
+            onChange={(event) => setMemoDraft(event.target.value)}
+            placeholder="이 사람에게만 적용되는 내용을 적으세요"
+            aria-label="메모"
           />
           <button
             className="secondary-button compact"
             type="submit"
-            disabled={busy || !checkDraft.trim()}
+            disabled={busy || !memoDraft.trim() || !onCreateMemo}
           >
             추가
           </button>
         </form>
-        <LinkedCheckItemsEditor
-          items={detail.checkItems}
-          busy={busy}
-          className="detail-linked-check-items"
-          testId="linked-check-items"
-          onUpdate={onUpdateCheckItem}
-          onToggle={onToggleCheckItem}
-          onArchive={onArchiveCheckItem}
-          onDelete={onDeleteCheckItem}
-        />
+        <div className="detail-memo-list" data-testid="linked-memos">
+          {memos.map((memo) => (
+            <button
+              className="detail-memo-card"
+              type="button"
+              key={memo.id}
+              onClick={() => setMemoDetail(memo)}
+            >
+              {memo.content}
+            </button>
+          ))}
+        </div>
       </DetailSection>
 
       <DetailSection title={`구독 이력 ${detail.subscriptions.length}건`}>
@@ -354,6 +301,47 @@ function PersonDetailContent({
       >
         {detail.status === "보관됨" ? "보관 해제" : "이 신청자 보관"}
       </button>
+      {memoDetail && (
+        <MemoDetailDialog
+          memo={{
+            id: memoDetail.id,
+            personId: detail.id,
+            content: memoDetail.content,
+            operatorName: "",
+            updatedAt: memoDetail.updatedAt,
+            status: memoDetail.status,
+            personName: detail.name,
+          }}
+          busy={busy}
+          onClose={() => setMemoDetail(null)}
+          onSave={(content) =>
+            onUpdateMemo
+              ? onUpdateMemo(memoDetail, content).then((saved) => {
+                  if (saved) setMemoDetail(null);
+                  return saved;
+                })
+              : Promise.resolve(false)
+          }
+          onArchive={(archived) =>
+            onArchiveMemo
+              ? onArchiveMemo(memoDetail, archived).then((saved) => {
+                  if (saved) setMemoDetail(null);
+                  return saved;
+                })
+              : Promise.resolve(false)
+          }
+          onDelete={() => {
+            const result = onDeleteMemo?.(memoDetail);
+            if (result instanceof Promise) {
+              return result.then((saved) => {
+                if (saved) setMemoDetail(null);
+                return saved;
+              });
+            }
+            return result;
+          }}
+        />
+      )}
     </div>
   );
 }

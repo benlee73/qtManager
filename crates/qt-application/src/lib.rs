@@ -42,17 +42,18 @@ pub use legacy_start_check_cleanup::{
 };
 pub use phase1::{CoreRepository, MigrationReport, Phase1Report, RunPhase1Probe};
 pub use phase2::{
-    CheckItemView, Clock, CreateCheckItemRequest, CreateDraftRequest, CreatePinnedNoteRequest,
-    DeskRecord, DistributionDesk, DistributionDeskRepository, IdGenerator, PinnedNoteView,
-    RecordDistributionRequest, RecordPurchaseRequest, RuntimeServices, UndoDistributionRequest,
-    UndoDistributionResult, UpdateCheckItemRequest, UpdateCheckItemStatusRequest,
-    UpdatePinnedNoteRequest, cancel_latest_purchase, create_check_item, create_draft,
-    create_pinned_note, delete_check_item, delete_pinned_note, load_distribution_desk,
+    CheckItemView, Clock, CreateCheckItemRequest, CreateDraftRequest, CreateMemoRequest,
+    CreatePinnedNoteRequest, DeskRecord, DistributionDesk, DistributionDeskRepository, IdGenerator,
+    MemoView, PinnedNoteView, RecordDistributionRequest, RecordPurchaseRequest, RuntimeServices,
+    UndoDistributionRequest, UndoDistributionResult, UpdateCheckItemRequest,
+    UpdateCheckItemStatusRequest, UpdateMemoRequest, UpdateMemoStatusRequest,
+    UpdatePinnedNoteRequest, cancel_latest_purchase, create_check_item, create_draft, create_memo,
+    create_pinned_note, delete_check_item, delete_memo, delete_pinned_note, load_distribution_desk,
     record_distribution, record_purchase, save_operator, undo_last_distribution, update_check_item,
-    update_check_item_status, update_pinned_note,
+    update_check_item_status, update_memo, update_memo_status, update_pinned_note,
 };
 pub use phase3::{
-    DistributionView, DuplicateCandidate, LinkedCheckItemView, ManagedPersonRecord,
+    DistributionView, DuplicateCandidate, LinkedCheckItemView, LinkedMemoView, ManagedPersonRecord,
     PeopleManagement, PeopleManagementRepository, PersonDetail, PersonSummary,
     RegisterPersonRequest, RenewSubscriptionRequest, SubscriptionPeriodState, SubscriptionView,
     UpdatePersonRequest, issue_containing_date, load_people_management, load_person_detail,
@@ -286,7 +287,7 @@ mod tests {
 
         let report = use_case.execute(Path::new("ignored.xlsx")).unwrap();
 
-        assert_eq!(report.format_version, 1);
+        assert_eq!(report.format_version, STATE_XLSX_FORMAT_VERSION);
         assert_eq!(report.verified_rows, 1);
         assert_eq!(
             logger.0.into_inner(),

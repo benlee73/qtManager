@@ -338,7 +338,7 @@ mod tests {
 
         let report = use_case.execute().unwrap();
 
-        assert_eq!(report.schema_version, 3);
+        assert_eq!(report.schema_version, qt_domain::DATABASE_SCHEMA_VERSION);
         assert_eq!(report.subscription_status, "유효");
         assert_eq!(report.distribution_status, "배부 완료");
         assert_eq!(report.target_quantity, 2);

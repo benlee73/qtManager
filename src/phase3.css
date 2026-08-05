@@ -546,6 +546,98 @@
   margin-top: 0.55rem;
 }
 
+.linked-memos-editor {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0.9rem 0;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+
+.linked-memos-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.linked-memos-heading h3 {
+  margin: 0;
+  font-size: var(--font-sm);
+}
+
+.linked-memo-create {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.linked-memo-create textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  padding: 0.55rem 0.65rem;
+  color: var(--text);
+  background: var(--input);
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.linked-memo-items {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.linked-memo-content {
+  width: 100%;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  color: var(--text);
+  background: var(--panel-high);
+  text-align: left;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.linked-memo-content:hover,
+.linked-memo-content:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.linked-memo-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-sm);
+}
+
+.detail-memo-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.detail-memo-card {
+  width: 100%;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  color: var(--text);
+  background: var(--panel-high);
+  text-align: left;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.detail-memo-card:hover,
+.detail-memo-card:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
 .danger-link {
   margin-top: 1.8rem;
   padding: 0;

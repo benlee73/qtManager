@@ -1643,6 +1643,160 @@ kbd {
   margin-top: 4px;
 }
 
+/* 통합 메모 UI: 활성 목록은 내용을 줄이지 않고 내부에서 읽을 수 있어야 한다. */
+.notes-panel {
+  grid-template-rows: 32px 94px minmax(0, 1fr);
+}
+
+.memo-list {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.memo-card {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 7px;
+  padding: 10px;
+  color: var(--text);
+  background: var(--panel-high);
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.memo-card:hover,
+.memo-card:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+  background: var(--panel-high);
+}
+
+.memo-card-content {
+  display: block;
+  font-size: var(--font-sm);
+  line-height: 1.55;
+}
+
+.memo-card-person {
+  color: var(--accent);
+  font-size: var(--font-xs);
+  font-weight: 750;
+}
+
+.memo-empty {
+  margin: 16px 8px;
+  color: var(--muted);
+  font-size: var(--font-sm);
+  text-align: center;
+}
+
+.memo-detail-dialog {
+  width: min(560px, 100%);
+}
+
+.memo-detail-person {
+  margin-top: 4px;
+  color: var(--accent);
+  font-size: var(--font-sm);
+  font-weight: 750;
+}
+
+.memo-detail-editor {
+  width: 100%;
+  min-height: 12rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--text);
+  background: var(--input);
+  line-height: 1.6;
+  resize: vertical;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.memo-detail-content {
+  display: block;
+  width: 100%;
+  min-height: 12rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--text);
+  background: var(--panel-high);
+  text-align: left;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.memo-detail-content:hover,
+.memo-detail-content:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.memo-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.memo-archive-dialog {
+  width: min(660px, 100%);
+}
+
+.memo-archive-dialog .dialog-heading p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: var(--font-sm);
+}
+
+.memo-archive-list {
+  display: grid;
+  max-height: min(58vh, 34rem);
+  gap: 7px;
+  overflow-y: auto;
+}
+
+.memo-archive-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel-high);
+}
+
+.memo-archive-content {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 0;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.memo-archive-content small {
+  color: var(--muted);
+}
+
 .text-button,
 .quiet-button {
   padding: 4px;

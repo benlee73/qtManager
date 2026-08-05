@@ -1,10 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 
-import {
-  LinkedCheckItemsEditor,
-  type EditableCheckItem,
-} from "./LinkedCheckItemsEditor";
-import type { CheckItemView, Issue } from "./phase2";
+import type { Issue } from "./phase2";
+import { type LinkedMemo } from "./phase3";
+import { MemoDetailDialog } from "./MemoDetailDialog";
 import {
   type DuplicateCandidate,
   type PersonDetail,
@@ -14,9 +12,6 @@ import {
   renewSubscription,
   updatePerson,
 } from "./phase3";
-
-type LinkedCheckItemSummary = Pick<CheckItemView, "id" | "summary" | "status"> &
-  Partial<Omit<CheckItemView, "id" | "summary" | "status">>;
 
 export function RegisterDialog({
   issue,
@@ -85,33 +80,27 @@ export function RegisterDialog({
 
 export function EditDialog({
   person,
-  checkItems,
   busy,
   onClose,
   onSaved,
-  onUpdateCheckItem,
-  onToggleCheckItem,
-  onArchiveCheckItem,
-  onDeleteCheckItem,
+  memos,
+  onCreateMemo,
+  onUpdateMemo,
+  onArchiveMemo,
+  onDeleteMemo,
 }: {
   person: PersonDetail;
-  checkItems: LinkedCheckItemSummary[];
   busy: boolean;
   onClose: () => void;
   onSaved: (
     work: () => Promise<unknown>,
     input: PersonInput,
   ) => Promise<boolean>;
-  onUpdateCheckItem?: (
-    item: EditableCheckItem,
-    content: string,
-  ) => Promise<boolean>;
-  onToggleCheckItem?: (
-    item: EditableCheckItem,
-    checked: boolean,
-  ) => Promise<boolean>;
-  onArchiveCheckItem?: (item: EditableCheckItem) => Promise<boolean>;
-  onDeleteCheckItem?: (item: EditableCheckItem) => void;
+  memos?: LinkedMemo[];
+  onCreateMemo?: (content: string) => Promise<boolean>;
+  onUpdateMemo?: (memo: LinkedMemo, content: string) => Promise<boolean>;
+  onArchiveMemo?: (memo: LinkedMemo, archived: boolean) => Promise<boolean>;
+  onDeleteMemo?: (memo: LinkedMemo) => void | Promise<boolean>;
 }) {
   const [candidates, setCandidates] = useState<DuplicateCandidate[]>([]);
   const [checked, setChecked] = useState(false);
@@ -149,15 +138,15 @@ export function EditDialog({
             저장하면 간이 등록 상태가 해제되고 입력한 정보가 반영됩니다.
           </p>
         )}
-        <LinkedCheckItems
-          items={checkItems}
-          busy={busy}
-          onUpdate={onUpdateCheckItem}
-          onToggle={onToggleCheckItem}
-          onArchive={onArchiveCheckItem}
-          onDelete={onDeleteCheckItem}
-        />
         <PersonFields person={person} />
+        <LinkedMemos
+          memos={memos ?? person.memos ?? []}
+          busy={busy}
+          onCreate={onCreateMemo}
+          onUpdate={onUpdateMemo}
+          onArchive={onArchiveMemo}
+          onDelete={onDeleteMemo}
+        />
         <DuplicateWarning
           candidates={candidates}
           checked={checked}
@@ -171,33 +160,119 @@ export function EditDialog({
   );
 }
 
-export function LinkedCheckItems({
-  items,
-  busy = false,
+function LinkedMemos({
+  memos,
+  busy,
+  onCreate,
   onUpdate,
-  onToggle,
   onArchive,
   onDelete,
 }: {
-  items: LinkedCheckItemSummary[];
-  busy?: boolean;
-  onUpdate?: (item: EditableCheckItem, content: string) => Promise<boolean>;
-  onToggle?: (item: EditableCheckItem, checked: boolean) => Promise<boolean>;
-  onArchive?: (item: EditableCheckItem) => Promise<boolean>;
-  onDelete?: (item: EditableCheckItem) => void;
+  memos: LinkedMemo[];
+  busy: boolean;
+  onCreate?: (content: string) => Promise<boolean>;
+  onUpdate?: (memo: LinkedMemo, content: string) => Promise<boolean>;
+  onArchive?: (memo: LinkedMemo, archived: boolean) => Promise<boolean>;
+  onDelete?: (memo: LinkedMemo) => void | Promise<boolean>;
 }) {
-  if (items.length === 0) return null;
+  const [draft, setDraft] = useState("");
+  const [selectedMemo, setSelectedMemo] = useState<LinkedMemo | null>(null);
   return (
-    <section className="linked-check-items" aria-label="연결된 확인할 일">
-      <h3>연결된 확인할 일</h3>
-      <LinkedCheckItemsEditor
-        items={items}
-        busy={busy}
-        onUpdate={onUpdate}
-        onToggle={onToggle}
-        onArchive={onArchive}
-        onDelete={onDelete}
-      />
+    <section className="linked-memos-editor" data-testid="linked-memos-editor">
+      <div className="linked-memos-heading">
+        <h3>메모</h3>
+        <span className="info-tooltip">
+          <button type="button" aria-label="메모 안내">
+            i
+          </button>
+          <span role="tooltip">
+            필요할 때 이 사람에게만 적용되는 내용을 적습니다.
+          </span>
+        </span>
+      </div>
+      <div className="linked-memo-create">
+        <textarea
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="메모를 입력하세요"
+          rows={3}
+          aria-label="연결 메모 추가"
+        />
+        <button
+          className="secondary-button compact"
+          type="button"
+          disabled={busy || !draft.trim() || !onCreate}
+          onClick={() => {
+            if (!onCreate) return;
+            void onCreate(draft.trim()).then((saved) => {
+              if (saved) setDraft("");
+            });
+          }}
+        >
+          추가
+        </button>
+      </div>
+      <div className="linked-memo-items">
+        {memos.map((memo) => (
+          <button
+            className="linked-memo-content"
+            type="button"
+            key={memo.id}
+            onDoubleClick={() => setSelectedMemo(memo)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ")
+                setSelectedMemo(memo);
+            }}
+            title="두 번 클릭하면 메모 상세를 엽니다"
+          >
+            {memo.content}
+          </button>
+        ))}
+        {memos.length === 0 && (
+          <p className="linked-memo-empty">등록된 메모가 없습니다.</p>
+        )}
+      </div>
+      {selectedMemo && (
+        <MemoDetailDialog
+          memo={{
+            id: selectedMemo.id,
+            personId: null,
+            content: selectedMemo.content,
+            operatorName: "",
+            updatedAt: selectedMemo.updatedAt,
+            status: selectedMemo.status,
+            personName: null,
+          }}
+          busy={busy}
+          onClose={() => setSelectedMemo(null)}
+          onSave={(content) =>
+            onUpdate
+              ? onUpdate(selectedMemo, content).then((saved) => {
+                  if (saved) setSelectedMemo(null);
+                  return saved;
+                })
+              : Promise.resolve(false)
+          }
+          onArchive={(archived) =>
+            onArchive
+              ? onArchive(selectedMemo, archived).then((saved) => {
+                  if (saved) setSelectedMemo(null);
+                  return saved;
+                })
+              : Promise.resolve(false)
+          }
+          onDelete={() => {
+            const result = onDelete?.(selectedMemo);
+            if (result instanceof Promise) {
+              return result.then((saved) => {
+                if (saved) setSelectedMemo(null);
+                return saved;
+              });
+            }
+            return result;
+          }}
+        />
+      )}
     </section>
   );
 }
@@ -297,14 +372,6 @@ function PersonFields({ person }: { person?: PersonDetail }) {
           inputMode="tel"
           placeholder="010-1234-5678"
           defaultValue={person?.phone ?? ""}
-        />
-      </Field>
-      <Field label="신청자 메모">
-        <textarea
-          name="personNote"
-          rows={3}
-          placeholder="이 사람에게 계속 적용되는 참고사항"
-          defaultValue={person?.personNote ?? ""}
         />
       </Field>
     </>
