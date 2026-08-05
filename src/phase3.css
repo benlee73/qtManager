@@ -275,7 +275,7 @@
 .person-note-heading span,
 .person-note p {
   color: var(--muted);
-  font-size: var(--font-xs);
+  font-size: var(--font-meta);
 }
 
 .person-note textarea {
@@ -347,7 +347,7 @@
 
 .subscription-period > div > span {
   color: var(--muted);
-  font-size: var(--font-xs);
+  font-size: var(--font-sm);
   font-weight: 700;
 }
 
@@ -497,7 +497,7 @@
 .distribution-history-header {
   padding-top: 0;
   color: var(--muted);
-  font-size: var(--font-xs);
+  font-size: var(--font-sm);
 }
 
 .distribution-history-quantity,

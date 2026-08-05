@@ -37,8 +37,9 @@
   --green-100: rgb(88 101 242 / 14%);
   --orange-soft: rgb(201 147 38 / 12%);
   --font-xs: 12px;
-  --font-sm: 13px;
-  --font-md: 14px;
+  --font-meta: 13px;
+  --font-sm: 14px;
+  --font-md: 15px;
   --font-lg: 17px;
   color: var(--text);
   background: var(--canvas);
@@ -474,7 +475,7 @@ p {
 
 .summary-grid span {
   color: var(--muted);
-  font-size: var(--font-xs);
+  font-size: var(--font-sm);
 }
 
 .summary-grid b {
@@ -722,7 +723,7 @@ kbd {
   border-radius: 6px;
   color: var(--muted);
   background: var(--panel);
-  font-size: var(--font-xs);
+  font-size: var(--font-meta);
   font-weight: 800;
 }
 
@@ -752,7 +753,7 @@ kbd {
   border-bottom: 1px solid var(--line);
   color: var(--faint);
   background: var(--panel-high);
-  font-size: var(--font-xs);
+  font-size: var(--font-sm);
   font-weight: 700;
 }
 
@@ -825,7 +826,7 @@ kbd {
 
 .person-name b {
   min-width: 0;
-  font-size: 14px;
+  font-size: var(--font-md);
 }
 
 .person-name {
@@ -852,7 +853,7 @@ kbd {
 .distribution-cell small {
   margin-top: 3px;
   color: var(--muted);
-  font-size: var(--font-xs);
+  font-size: var(--font-meta);
 }
 
 .subscription-simple {
@@ -977,7 +978,7 @@ kbd {
   padding: 4px 2px;
   color: var(--muted);
   background: transparent;
-  font-size: var(--font-xs);
+  font-size: var(--font-meta);
 }
 
 .count-badge {
@@ -1033,7 +1034,7 @@ kbd {
 
 .sticky-input small {
   color: var(--faint);
-  font-size: var(--font-xs);
+  font-size: var(--font-meta);
 }
 
 .sticky-input button {
@@ -1695,13 +1696,13 @@ kbd {
 
 .memo-card-content {
   display: block;
-  font-size: var(--font-xs);
+  font-size: var(--font-sm);
   line-height: 1.45;
 }
 
 .memo-card-person {
   color: var(--accent);
-  font-size: var(--font-xs);
+  font-size: var(--font-meta);
   font-weight: 750;
 }
 
@@ -1815,7 +1816,7 @@ kbd {
 }
 
 .memo-archive-content small {
-  font-size: var(--font-xs);
+  font-size: var(--font-meta);
   color: var(--muted);
 }
 

@@ -278,7 +278,7 @@ describe("QT Manager desktop flow", () => {
         );
         return shortcutList ? getComputedStyle(shortcutList).fontSize : "";
       }),
-    ).toBe("13px");
+    ).toBe("14px");
     await browser.saveScreenshot("test-results/ui-help-shortcuts-dark.png");
 
     await browser.execute(() => {
@@ -314,8 +314,8 @@ describe("QT Manager desktop flow", () => {
         };
       }),
     ).toEqual({
-      supportLabelFontSize: "13px",
-      supportValueFontSize: "13px",
+      supportLabelFontSize: "14px",
+      supportValueFontSize: "14px",
     });
     await browser.saveScreenshot("test-results/ui-help-support-dark.png");
     await browser.execute(() => {
@@ -1331,6 +1331,14 @@ describe("QT Manager desktop flow", () => {
         deskLeft: Math.round(desk.left),
         stickyInputHeight: Math.round(stickyInput.height),
         fontMedium: root.getPropertyValue("--font-md").trim(),
+        fontSmall: root.getPropertyValue("--font-sm").trim(),
+        fontMeta: root.getPropertyValue("--font-meta").trim(),
+        tableHeadFontSize: getComputedStyle(
+          document.querySelector<HTMLElement>(".table-head")!,
+        ).fontSize,
+        summaryLabelFontSize: getComputedStyle(
+          document.querySelector<HTMLElement>(".summary-grid span")!,
+        ).fontSize,
         brandGap: Number.parseFloat(brand.rowGap),
         placeholderAlpha,
         hasOperatorStatus: document.querySelector(".operator-status") !== null,
@@ -1358,7 +1366,11 @@ describe("QT Manager desktop flow", () => {
     });
     expect(layout.deskLeft).toBe(76);
     expect(layout.stickyInputHeight).toBeLessThanOrEqual(94);
-    expect(layout.fontMedium).toBe("14px");
+    expect(layout.fontMedium).toBe("15px");
+    expect(layout.fontSmall).toBe("14px");
+    expect(layout.fontMeta).toBe("13px");
+    expect(layout.tableHeadFontSize).toBe("14px");
+    expect(layout.summaryLabelFontSize).toBe("14px");
     expect(layout.brandGap).toBeGreaterThanOrEqual(4);
     expect(layout.placeholderAlpha).toBeLessThanOrEqual(0.65);
     expect(layout.hasOperatorStatus).toBe(false);
