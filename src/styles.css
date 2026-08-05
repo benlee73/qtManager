@@ -786,8 +786,8 @@ kbd {
 }
 
 .person-row {
-  min-height: 66px;
-  padding: 7px 11px;
+  min-height: 68px;
+  padding: 8px 11px;
   border-bottom: 1px solid var(--line-soft);
   font-size: var(--font-md);
 }
@@ -1664,7 +1664,7 @@ kbd {
 .memo-list {
   display: grid;
   align-content: start;
-  gap: 7px;
+  gap: 8px;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -1675,11 +1675,11 @@ kbd {
   display: grid;
   width: 100%;
   min-width: 0;
-  gap: 6px;
+  gap: 7px;
   border: 1px solid var(--line);
   border-left: 3px solid var(--accent);
   border-radius: 7px;
-  padding: 10px;
+  padding: 11px;
   color: var(--text);
   background: var(--panel-high);
   text-align: left;

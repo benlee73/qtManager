@@ -85,6 +85,32 @@ describe("QT Manager desktop flow", () => {
         (await textOf('[data-testid="person-row"]')).includes("2권 배부"),
       { timeoutMsg: "간이 등록한 2권 구독 신청자를 찾지 못했습니다." },
     );
+    await setInput("#quick-item", "간격 검증 메모");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="add-memo"]')
+        ?.click();
+    });
+    await waitForText(".memo-list", "간격 검증 메모");
+    const spacing = await browser.execute(() => {
+      const row = document.querySelector<HTMLElement>(
+        '[data-testid="person-row"]',
+      );
+      const memoList = document.querySelector<HTMLElement>(".memo-list");
+      const memoCard = document.querySelector<HTMLElement>(".memo-card");
+      return {
+        personRowHeight: row
+          ? Math.round(row.getBoundingClientRect().height)
+          : 0,
+        personRowPadding: row ? getComputedStyle(row).padding : "",
+        memoListGap: memoList ? getComputedStyle(memoList).rowGap : "",
+        memoCardPadding: memoCard ? getComputedStyle(memoCard).padding : "",
+      };
+    });
+    expect(spacing.personRowHeight).toBeGreaterThanOrEqual(68);
+    expect(spacing.personRowPadding).toBe("8px 11px");
+    expect(spacing.memoListGap).toBe("8px");
+    expect(spacing.memoCardPadding).toBe("11px");
 
     await clickButtonByText("", `${applicant} 메뉴`);
     await clickButtonByText("일부만 배부");
