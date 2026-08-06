@@ -754,7 +754,6 @@ export default function App() {
                 >
                   보관함
                 </button>
-                <span className="count-badge">{desk?.memos?.length ?? 0}</span>
               </div>
             </header>
             <form

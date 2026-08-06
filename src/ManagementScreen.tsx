@@ -5,6 +5,10 @@ import { ApplicationImportDialog } from "./ApplicationImportDialog";
 import { HandoverDialog } from "./HandoverDialog";
 import { ManagementPersonList, PersonDetailPanel } from "./ManagementDetail";
 import {
+  profileCompletionNames,
+  profileCompletionPeople,
+} from "./managementFilters";
+import {
   createManagementLoader,
   type ManagementSelection,
 } from "./managementLoader";
@@ -53,6 +57,7 @@ export function ManagementScreen({
 }) {
   const [query, setQuery] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
+  const [draftOnly, setDraftOnly] = useState(false);
   const [management, setManagement] = useState<PeopleManagement | null>(null);
   const [selection, setSelection] = useState<ManagementSelection>({
     selectedId: null,
@@ -186,6 +191,7 @@ export function ManagementScreen({
               value={query}
               onChange={(event) => {
                 loader.invalidate();
+                setDraftOnly(false);
                 setQuery(event.target.value);
               }}
               placeholder="이름, 또래, 전화번호 검색"
@@ -198,6 +204,7 @@ export function ManagementScreen({
               checked={includeArchived}
               onChange={(event) => {
                 loader.invalidate();
+                setDraftOnly(false);
                 setIncludeArchived(event.target.checked);
               }}
             />
@@ -205,12 +212,40 @@ export function ManagementScreen({
           </label>
           <div className="management-counts">
             <span>검색 결과 {management?.people.length ?? 0}명</span>
-            <span title="현장 간이 등록 상태가 아직 보완되지 않은 신청자 수">
-              정보 보완 필요 {management?.draftCount ?? 0}명
-            </span>
+            {(() => {
+              const draftPeople = profileCompletionPeople(
+                management?.people ?? [],
+              );
+              const draftNames = profileCompletionNames(draftPeople);
+              const draftCount = management?.draftCount ?? 0;
+              if (draftCount === 0) {
+                return (
+                  <span title="현장 간이 등록 상태가 아직 보완되지 않은 신청자 수">
+                    정보 보완 필요 0명
+                  </span>
+                );
+              }
+              return (
+                <button
+                  className={draftOnly ? "count-filter active" : "count-filter"}
+                  data-testid="draft-count-filter"
+                  type="button"
+                  aria-pressed={draftOnly}
+                  aria-label={`정보 보완 필요 ${draftCount}명${draftNames ? `: ${draftNames}` : ""}`}
+                  title={`보완 대상: ${draftNames || "신청자 목록"} · 눌러 목록 필터`}
+                  onClick={() => setDraftOnly((current) => !current)}
+                >
+                  정보 보완 필요 {draftCount}명
+                </button>
+              );
+            })()}
           </div>
           <ManagementPersonList
-            people={management?.people ?? []}
+            people={
+              draftOnly
+                ? profileCompletionPeople(management?.people ?? [])
+                : (management?.people ?? [])
+            }
             selectedId={selection.selectedId}
             onSelect={(id) => void loader.select(id)}
           />

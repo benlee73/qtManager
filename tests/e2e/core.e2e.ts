@@ -653,6 +653,11 @@ describe("QT Manager desktop flow", () => {
     });
     await waitForText(".toast", "메모를 추가했습니다.");
     await waitForText(".memo-list", unlinked);
+    expect(
+      await browser.execute(
+        () => document.querySelector(".notes-panel .count-badge") === null,
+      ),
+    ).toBe(true);
 
     await clickButtonByText("", "마지막 동작 되돌리기");
     await browser.waitUntil(
@@ -1418,7 +1423,7 @@ describe("QT Manager desktop flow", () => {
       ).__TAURI_INTERNALS__;
       return internals.invoke("main_window_contract_command");
     });
-    // The Tauri config declares a 1000x720 initial size (verified by the
+    // The Tauri config declares a 1120x760 initial size (verified by the
     // project contract check), but hosted WebDriver may restore/maximize a
     // native window before the webview is attached. Assert the portable
     // runtime contract here and verify the configured values statically.
@@ -1434,7 +1439,7 @@ describe("QT Manager desktop flow", () => {
     }>("main_window_contract_command");
     expect(resized.resizable).toBe(true);
     // Native WebDriver window units vary with hosted macOS Retina scaling;
-    // assert the portable minimum contract while the Tauri 1000x720 defaults
+    // assert the portable minimum contract while the Tauri 1120x760 defaults
     // remain covered by scripts/check_project.py.
     expect(resized.width).toBeGreaterThanOrEqual(900);
     expect(resized.height).toBeGreaterThanOrEqual(640);
@@ -2084,6 +2089,7 @@ describe("QT Manager desktop flow", () => {
               rect.bottom <= window.innerHeight &&
               style.display !== "none" &&
               style.visibility !== "hidden",
+            fontWeight: style.fontWeight,
           };
         });
         const panelLine = getComputedStyle(
@@ -2092,6 +2098,16 @@ describe("QT Manager desktop flow", () => {
         const distributionRows = [
           ...detail.querySelectorAll<HTMLElement>(".distribution-history-row"),
         ];
+        const firstSubscription =
+          detail.querySelector<HTMLElement>(".subscription-card");
+        const quantity = firstSubscription?.querySelector<HTMLElement>(
+          ".subscription-quantity",
+        );
+        const state = firstSubscription?.querySelector<HTMLElement>(
+          ".subscription-state",
+        );
+        const quantityRect = quantity?.getBoundingClientRect();
+        const stateRect = state?.getBoundingClientRect();
         return {
           rowCount: rows.length,
           rowHeights: rowRects.map((row) => Math.round(row.height)),
@@ -2131,6 +2147,14 @@ describe("QT Manager desktop flow", () => {
           ].every(
             (row) => getComputedStyle(row).borderBottomColor === panelLine,
           ),
+          historyVerticalCenterDelta:
+            quantityRect && stateRect
+              ? Math.abs(
+                  quantityRect.top +
+                    quantityRect.height / 2 -
+                    (stateRect.top + stateRect.height / 2),
+                )
+              : null,
           actionContracts,
           listOverflow: getComputedStyle(list).overflowY,
           detailOverflow: getComputedStyle(detail).overflowY,
@@ -2169,6 +2193,10 @@ describe("QT Manager desktop flow", () => {
     expect(managementContract.distributionRowCount).toBe(1);
     expect(managementContract.distributionRowLineMatchesPanel).toBe(true);
     expect(managementContract.distributionLineMatchesPanel).toBe(true);
+    expect(managementContract.historyVerticalCenterDelta).not.toBeNull();
+    expect(managementContract.historyVerticalCenterDelta).toBeLessThanOrEqual(
+      1,
+    );
     expect(managementContract.actionContracts).toEqual([
       {
         testId: "open-handover",
@@ -2176,6 +2204,7 @@ describe("QT Manager desktop flow", () => {
         hasExpectedClass: true,
         hasOppositeClass: false,
         visible: true,
+        fontWeight: "400",
       },
       {
         testId: "open-application-import",
@@ -2183,6 +2212,7 @@ describe("QT Manager desktop flow", () => {
         hasExpectedClass: true,
         hasOppositeClass: false,
         visible: true,
+        fontWeight: "400",
       },
       {
         testId: "open-register-person",
@@ -2190,6 +2220,7 @@ describe("QT Manager desktop flow", () => {
         hasExpectedClass: true,
         hasOppositeClass: false,
         visible: true,
+        fontWeight: "400",
       },
     ]);
     expect(managementContract.listOverflow).toBe("auto");
@@ -2634,6 +2665,61 @@ describe("QT Manager desktop flow", () => {
     ).toContain("현장 배부");
   });
 
+  it("filters and names applicants that need profile completion", async () => {
+    const draftName = `가상보완대상${Date.now()}`;
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="open-draft"]')
+        ?.click();
+    });
+    await setInput("input[name='name']", draftName);
+    await setInput("input[name='cohort']", "00");
+    await setInput("input[name='quantity']", "1");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLFormElement>('[data-testid="draft-form"]')
+        ?.requestSubmit();
+    });
+    await waitForText(".toast", "현장 신청자를 추가했습니다");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
+        ?.click();
+    });
+    await waitForText("h2", "신청자 관리");
+    await setInput('[data-testid="management-search"]', draftName);
+    await waitForText('[data-testid="management-person"]', draftName);
+    await waitForText('[data-testid="draft-count-filter"]', "정보 보완 필요");
+    const countLabel = await browser.execute(() => {
+      const button = document.querySelector<HTMLButtonElement>(
+        '[data-testid="draft-count-filter"]',
+      );
+      return {
+        ariaLabel: button?.getAttribute("aria-label") ?? "",
+        title: button?.title ?? "",
+      };
+    });
+    expect(countLabel.ariaLabel).toContain(draftName);
+    expect(countLabel.title).toContain(draftName);
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="draft-count-filter"]')
+        ?.click();
+    });
+    await browser.waitUntil(
+      async () =>
+        await browser.execute((name) => {
+          const rows = [
+            ...document.querySelectorAll<HTMLElement>(
+              '[data-testid="management-person"]',
+            ),
+          ];
+          return rows.length === 1 && rows[0]?.textContent?.includes(name);
+        }, draftName),
+      { timeoutMsg: "정보 보완 필요 신청자 필터가 적용되지 않았습니다." },
+    );
+  });
+
   it("previews pasted Google responses, links a duplicate candidate and blocks a repeat", async () => {
     const unique = String(Date.now()).slice(-8);
     const applicant = `가상붙여넣기${unique}`;
@@ -2696,12 +2782,30 @@ describe("QT Manager desktop flow", () => {
         summaryCardCount: summary?.children.length ?? 0,
         descriptionLines:
           description?.querySelectorAll(":scope > span").length ?? 0,
+        paymentNotice:
+          document.querySelector(".payment-notice")?.textContent ?? "",
+        paymentNoticeStyle: (() => {
+          const notice = document.querySelector<HTMLElement>(".payment-notice");
+          if (!notice) return null;
+          const style = getComputedStyle(notice);
+          return {
+            marginTop: style.marginTop,
+            padding: style.padding,
+            borderRadius: style.borderRadius,
+          };
+        })(),
       };
     });
     expect(importLayout).toEqual({
       summaryColumns: 3,
       summaryCardCount: 3,
       descriptionLines: 2,
+      paymentNotice: "입금 여부 열은 확인하지 않고 가져오기에서 제외합니다.",
+      paymentNoticeStyle: {
+        marginTop: "8px",
+        padding: "8px 10px",
+        borderRadius: "7px",
+      },
     });
     await browser.execute(() => {
       const checkbox = document.querySelector<HTMLInputElement>(
