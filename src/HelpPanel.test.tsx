@@ -21,7 +21,7 @@ describe("HelpPanel", () => {
     );
 
     expect(markup).toContain("오늘이 포함된 호");
-    expect(markup).toContain("현장 배부 화면에서 선택한 QT 호");
+    expect(markup).toContain("현장 배부에서 선택한 QT 호");
     expect(markup).toContain("메모 추가와 연결");
     expect(markup).toContain("신청자에 연결된 메모를 수정·보관·삭제");
     expect(markup).toContain("신청자 관리 목록에서는 숨기고");

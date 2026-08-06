@@ -205,7 +205,7 @@ export function HandoverDialog({
 
         <div className="handover-actions">
           <button
-            className="secondary-button"
+            className="secondary-button handover-action"
             data-testid="export-state"
             type="button"
             disabled={busy}
@@ -223,7 +223,7 @@ export function HandoverDialog({
             전체 상태 내보내기
           </button>
           <button
-            className="primary-button"
+            className="primary-button handover-action"
             data-testid="choose-state-import"
             type="button"
             disabled={busy}

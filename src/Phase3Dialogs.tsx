@@ -445,7 +445,9 @@ function SubscriptionFields({
           <input
             name="issueYear"
             type="number"
+            list={allowIssueChange ? "subscription-year-options" : undefined}
             min={2020}
+            max={2100}
             defaultValue={issue.year}
             readOnly={!allowIssueChange}
             required
@@ -471,12 +473,28 @@ function SubscriptionFields({
           <input
             name="quantity"
             type="number"
+            list="subscription-quantity-options"
             min={1}
+            max={99}
             defaultValue={1}
             required
           />
         </Field>
       </div>
+      {allowIssueChange && (
+        <datalist id="subscription-year-options">
+          {Array.from({ length: 12 }, (_, index) => 2024 + index).map(
+            (year) => (
+              <option key={year} value={year} />
+            ),
+          )}
+        </datalist>
+      )}
+      <datalist id="subscription-quantity-options">
+        {Array.from({ length: 10 }, (_, index) => index + 1).map((quantity) => (
+          <option key={quantity} value={quantity} />
+        ))}
+      </datalist>
       <div className="field-grid">
         <Field label="신청일">
           <input name="appliedAt" type="date" />

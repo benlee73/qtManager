@@ -37,7 +37,7 @@
 
 .management-heading-help > span,
 .person-note-help > span {
-  width: min(24rem, calc(100vw - 2rem));
+  width: fit-content;
   max-width: min(24rem, calc(100vw - 2rem));
   overflow-wrap: anywhere;
   white-space: normal;
@@ -386,7 +386,7 @@
 
 .linked-memos-tooltip > span {
   left: 0;
-  width: min(18rem, calc(100vw - 4rem));
+  width: fit-content;
   max-width: min(18rem, calc(100vw - 4rem));
   transform: none;
   white-space: normal;
@@ -414,7 +414,7 @@
 
 .history-list article {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 0.3rem 1rem;
   padding: 0.85rem 1rem;
   border: 1px solid var(--line);
@@ -470,6 +470,19 @@
   color: var(--green-700);
   font-size: var(--font-sm);
   font-weight: 800;
+}
+
+.subscription-quantity {
+  align-self: center;
+  padding-inline: 0.4rem;
+  color: var(--muted);
+  font-size: var(--font-sm);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.history-list .subscription-applied-at {
+  grid-column: 1 / -1;
 }
 
 .history-list .subscription-scheduled > .subscription-state {
@@ -701,6 +714,13 @@
   font-size: 0.85rem;
 }
 
+.subscription-form-block .field input,
+.subscription-form-block .field select {
+  height: 42px;
+  padding: 0.65rem 0.75rem;
+  resize: none;
+}
+
 .duplicate-warning {
   display: grid;
   gap: 0.45rem;
@@ -739,6 +759,17 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+}
+
+.handover-action {
+  min-height: 42px;
+  padding-inline: 14px;
+  font-size: var(--font-meta);
+  font-weight: 700;
+}
+
+.handover-actions .primary-button {
+  border: 1px solid var(--accent);
 }
 
 .import-preview {

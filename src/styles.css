@@ -244,7 +244,8 @@ p {
   top: calc(100% + 7px);
   left: 50%;
   display: none;
-  width: max-content;
+  width: fit-content;
+  max-width: min(20rem, calc(100vw - 24px));
   transform: translateX(-50%);
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -253,6 +254,8 @@ p {
   background: var(--panel-high);
   box-shadow: 0 8px 20px var(--shadow);
   font-size: var(--font-xs);
+  line-height: 1.45;
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 
@@ -420,7 +423,7 @@ p {
   justify-content: center;
   gap: 0;
   overflow: hidden;
-  font-size: 23px;
+  font-size: 21px;
   letter-spacing: 0.035em;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -484,7 +487,7 @@ p {
   min-width: 0;
   overflow: hidden;
   margin-top: 2px;
-  font-size: clamp(13px, 1.3vw, var(--font-lg));
+  font-size: var(--font-lg);
   line-height: 17px;
   text-overflow: ellipsis;
   text-align: center;
@@ -670,8 +673,8 @@ kbd {
   padding: 0 9px;
   color: var(--muted);
   background: var(--panel-high);
-  font-size: var(--font-sm);
-  font-weight: 700;
+  font-size: var(--font-meta);
+  font-weight: 650;
 }
 
 .filter-popover {
@@ -737,7 +740,7 @@ kbd {
   display: grid;
   grid-template-columns:
     42px minmax(96px, 1fr) minmax(124px, 1.2fr) minmax(62px, 0.65fr)
-    112px;
+    minmax(136px, 0.95fr);
   align-items: center;
   gap: 8px;
 }
@@ -913,6 +916,23 @@ kbd {
   font-weight: 800;
 }
 
+.draft-action-button {
+  min-width: 138px;
+  padding-inline: 14px;
+  font-size: var(--font-meta);
+  font-weight: 650;
+}
+
+.row-actions .primary-button,
+.row-actions .cancel-distribution-button {
+  min-width: 106px;
+  min-height: 36px;
+  padding-inline: 14px;
+  font-size: var(--font-meta);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .primary-button:hover:not(:disabled) {
   background: var(--accent-hover);
 }
@@ -939,6 +959,35 @@ kbd {
   height: 29px;
   border: 0;
   background: transparent;
+}
+
+.person-context-menu {
+  position: fixed;
+  z-index: 45;
+  display: grid;
+  width: max-content;
+  min-width: 164px;
+  max-width: min(220px, calc(100vw - 16px));
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-high);
+  box-shadow: 0 16px 40px var(--shadow);
+}
+
+.person-context-menu button {
+  padding: 9px 11px;
+  color: var(--text);
+  background: transparent;
+  font-size: var(--font-meta);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.person-context-menu button:hover,
+.person-context-menu button:focus-visible {
+  border-radius: 5px;
+  background: var(--panel-hover);
 }
 
 .empty-state {
@@ -1462,7 +1511,7 @@ kbd {
 }
 
 .import-dialog {
-  width: min(860px, 100%);
+  width: min(780px, 100%);
 }
 
 .delete-confirm-dialog {

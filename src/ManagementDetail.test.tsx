@@ -235,6 +235,8 @@ describe("PersonDetailPanel", () => {
     expect(markup).toContain("현재 구독");
     expect(markup).toContain("시작");
     expect(markup).toContain("끝");
+    expect(markup).toContain('class="subscription-quantity numeric"');
+    expect(markup).toContain("2권");
     expect(markup).not.toContain("→");
     expect(markup).not.toContain("기존 XLSX");
     expect(markup).not.toContain("2026년 기존 배부현황 최초 이전");

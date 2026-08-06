@@ -10,6 +10,7 @@ import { ChevronLeftIcon, ChevronRightIcon, RedoIcon, UndoIcon } from "./Icons";
 import { ManagementScreen } from "./ManagementScreen";
 import { NotificationStack } from "./Notifications";
 import { PersonFilterMenu } from "./PersonFilterMenu";
+import { PersonContextMenu } from "./PersonContextMenu";
 import { type Phase2Dialog, Phase2DialogContent } from "./Phase2Dialogs";
 import { EditDialog } from "./Phase3Dialogs";
 import type { ReversibleAction } from "./actionHistory";
@@ -72,6 +73,11 @@ export default function App() {
     direction: "asc" | "desc";
   } | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [personContextMenu, setPersonContextMenu] = useState<{
+    personId: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [dialog, setDialog] = useState<Phase2Dialog>(null);
   const [editPerson, setEditPerson] = useState<PersonDetail | null>(null);
@@ -229,6 +235,12 @@ export default function App() {
     );
   }, [desk, listFilters, sort]);
 
+  const contextPerson = personContextMenu
+    ? visiblePeople.find(
+        (person) => person.personId === personContextMenu.personId,
+      )
+    : null;
+
   const selectedIssueParts = issueLabelParts(issue);
 
   const openPersonEdit = useCallback(
@@ -333,16 +345,39 @@ export default function App() {
           document.activeElement.blur();
         }
       }
+      if (event.key === "Escape" && personContextMenu) {
+        setPersonContextMenu(null);
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
+      }
     }
     window.addEventListener("keydown", handleKeydown);
     return () => window.removeEventListener("keydown", handleKeydown);
   }, [
     defaultDistribution,
+    personContextMenu,
     redoAction,
     selectedPersonId,
     undoAction,
     visiblePeople,
   ]);
+
+  useEffect(() => {
+    if (!personContextMenu) return;
+    const closeOutside = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest(".person-context-menu")) {
+        setPersonContextMenu(null);
+      }
+    };
+    window.addEventListener("pointerdown", closeOutside);
+    window.addEventListener("click", closeOutside);
+    return () => {
+      window.removeEventListener("pointerdown", closeOutside);
+      window.removeEventListener("click", closeOutside);
+    };
+  }, [personContextMenu]);
 
   const submitQuickItem = () => {
     if (!quickItemDraft.value.trim()) return;
@@ -363,7 +398,12 @@ export default function App() {
   };
 
   return (
-    <div className="fixed-app">
+    <div
+      className="fixed-app"
+      onContextMenu={(event) => {
+        if (!isTextEntryTarget(event.target)) event.preventDefault();
+      }}
+    >
       <AppNavigation
         active={screen}
         operator={desk?.operatorName}
@@ -397,10 +437,11 @@ export default function App() {
           const target = event.target as HTMLElement;
           if (
             !target.closest(
-              "button, input, textarea, select, a, [role='option'], .more-menu",
+              "button, input, textarea, select, a, [role='option'], .more-menu, .person-context-menu",
             )
           ) {
             setSelectedPersonId(null);
+            setPersonContextMenu(null);
           }
         }}
       >
@@ -496,13 +537,13 @@ export default function App() {
                   data-testid="people-search"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="또래, 이름 또는 전화번호 검색"
+                  placeholder="또래 또는 이름 검색"
                   aria-label="QT 신청자 검색"
                 />
                 <kbd>/</kbd>
               </label>
               <button
-                className="secondary-button"
+                className="secondary-button draft-action-button"
                 data-testid="open-draft"
                 type="button"
                 onClick={() => setDialog({ type: "draft" })}
@@ -596,6 +637,13 @@ export default function App() {
                   busy={busy}
                   openMenu={openMenu}
                   onOpenMenu={setOpenMenu}
+                  onOpenContextMenu={(position) => {
+                    setOpenMenu(null);
+                    setPersonContextMenu({
+                      personId: person.personId,
+                      ...position,
+                    });
+                  }}
                   onSelect={() =>
                     setSelectedPersonId((current) =>
                       current === person.personId ? null : person.personId,
@@ -640,6 +688,47 @@ export default function App() {
               )}
             </div>
           </section>
+
+          {personContextMenu && (
+            <PersonContextMenu
+              x={personContextMenu.x}
+              y={personContextMenu.y}
+              onClose={() => setPersonContextMenu(null)}
+              actions={[
+                {
+                  label: "상세 정보 보기",
+                  onSelect: () => {
+                    setManagementFocusId(personContextMenu.personId);
+                    setScreen("management");
+                  },
+                },
+                {
+                  label: "메모 추가",
+                  onSelect: () =>
+                    setDialog({
+                      type: "memo",
+                      personId: personContextMenu.personId,
+                    }),
+                },
+                {
+                  label: "신청자 정보 수정",
+                  onSelect: () =>
+                    void openPersonEdit(personContextMenu.personId),
+                },
+                ...(contextPerson &&
+                contextPerson.canDistribute &&
+                contextPerson.remainingQuantity > 1
+                  ? [
+                      {
+                        label: "일부만 배부",
+                        onSelect: () =>
+                          setDialog({ type: "partial", person: contextPerson }),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          )}
 
           <aside className="notes-panel">
             <header>
@@ -922,6 +1011,7 @@ export function PersonRow({
   busy,
   openMenu,
   onOpenMenu,
+  onOpenContextMenu,
   onSelect,
   onDistribute,
   onCancelDistribution,
@@ -936,6 +1026,7 @@ export function PersonRow({
   busy: boolean;
   openMenu: string | null;
   onOpenMenu: (id: string | null) => void;
+  onOpenContextMenu: (position: { x: number; y: number }) => void;
   onSelect: () => void;
   onDistribute: () => void;
   onCancelDistribution: () => void;
@@ -962,10 +1053,11 @@ export function PersonRow({
       }}
       onContextMenu={(event) => {
         event.preventDefault();
+        event.stopPropagation();
         // 우클릭한 행도 현재 작업 대상이 되도록 선택을 맞춘다. 이미
         // 선택된 행에서는 토글하지 않아 우클릭이 선택 해제로 이어지지 않는다.
         if (!selected) onSelect();
-        onOpenMenu(`person-${person.personId}`);
+        onOpenContextMenu({ x: event.clientX, y: event.clientY });
       }}
       data-testid="person-row"
     >

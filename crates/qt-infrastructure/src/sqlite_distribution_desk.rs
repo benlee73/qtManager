@@ -44,10 +44,6 @@ impl DistributionDeskRepository for SqliteCoreRepository {
 
     fn list_desk_records(&self, query: &str, issue: Issue) -> Result<Vec<DeskRecord>, PortError> {
         let normalized = query.split_whitespace().collect::<String>().to_lowercase();
-        let phone_query = normalized
-            .chars()
-            .filter(char::is_ascii_digit)
-            .collect::<String>();
         let mut people_statement = self
             .connection
             .prepare(&format!(
@@ -62,7 +58,7 @@ impl DistributionDeskRepository for SqliteCoreRepository {
             ))
             .map_err(port_error)?;
         let people = people_statement
-            .query_map(params![normalized, phone_query], person_from_row)
+            .query_map(params![normalized], person_from_row)
             .map_err(port_error)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(port_error)?;
@@ -520,10 +516,6 @@ fn subscriptions_by_person(
     query: &str,
 ) -> Result<HashMap<String, Vec<Subscription>>, PortError> {
     let normalized = query.split_whitespace().collect::<String>().to_lowercase();
-    let phone_query = normalized
-        .chars()
-        .filter(char::is_ascii_digit)
-        .collect::<String>();
     let mut statement = connection
         .prepare(&format!(
             "
@@ -539,7 +531,7 @@ fn subscriptions_by_person(
         ))
         .map_err(port_error)?;
     let subscriptions = statement
-        .query_map(params![normalized, phone_query], subscription_from_row)
+        .query_map(params![normalized], subscription_from_row)
         .map_err(port_error)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(port_error)?;
@@ -559,10 +551,6 @@ fn distributions_by_subscription(
     issue: Issue,
 ) -> Result<HashMap<String, Vec<Distribution>>, PortError> {
     let normalized = query.split_whitespace().collect::<String>().to_lowercase();
-    let phone_query = normalized
-        .chars()
-        .filter(char::is_ascii_digit)
-        .collect::<String>();
     let mut statement = connection
         .prepare(&format!(
             "
@@ -571,7 +559,7 @@ fn distributions_by_subscription(
             FROM distributions d
             JOIN subscriptions s ON s.id = d.subscription_id
             JOIN people p ON p.id = s.person_id
-            WHERE d.issue_year = ?3 AND d.issue_month = ?4 AND ({})
+            WHERE d.issue_year = ?2 AND d.issue_month = ?3 AND ({})
             ORDER BY d.created_at, d.id
             ",
             search_predicate("p")
@@ -579,7 +567,7 @@ fn distributions_by_subscription(
         .map_err(port_error)?;
     let distributions = statement
         .query_map(
-            params![normalized, phone_query, issue.year, issue.start_month],
+            params![normalized, issue.year, issue.start_month],
             distribution_from_row,
         )
         .map_err(port_error)?
@@ -603,7 +591,6 @@ fn search_predicate(alias: &str) -> String {
         OR coalesce({alias}.cohort, '') LIKE '%' || ?1 || '%'
         OR coalesce({alias}.cohort, '') || lower(replace({alias}.name, ' ', ''))
             LIKE '%' || ?1 || '%'
-        OR (?2 != '' AND coalesce({alias}.normalized_phone, '') LIKE '%' || ?2 || '%')
         "
     )
 }

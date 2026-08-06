@@ -240,16 +240,18 @@ function PersonDetailContent({
                     {subscription.lastIssue}
                   </strong>
                 </div>
-                <p>
-                  <span className="numeric">{subscription.quantity}권</span>
-                  {subscription.appliedAt
-                    ? ` · 신청 ${subscription.appliedAt}`
-                    : ""}
-                </p>
+              </div>
+              <div className="subscription-quantity numeric">
+                {subscription.quantity}권
               </div>
               <span className="subscription-state">
                 {subscriptionStateLabels[subscription.periodState]}
               </span>
+              {subscription.appliedAt && (
+                <p className="subscription-applied-at">
+                  신청 {subscription.appliedAt}
+                </p>
+              )}
               {subscription.memo &&
                 !isLegacyMigrationMemo(subscription.memo) && (
                   <small title={subscription.memo}>{subscription.memo}</small>

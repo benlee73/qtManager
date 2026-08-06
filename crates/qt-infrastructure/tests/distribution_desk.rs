@@ -115,7 +115,7 @@ fn persists_and_searches_complete_distribution_desk_flow_after_reopen() {
 
     let mut reopened = SqliteCoreRepository::open(&path).unwrap();
     let restored =
-        load_distribution_desk(&mut reopened, &FixedClock, issue, "12345678", false).unwrap();
+        load_distribution_desk(&mut reopened, &FixedClock, issue, "94가상", false).unwrap();
     assert_eq!(restored.people[0].distribution_status, "일부 배부");
     assert_eq!(restored.people[0].remaining_quantity, 1);
     assert!(restored.people[0].has_memo);
@@ -130,6 +130,10 @@ fn persists_and_searches_complete_distribution_desk_flow_after_reopen() {
         (1, 1)
     );
     assert_eq!(restored.operator_name.as_deref(), Some("가상담당자"));
+
+    let phone_search =
+        load_distribution_desk(&mut reopened, &FixedClock, issue, "12345678", false).unwrap();
+    assert!(phone_search.people.is_empty());
 
     update_check_item_status(
         &mut reopened,

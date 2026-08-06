@@ -157,7 +157,7 @@ describe("QT Manager desktop flow", () => {
     await waitForText('[data-testid="person-row"]', "일부 배부");
   });
 
-  it("searches by cohort and phone, blocks an expired subscription, renews it, and marks a last issue", async () => {
+  it("searches by cohort and name, blocks an expired subscription, renews it, and marks a last issue", async () => {
     await setPersonFilterPreset("전체");
     const selected = await selectedIssue();
     const expiredStart = shiftIssue(selected, -6);
@@ -195,6 +195,11 @@ describe("QT Manager desktop flow", () => {
       '[data-testid="people-search"]',
       expiredPhone.replaceAll("-", ""),
     );
+    await waitForText(
+      '[data-testid="empty-list"]',
+      "일치하는 신청자가 없습니다",
+    );
+    await setInput('[data-testid="people-search"]', expiredName);
     await waitForText('[data-testid="person-row"]', expiredName);
     const phoneAccess = await browser.execute((phone) => {
       const row = document.querySelector<HTMLElement>(
