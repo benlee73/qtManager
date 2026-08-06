@@ -37,7 +37,7 @@
 
 .management-heading-help > span,
 .person-note-help > span {
-  width: fit-content;
+  width: max-content;
   max-width: min(24rem, calc(100vw - 2rem));
   overflow-wrap: anywhere;
   white-space: normal;
@@ -386,7 +386,7 @@
 
 .linked-memos-tooltip > span {
   left: 0;
-  width: fit-content;
+  width: max-content;
   max-width: min(18rem, calc(100vw - 4rem));
   transform: none;
   white-space: normal;
@@ -414,8 +414,8 @@
 
 .history-list article {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 0.3rem 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(3.5rem, auto) auto;
+  gap: 0.3rem 1.2rem;
   padding: 0.85rem 1rem;
   border: 1px solid var(--line);
   border-radius: 0.65rem;
@@ -473,7 +473,10 @@
 }
 
 .subscription-quantity {
+  grid-column: 2;
+  grid-row: 1;
   align-self: center;
+  justify-self: center;
   padding-inline: 0.4rem;
   color: var(--muted);
   font-size: var(--font-sm);
@@ -770,6 +773,169 @@
 
 .handover-actions .primary-button {
   border: 1px solid var(--accent);
+}
+
+.import-description {
+  display: grid;
+  gap: 2px;
+}
+
+.import-description > span {
+  display: block;
+}
+
+.import-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.import-summary > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-high);
+}
+
+.import-summary b {
+  color: var(--muted);
+  font-size: var(--font-meta);
+  font-weight: 700;
+}
+
+.import-summary strong {
+  color: var(--text);
+  font-size: var(--font-md);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.import-summary .has-errors {
+  border-color: rgb(237 66 69 / 42%);
+}
+
+.import-summary .has-errors strong {
+  color: var(--red);
+}
+
+.import-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-high);
+}
+
+.import-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.import-row strong,
+.import-row p,
+.import-row small {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.import-row strong {
+  font-size: var(--font-sm);
+}
+
+.import-row p,
+.import-row small {
+  color: var(--muted);
+  font-size: var(--font-meta);
+  line-height: 1.4;
+}
+
+.import-row small {
+  color: var(--text);
+}
+
+.import-row.error {
+  border-color: rgb(237 66 69 / 42%);
+}
+
+.import-row.candidate {
+  border-color: rgb(201 147 38 / 48%);
+}
+
+.import-row select {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 3px;
+}
+
+.mapping-panel {
+  display: grid;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid var(--note-line);
+  border-radius: 9px;
+  background: var(--panel-high);
+}
+
+.mapping-panel-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.mapping-panel-copy strong {
+  font-size: var(--font-md);
+}
+
+.mapping-panel-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-sm);
+  line-height: 1.45;
+}
+
+.mapping-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mapping-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--font-meta);
+  font-weight: 700;
+}
+
+.mapping-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: var(--text);
+  background: var(--input);
+  font-variant-numeric: tabular-nums;
+}
+
+.mapping-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.mapping-actions .quiet-button {
+  margin-left: auto;
 }
 
 .import-preview {

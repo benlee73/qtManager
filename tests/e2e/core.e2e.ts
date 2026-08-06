@@ -1240,7 +1240,7 @@ describe("QT Manager desktop flow", () => {
     expect(
       Math.abs(issueAfter.headingCenter - issueAfter.arrowsCenter),
     ).toBeLessThan(1);
-    expect(issueAfter.gap).toBe("0px");
+    expect(Number.parseFloat(issueAfter.gap)).toBeGreaterThan(0);
     await clickButtonByText("", "이전 호");
 
     const compactPanels = await panelWidths();
@@ -1473,6 +1473,35 @@ describe("QT Manager desktop flow", () => {
         ?.click();
     });
     await waitForText("h2", "신청자 관리");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="management-heading-help"] button',
+        )
+        ?.focus();
+    });
+    const headingTooltip = await browser.execute(() => {
+      const tooltip = document.querySelector<HTMLElement>(
+        '[data-testid="management-heading-help"] [role="tooltip"]',
+      );
+      if (!tooltip) return null;
+      // Webdriver's focus handling is not consistent across the macOS WebView
+      // and tauri-driver. Force the tooltip into its visible layout state so
+      // this assertion measures the actual max-content sizing contract rather
+      // than the driver's transient :focus-within state.
+      tooltip.style.display = "block";
+      const rect = tooltip.getBoundingClientRect();
+      const style = getComputedStyle(tooltip);
+      return {
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        whiteSpace: style.whiteSpace,
+      };
+    });
+    expect(headingTooltip).not.toBeNull();
+    expect(headingTooltip?.width).toBeGreaterThan(120);
+    expect(headingTooltip?.height).toBeLessThan(120);
+    expect(headingTooltip?.whiteSpace).toBe("normal");
     await setInput('[data-testid="management-search"]', applicant);
     await selectManagementPerson(applicant);
     await waitForText('[data-testid="person-detail"]', linked);
@@ -2622,6 +2651,32 @@ describe("QT Manager desktop flow", () => {
         )
         ?.click();
     });
+    await setInput('[data-testid="application-paste-input"]', "셀1");
+    await browser.execute(() => {
+      const textarea = document.querySelector<HTMLTextAreaElement>(
+        '[data-testid="application-paste-input"]',
+      );
+      if (!textarea) throw new Error("응답 행 입력란을 찾지 못했습니다.");
+      textarea.focus();
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      textarea.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Tab",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(
+          () =>
+            document.querySelector<HTMLTextAreaElement>(
+              '[data-testid="application-paste-input"]',
+            )?.value ?? "",
+        )) === "셀1\t",
+      { timeoutMsg: "응답 행 입력란에 탭 문자를 넣지 못했습니다." },
+    );
     const firstResponse = [
       `2026. 2. 1 오후 7:48:08\t${applicant}\t00\t${phone}\t1-2월호\t2\t네 입금했습니다.`,
       "가상오류\t0\t전화번호\t2월호\t0",
@@ -2629,6 +2684,25 @@ describe("QT Manager desktop flow", () => {
     await setInput('[data-testid="application-paste-input"]', firstResponse);
     await waitForText('[data-testid="application-preview"]', applicant);
     await waitForText('[data-testid="application-preview"]', "또래는");
+    const importLayout = await browser.execute(() => {
+      const summary = document.querySelector<HTMLElement>(".import-summary");
+      const description = document.querySelector<HTMLElement>(
+        ".import-description",
+      );
+      return {
+        summaryColumns: summary
+          ? getComputedStyle(summary).gridTemplateColumns.split(" ").length
+          : 0,
+        summaryCardCount: summary?.children.length ?? 0,
+        descriptionLines:
+          description?.querySelectorAll(":scope > span").length ?? 0,
+      };
+    });
+    expect(importLayout).toEqual({
+      summaryColumns: 3,
+      summaryCardCount: 3,
+      descriptionLines: 2,
+    });
     await browser.execute(() => {
       const checkbox = document.querySelector<HTMLInputElement>(
         'input[aria-label="1행 선택"]',
@@ -2684,6 +2758,33 @@ describe("QT Manager desktop flow", () => {
       '[data-testid="application-preview"]',
       "이미 추가한 응답",
     );
+    await clickButtonByText("", "닫기");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="open-application-import"]',
+        )
+        ?.click();
+    });
+    await setInput(
+      '[data-testid="application-paste-input"]',
+      "시각\t이름\t또래\t연락처\t시작\t수량\t입금\t추가열",
+    );
+    await waitForText("#application-import-title", "Google 응답 붙여넣기");
+    await waitForText(
+      "#mapping-panel-title",
+      "열 순서를 자동으로 찾지 못했습니다.",
+    );
+    const mappingLayout = await browser.execute(() => {
+      const fields = document.querySelector<HTMLElement>(".mapping-fields");
+      return {
+        columns: fields
+          ? getComputedStyle(fields).gridTemplateColumns.split(" ").length
+          : 0,
+        labels: fields?.querySelectorAll("label").length ?? 0,
+      };
+    });
+    expect(mappingLayout).toEqual({ columns: 3, labels: 6 });
     await clickButtonByText("", "닫기");
     await clickButtonByText("현장 배부");
   });

@@ -298,23 +298,36 @@ export default function App() {
       } else if (event.key === "?" && !isTextEntryTarget(event.target)) {
         event.preventDefault();
         setHelpOpen(true);
-      } else if (modified && event.key === "Enter") {
+      } else if (
+        modified &&
+        !isTextEntryTarget(event.target) &&
+        event.key === "Enter"
+      ) {
         event.preventDefault();
         const person = visiblePeople.find(
           (candidate) => candidate.personId === selectedPersonId,
         );
         if (person) void defaultDistribution(person);
-      } else if (modified && event.key.toLowerCase() === "n") {
+      } else if (
+        modified &&
+        !isTextEntryTarget(event.target) &&
+        event.key.toLowerCase() === "n"
+      ) {
         event.preventDefault();
         setDialog({ type: "draft" });
       } else if (
         modified &&
+        !isTextEntryTarget(event.target) &&
         event.shiftKey &&
         event.key.toLowerCase() === "m"
       ) {
         event.preventDefault();
         quickItemRef.current?.focus();
-      } else if (modified && event.key.toLowerCase() === "z") {
+      } else if (
+        modified &&
+        !isTextEntryTarget(event.target) &&
+        event.key.toLowerCase() === "z"
+      ) {
         event.preventDefault();
         if (event.shiftKey) void redoAction();
         else void undoAction();

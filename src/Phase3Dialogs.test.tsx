@@ -18,7 +18,7 @@ const person: PersonDetail = {
 };
 
 describe("RenewDialog", () => {
-  it("offers renewal year and quantity suggestions while keeping direct input", () => {
+  it("keeps renewal year and quantity as direct inputs without suggestion lists", () => {
     const markup = renderToStaticMarkup(
       <RenewDialog
         person={person}
@@ -29,10 +29,10 @@ describe("RenewDialog", () => {
       />,
     );
 
-    expect(markup).toContain('list="subscription-year-options"');
-    expect(markup).toContain('list="subscription-quantity-options"');
-    expect(markup).toContain('<datalist id="subscription-year-options">');
-    expect(markup).toContain('<option value="2026"');
-    expect(markup).toContain('<option value="10"');
+    expect(markup).not.toContain('list="subscription-year-options"');
+    expect(markup).not.toContain('list="subscription-quantity-options"');
+    expect(markup).not.toContain("<datalist");
+    expect(markup).toContain('name="issueYear"');
+    expect(markup).toContain('name="quantity"');
   });
 });

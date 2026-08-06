@@ -244,8 +244,8 @@ p {
   top: calc(100% + 7px);
   left: 50%;
   display: none;
-  width: fit-content;
-  max-width: min(20rem, calc(100vw - 24px));
+  width: max-content;
+  max-width: min(24rem, calc(100vw - 24px));
   transform: translateX(-50%);
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -421,17 +421,19 @@ p {
   width: 210px;
   align-items: baseline;
   justify-content: center;
-  gap: 0;
+  gap: 0.05em;
   overflow: hidden;
   font-size: 21px;
-  letter-spacing: 0.035em;
+  letter-spacing: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
 .issue-year-suffix {
-  margin-right: 0.22em;
+  margin-left: 0.08em;
+  margin-right: 0.16em;
+  letter-spacing: 0.04em;
 }
 
 .issue-year {
@@ -443,8 +445,13 @@ p {
   display: grid;
   width: 5ch;
   grid-template-columns: 2ch 1ch 2ch;
-  letter-spacing: 0;
+  letter-spacing: 0.045em;
   text-align: center;
+}
+
+.issue-month-suffix {
+  margin-left: 0.12em;
+  letter-spacing: 0.08em;
 }
 
 .summary-grid {
@@ -452,7 +459,7 @@ p {
   width: clamp(340px, 42vw, 460px);
   min-width: 0;
   flex: 0 1 460px;
-  height: 50px;
+  height: 58px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow: hidden;
   border: 1px solid var(--line);
@@ -467,7 +474,8 @@ p {
   align-content: center;
   justify-items: center;
   overflow: hidden;
-  padding: 0 10px;
+  min-height: 58px;
+  padding: 7px 10px 8px;
   border-right: 1px solid var(--line);
   text-align: center;
 }
@@ -477,6 +485,7 @@ p {
 }
 
 .summary-grid span {
+  line-height: 1.25;
   color: var(--muted);
   font-size: var(--font-sm);
 }
@@ -486,9 +495,9 @@ p {
   width: 100%;
   min-width: 0;
   overflow: hidden;
-  margin-top: 2px;
+  margin-top: 4px;
   font-size: var(--font-lg);
-  line-height: 17px;
+  line-height: 20px;
   text-overflow: ellipsis;
   text-align: center;
   white-space: nowrap;

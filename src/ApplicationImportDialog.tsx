@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   type ApplicationPreviewRow,
@@ -7,6 +7,7 @@ import {
   importApplications,
   previewApplications,
 } from "./applicationImport";
+import { insertAtSelection } from "./textEditing";
 
 const DEFAULT_MAPPING: ColumnMapping = {
   submittedAt: 1,
@@ -36,6 +37,7 @@ export function ApplicationImportDialog({
   const [decisions, setDecisions] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const rawInputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const closeWithEscape = (event: KeyboardEvent) => {
@@ -142,19 +144,40 @@ export function ApplicationImportDialog({
             ×
           </button>
         </div>
-        <p className="dialog-description">
-          Google 응답 시트에서 행을 복사해 붙여넣으세요. 제출 시각이 없는 행은
-          현재 선택한 {issueYear}년 호로 해석하며, 입금 여부는 저장하지
-          않습니다.
+        <p className="dialog-description import-description">
+          <span>Google 응답 시트에서 행을 복사해 붙여넣으세요.</span>
+          <span>
+            제출 시각이 없는 행은 현재 선택한 {issueYear}년 호로 해석하며, 입금
+            여부는 저장하지 않습니다.
+          </span>
         </p>
         <label className="field">
           응답 행
           <textarea
             data-testid="application-paste-input"
+            ref={rawInputRef}
             autoFocus
             rows={6}
             value={text}
             onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Tab" || event.shiftKey) return;
+              event.preventDefault();
+              const textarea = event.currentTarget;
+              const inserted = insertAtSelection(
+                textarea.value,
+                textarea.selectionStart,
+                textarea.selectionEnd,
+                "\t",
+              );
+              setText(inserted.value);
+              requestAnimationFrame(() => {
+                const next = rawInputRef.current;
+                if (!next) return;
+                next.selectionStart = inserted.caret;
+                next.selectionEnd = inserted.caret;
+              });
+            }}
             placeholder={
               "2026. 2. 1 오후 7:48:08\t홍길동\t95\t010-1234-5678\t1-2월호\t1"
             }
@@ -176,9 +199,18 @@ export function ApplicationImportDialog({
         {preview && !preview.needsMapping && (
           <>
             <div className="import-summary" role="status">
-              <span>바로 추가 {preview.readyCount}건</span>
-              <span>확인 필요 {preview.warningCount}건</span>
-              <span>오류 {preview.errorCount}건</span>
+              <span>
+                <b>바로 추가</b>
+                <strong>{preview.readyCount}건</strong>
+              </span>
+              <span>
+                <b>확인 필요</b>
+                <strong>{preview.warningCount}건</strong>
+              </span>
+              <span className={preview.errorCount ? "has-errors" : undefined}>
+                <b>오류</b>
+                <strong>{preview.errorCount}건</strong>
+              </span>
             </div>
             {preview.ignoredPaymentColumn && (
               <p className="payment-notice">
@@ -304,12 +336,16 @@ function ColumnMappingForm({
     ["quantity", "수량"],
   ];
   return (
-    <div className="mapping-panel">
-      <strong>열 순서를 자동으로 찾지 못했습니다.</strong>
-      <p>붙여넣은 첫 번째 열을 1로 하여 각 열 번호를 지정하세요.</p>
-      <div>
+    <section className="mapping-panel" aria-labelledby="mapping-panel-title">
+      <div className="mapping-panel-copy">
+        <strong id="mapping-panel-title">
+          열 순서를 자동으로 찾지 못했습니다.
+        </strong>
+        <p>붙여넣은 첫 번째 열을 1로 하여 각 열 번호를 지정하세요.</p>
+      </div>
+      <div className="mapping-fields">
         {fields.map(([key, label]) => (
-          <label key={key}>
+          <label className="mapping-field" key={key}>
             {label}
             <input
               type="number"
@@ -340,7 +376,7 @@ function ColumnMappingForm({
           QT 신청자 직접 추가
         </button>
       </div>
-    </div>
+    </section>
   );
 }
 
