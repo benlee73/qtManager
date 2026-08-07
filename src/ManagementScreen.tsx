@@ -45,6 +45,8 @@ export function ManagementScreen({
   recordAction,
   focusPersonId,
   onFocusConsumed,
+  renewPersonId,
+  onRenewConsumed,
   onExternalChange,
   onStateImported,
 }: {
@@ -53,6 +55,8 @@ export function ManagementScreen({
   recordAction: (action: ReversibleAction) => void;
   focusPersonId?: string | null;
   onFocusConsumed?: () => void;
+  renewPersonId?: string | null;
+  onRenewConsumed?: () => void;
   onExternalChange?: () => void;
   onStateImported?: () => void;
 }) {
@@ -115,6 +119,12 @@ export function ManagementScreen({
     onFocusConsumed,
     query,
   ]);
+
+  useEffect(() => {
+    if (!renewPersonId || selection.detail?.id !== renewPersonId) return;
+    setDialog({ type: "renew", person: selection.detail });
+    onRenewConsumed?.();
+  }, [onRenewConsumed, renewPersonId, selection.detail]);
 
   async function mutate(
     work: () => Promise<unknown>,

@@ -198,13 +198,16 @@ describe("QT Manager desktop flow", () => {
     await setInput('[data-testid="people-search"]', `00 ${expiredName}`);
     await waitForText('[data-testid="person-row"]', "구독 만료");
     expect(
-      await browser.execute(
-        () =>
-          document.querySelector<HTMLButtonElement>(
-            '[data-testid="distribute"]',
-          )?.disabled,
-      ),
-    ).toBe(true);
+      await browser.execute(() => {
+        const button = document.querySelector<HTMLButtonElement>(
+          '[data-testid="renew-subscription"]',
+        );
+        return {
+          disabled: button?.disabled ?? null,
+          label: button?.textContent?.trim() ?? "",
+        };
+      }),
+    ).toEqual({ disabled: false, label: "구독 갱신" });
 
     await setInput(
       '[data-testid="people-search"]',
@@ -256,6 +259,32 @@ describe("QT Manager desktop flow", () => {
             document.querySelector('[data-testid="edit-person-form"]') === null,
         ),
       { timeoutMsg: "Escape로 신청자 수정 창이 닫히지 않았습니다." },
+    );
+    await clickButtonByText("구독 갱신");
+    await waitForText(
+      "#management-dialog-title",
+      `${expiredName} · 구독 추가·갱신`,
+    );
+    await browser.execute(() =>
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
+    );
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () => document.querySelector('[data-testid="renew-form"]') === null,
+        ),
+      { timeoutMsg: "만료 신청자 갱신 창이 Escape로 닫히지 않았습니다." },
+    );
+    await dispatchShortcut("1");
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.querySelector('[data-testid="people-search"]') !== null,
+        ),
+      {
+        timeoutMsg: "갱신 창을 닫은 뒤 현장 배부 화면으로 돌아오지 못했습니다.",
+      },
     );
     await invokeTauri("renew_subscription_command", {
       request: {

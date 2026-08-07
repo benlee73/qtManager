@@ -39,6 +39,7 @@ describe("PersonRow", () => {
         onCancelDistribution={vi.fn()}
         onPartial={vi.fn()}
         onViewDetails={vi.fn()}
+        onRenew={vi.fn()}
         onMemo={vi.fn()}
         onEdit={vi.fn()}
       />,
@@ -63,6 +64,7 @@ describe("PersonRow", () => {
         onCancelDistribution={vi.fn()}
         onPartial={vi.fn()}
         onViewDetails={vi.fn()}
+        onRenew={vi.fn()}
         onMemo={vi.fn()}
         onEdit={vi.fn()}
       />,
@@ -86,11 +88,42 @@ describe("PersonRow", () => {
         onCancelDistribution={vi.fn()}
         onPartial={vi.fn()}
         onViewDetails={vi.fn()}
+        onRenew={vi.fn()}
         onMemo={vi.fn()}
         onEdit={vi.fn()}
       />,
     );
 
     expect(markup).toContain("상세 정보 보기");
+  });
+
+  it("keeps the renewal action enabled for an expired subscription", () => {
+    const markup = renderToStaticMarkup(
+      <PersonRow
+        person={{
+          ...person,
+          subscriptionStatus: "구독 만료",
+          distributionStatus: "대상 아님",
+          canDistribute: false,
+        }}
+        selected={false}
+        busy={false}
+        openMenu={null}
+        onOpenMenu={vi.fn()}
+        onOpenContextMenu={vi.fn()}
+        onSelect={vi.fn()}
+        onDistribute={vi.fn()}
+        onCancelDistribution={vi.fn()}
+        onPartial={vi.fn()}
+        onViewDetails={vi.fn()}
+        onRenew={vi.fn()}
+        onMemo={vi.fn()}
+        onEdit={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain('data-testid="renew-subscription"');
+    expect(markup).not.toContain('disabled=""');
+    expect(markup).toContain("구독 갱신");
   });
 });

@@ -64,6 +64,9 @@ export default function App() {
   const [managementFocusId, setManagementFocusId] = useState<string | null>(
     null,
   );
+  const [managementRenewPersonId, setManagementRenewPersonId] = useState<
+    string | null
+  >(null);
   const [theme, setTheme] = useState<Theme>(() => readStoredTheme());
   const [helpOpen, setHelpOpen] = useState(false);
   const [issue, setIssue] = useState<Issue>(() => recommendedIssue());
@@ -539,6 +542,8 @@ export default function App() {
           recordAction={recordAction}
           focusPersonId={managementFocusId}
           onFocusConsumed={() => setManagementFocusId(null)}
+          renewPersonId={managementRenewPersonId}
+          onRenewConsumed={() => setManagementRenewPersonId(null)}
           onExternalChange={() => setRedoStack([])}
           onStateImported={clearHistory}
         />
@@ -782,6 +787,11 @@ export default function App() {
                   onPartial={() => setDialog({ type: "partial", person })}
                   onViewDetails={() => {
                     setManagementFocusId(person.personId);
+                    setScreen("management");
+                  }}
+                  onRenew={() => {
+                    setManagementFocusId(person.personId);
+                    setManagementRenewPersonId(person.personId);
                     setScreen("management");
                   }}
                   onMemo={() =>
@@ -1153,6 +1163,7 @@ export function PersonRow({
   onCancelDistribution,
   onPartial,
   onViewDetails,
+  onRenew,
   onMemo,
   onEdit,
   rowRef,
@@ -1168,11 +1179,13 @@ export function PersonRow({
   onCancelDistribution: () => void;
   onPartial: () => void;
   onViewDetails: () => void;
+  onRenew: () => void;
   onMemo: () => void;
   onEdit: () => void;
   rowRef?: (element: HTMLElement | null) => void;
 }) {
   const headline = subscriptionHeadline(person);
+  const isExpired = person.subscriptionStatus === "구독 만료";
   return (
     <article
       ref={rowRef}
@@ -1237,17 +1250,20 @@ export function PersonRow({
               ? "cancel-distribution-button"
               : "primary-button"
           }
-          data-testid="distribute"
+          data-testid={isExpired ? "renew-subscription" : "distribute"}
           type="button"
           disabled={
-            (!person.canDistribute &&
-              person.distributionStatus !== "배부 완료") ||
-            busy
+            isExpired
+              ? busy
+              : (!person.canDistribute &&
+                  person.distributionStatus !== "배부 완료") ||
+                busy
           }
           onClick={(event) => {
             event.stopPropagation();
             if (person.distributionStatus === "배부 완료")
               onCancelDistribution();
+            else if (isExpired) onRenew();
             else onDistribute();
           }}
         >
