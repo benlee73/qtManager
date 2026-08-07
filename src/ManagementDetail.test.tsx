@@ -131,6 +131,7 @@ describe("ManagementPersonList", () => {
 
     expect(markup).not.toContain("010-0000-0000");
     expect(markup).toContain('data-testid="management-person-primary"');
+    expect(markup).toContain('data-person-id="person-one"');
     expect(markup).not.toContain('data-testid="management-person-meta"');
     expect(markup).not.toContain('data-testid="management-person-period"');
     expect(markup).toContain(

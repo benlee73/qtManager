@@ -203,23 +203,13 @@ export function HelpPanel({
                 <li>
                   <div className="help-step-copy">
                     <strong>찾기</strong>
-                    <span>
-                      검색창에 이름 일부, 또래 또는 또래+이름을 입력합니다.
-                    </span>
+                    <span>검색창에 이름 또는 또래를 입력합니다.</span>
                   </div>
                 </li>
                 <li>
                   <div className="help-step-copy">
                     <strong>배부</strong>
                     <span>책을 건넨 뒤 각 행의 ‘N권 배부’를 누릅니다.</span>
-                  </div>
-                </li>
-                <li>
-                  <div className="help-step-copy">
-                    <strong>실수 복구</strong>
-                    <span>
-                      배부 취소 확인창 또는 상단 되돌리기를 사용합니다.
-                    </span>
                   </div>
                 </li>
               </ol>
@@ -231,23 +221,14 @@ export function HelpPanel({
               sectionRef={(element) => registerSection("distribution", element)}
             >
               <div className="help-card-grid">
-                <HelpCard title="찾기">
-                  <HelpList>
-                    <li>이름 일부는 입력하는 즉시 결과가 바뀝니다.</li>
-                    <li>두 자리 또래 또는 ‘94 홍’처럼 조합해 검색합니다.</li>
-                    <li>
-                      전화번호는 신청자 관리에서 검색하고 현장 배부에서는
-                      사용하지 않습니다.
-                    </li>
-                  </HelpList>
-                </HelpCard>
                 <HelpCard title="배부">
                   <HelpList>
                     <li>
                       2권 신청자는 기본 버튼 한 번으로 남은 2권을 처리합니다.
                     </li>
                     <li>
-                      1권만 전달했다면 행의 메뉴에서 ‘일부만’을 선택합니다.
+                      1권만 전달했다면 점 세 개를 누르거나 행을 마우스 오른쪽
+                      버튼으로 눌러 ‘일부만 배부’를 선택합니다.
                     </li>
                     <li>만료·대상 아님 신청자는 일반 배부가 막힙니다.</li>
                   </HelpList>
@@ -257,28 +238,7 @@ export function HelpPanel({
                     <li>
                       필터에서 미배부·일부·완료·만료를 여러 개 선택합니다.
                     </li>
-                    <li>검색 중에도 선택한 필터가 그대로 적용됩니다.</li>
                     <li>표 머리글을 눌러 오름차순·내림차순을 바꿉니다.</li>
-                  </HelpList>
-                </HelpCard>
-                <HelpCard title="전화번호와 구독">
-                  <HelpList>
-                    <li>
-                      현장 배부 표는 전화번호 열을 숨기고 이름·또래로 빠르게
-                      찾습니다.
-                    </li>
-                    <li>
-                      전체 전화번호는 행 툴팁·접근성 이름, 신청자 관리 상세와
-                      정보 수정 화면에서 확인합니다.
-                    </li>
-                    <li>
-                      구독 종료는 날짜 대신 ‘2027년 3~4월호까지’처럼 마지막 대상
-                      QT 호로 표시합니다.
-                    </li>
-                    <li>
-                      실제 배부 자격은 현장 배부에서 선택한 QT 호가 구독 기간에
-                      포함되는지로 판단합니다.
-                    </li>
                   </HelpList>
                 </HelpCard>
               </div>
@@ -297,8 +257,8 @@ export function HelpPanel({
                       있습니다.
                     </li>
                     <li>
-                      신청자 행의 점 세 개 또는 우클릭에서 추가하면 그 신청자와
-                      연결됩니다.
+                      신청자 행의 점 세 개 또는 우클릭에서 메모를 추가하면 그
+                      신청자와 연결됩니다.
                     </li>
                     <li>
                       신청자 관리의 상세·정보 수정 화면에서도 연락처 아래에 연결
@@ -331,7 +291,8 @@ export function HelpPanel({
               </div>
               <p className="help-note">
                 메모 추가·수정·보관·복원은 저장 직후 되돌리기와 다시 실행을
-                지원합니다. 새 동작을 하면 이전 다시 실행 대기는 사라집니다.
+                지원합니다.
+                <br />새 동작을 하면 이전 다시 실행 대기는 사라집니다.
               </p>
             </HelpSection>
 
@@ -358,8 +319,8 @@ export function HelpPanel({
                 </HelpCard>
                 <HelpCard title="상세에서 확인">
                   <HelpList>
-                    <li>신청자 목록에는 또래와 이름만 기본 표시됩니다.</li>
                     <li>정보 보완이나 보관 상태는 작은 표시로 구분합니다.</li>
+                    <li>신청자 목록에는 또래와 이름만 기본 표시됩니다.</li>
                     <li>
                       `정보 보완 필요 N명`은 현장 간이 등록 상태가 아직 보완되지
                       않은 신청자 수입니다. 일반 등록자의 또래 누락만으로는 이
@@ -374,6 +335,10 @@ export function HelpPanel({
                     <li>
                       구독 수·마지막 호는 상세에서 확인합니다. 구독 표는 오늘이
                       포함된 호를 기준으로 현재·예정·지난·보관을 나눕니다.
+                    </li>
+                    <li>
+                      실제 배부 자격은 현장 배부에서 선택한 QT 호가 구독 기간에
+                      포함되는지로 판단합니다.
                     </li>
                     <li>
                       현장 배부 표의 점 세 개나 우클릭 메뉴에서 `상세 정보
@@ -468,38 +433,56 @@ export function HelpPanel({
               title="단축키"
               sectionRef={(element) => registerSection("shortcuts", element)}
             >
-              <HelpCard title="자주 쓰는 동작">
-                <dl className="shortcut-list">
-                  <div>
-                    <dt>/</dt>
-                    <dd>검색창으로 이동</dd>
-                  </div>
-                  <div>
-                    <dt>⌘/Ctrl + Enter</dt>
-                    <dd>선택한 사람 기본 배부</dd>
-                  </div>
-                  <div>
-                    <dt>⌘/Ctrl + N</dt>
-                    <dd>현장 간이 등록</dd>
-                  </div>
-                  <div>
-                    <dt>⌘/Ctrl + Shift + M</dt>
-                    <dd>메모 입력으로 이동</dd>
-                  </div>
-                  <div>
-                    <dt>⌘/Ctrl + Z</dt>
-                    <dd>최근 동작 되돌리기</dd>
-                  </div>
-                  <div>
-                    <dt>⌘/Ctrl + Shift + Z</dt>
-                    <dd>되돌린 동작 다시 실행</dd>
-                  </div>
-                  <div>
-                    <dt>?</dt>
-                    <dd>도움말 열기</dd>
-                  </div>
-                </dl>
-              </HelpCard>
+              <div className="help-card-grid">
+                <HelpCard title="자주 쓰는 동작">
+                  <dl className="shortcut-list">
+                    <div>
+                      <dt>/</dt>
+                      <dd>검색창으로 이동</dd>
+                    </div>
+                    <div>
+                      <dt>⌘/Ctrl + Enter</dt>
+                      <dd>선택한 사람 기본 배부</dd>
+                    </div>
+                    <div>
+                      <dt>⌘/Ctrl + N</dt>
+                      <dd>현장 간이 등록</dd>
+                    </div>
+                    <div>
+                      <dt>⌘/Ctrl + Shift + M</dt>
+                      <dd>메모 입력으로 이동</dd>
+                    </div>
+                    <div>
+                      <dt>⌘/Ctrl + Z</dt>
+                      <dd>최근 동작 되돌리기</dd>
+                    </div>
+                    <div>
+                      <dt>⌘/Ctrl + Shift + Z</dt>
+                      <dd>되돌린 동작 다시 실행</dd>
+                    </div>
+                    <div>
+                      <dt>?</dt>
+                      <dd>도움말 열기</dd>
+                    </div>
+                  </dl>
+                </HelpCard>
+                <HelpCard title="검색과 이동">
+                  <HelpList>
+                    <li>검색창에서 `ArrowDown`으로 첫 신청자를 선택합니다.</li>
+                    <li>
+                      목록에서 `ArrowUp`·`ArrowDown`으로 한 명씩 이동합니다.
+                    </li>
+                    <li>
+                      배부 행에서 `Enter`를 누르면 확인창이 열리고, 다시
+                      `Enter`를 누르면 확정합니다.
+                    </li>
+                    <li>
+                      배부 화면의 `ArrowRight`는 메모 입력으로 이동합니다.
+                      `Enter`는 저장하고 `Shift+Enter`는 줄바꿈합니다.
+                    </li>
+                  </HelpList>
+                </HelpCard>
+              </div>
             </HelpSection>
 
             <HelpSection

@@ -25,6 +25,7 @@ export type Phase2Dialog =
   | { type: "purchase" }
   | { type: "partial"; person: DeskPerson }
   | { type: "cancel-distribution"; person: DeskPerson }
+  | { type: "confirm-distribution"; person: DeskPerson }
   | null;
 
 export function Phase2DialogContent({
@@ -298,6 +299,53 @@ export function Phase2DialogContent({
             배부 취소
           </button>
         </div>
+      </FormDialog>
+    );
+  }
+  if (dialog.type === "confirm-distribution") {
+    return (
+      <FormDialog title="배부하시겠습니까?" onClose={onClose}>
+        <form
+          data-testid="confirm-distribution-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const allocations = distributionAllocations(dialog.person);
+            void mutate(
+              () => distributeAllocations(issue, allocations),
+              `${dialog.person.name} · ${dialog.person.remainingQuantity}권 배부했습니다.`,
+            ).then((saved) => {
+              if (saved) {
+                recordAction({
+                  description: `${dialog.person.name} 배부`,
+                  undo: () => undoDistributionAllocations(issue, allocations),
+                  redo: () => distributeAllocations(issue, allocations),
+                });
+              }
+            });
+          }}
+        >
+          <p className="dialog-description">
+            {dialog.person.name}님에게 이번 호 {dialog.person.remainingQuantity}
+            권을 배부합니다.
+          </p>
+          <div className="confirm-actions">
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={onClose}
+            >
+              돌아가기
+            </button>
+            <button
+              className="primary-button"
+              type="submit"
+              autoFocus
+              disabled={busy}
+            >
+              {busy ? "배부 중…" : "배부하기"}
+            </button>
+          </div>
+        </form>
       </FormDialog>
     );
   }

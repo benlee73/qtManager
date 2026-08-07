@@ -135,6 +135,10 @@ export function ManagementScreen({
     }
   }
 
+  const visibleManagementPeople = draftOnly
+    ? profileCompletionPeople(management?.people ?? [])
+    : (management?.people ?? []);
+
   return (
     <main className="app-shell management-shell">
       <section className="management-heading">
@@ -194,6 +198,20 @@ export function ManagementScreen({
                 setDraftOnly(false);
                 setQuery(event.target.value);
               }}
+              onKeyDown={(event) => {
+                if (event.key !== "ArrowDown" || event.nativeEvent.isComposing)
+                  return;
+                const firstPerson = visibleManagementPeople[0];
+                if (!firstPerson) return;
+                event.preventDefault();
+                void loader.select(firstPerson.id);
+                const firstRow = Array.from(
+                  document.querySelectorAll<HTMLElement>(
+                    '[data-testid="management-person"]',
+                  ),
+                ).find((row) => row.dataset.personId === firstPerson.id);
+                firstRow?.focus();
+              }}
               placeholder="이름, 또래, 전화번호 검색"
               aria-label="관리할 QT 신청자 검색"
             />
@@ -241,11 +259,7 @@ export function ManagementScreen({
             })()}
           </div>
           <ManagementPersonList
-            people={
-              draftOnly
-                ? profileCompletionPeople(management?.people ?? [])
-                : (management?.people ?? [])
-            }
+            people={visibleManagementPeople}
             selectedId={selection.selectedId}
             onSelect={(id) => void loader.select(id)}
           />

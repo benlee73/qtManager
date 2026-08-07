@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
 
 import { validateDraftInput } from "./draftValidation";
+import { Phase2DialogContent } from "./Phase2Dialogs";
+import type { DeskPerson } from "./phase2";
 
 const validInput = {
   name: "현장 신청자",
@@ -31,5 +34,44 @@ describe("현장 간이 등록 입력", () => {
     expect(validateDraftInput({ ...validInput, quantity: 0 })).toBe(
       "수량은 1권 이상 입력하세요.",
     );
+  });
+});
+
+describe("배부 확인", () => {
+  it("renders a focused submit action for the second Enter", () => {
+    const person: DeskPerson = {
+      personId: "person-confirm",
+      subscriptionId: "subscription-confirm",
+      distributionTargets: [],
+      name: "가상 신청자",
+      cohort: "00",
+      phone: null,
+      personStatus: "정상",
+      subscriptionStatus: "유효",
+      distributionStatus: "미배부",
+      targetQuantity: 2,
+      distributedQuantity: 0,
+      remainingQuantity: 2,
+      lastIssue: "2026년 11~12월호",
+      endDate: "2026-12-31",
+      isLastIssue: false,
+      hasMemo: false,
+      canDistribute: true,
+    };
+    const markup = renderToStaticMarkup(
+      <Phase2DialogContent
+        dialog={{ type: "confirm-distribution", person }}
+        issue={{ year: 2026, startMonth: 9 }}
+        busy={false}
+        onClose={vi.fn()}
+        mutate={vi.fn().mockResolvedValue(true)}
+        recordAction={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain("배부하시겠습니까?");
+    expect(markup).toContain("이번 호 2권");
+    expect(markup).toContain('data-testid="confirm-distribution-form"');
+    expect(markup).toContain('type="submit" autofocus');
   });
 });

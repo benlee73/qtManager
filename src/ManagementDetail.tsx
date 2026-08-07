@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTextDraft } from "./drafts";
+import { listIndexAfterKey } from "./keyboardNavigation";
 
 import type {
   LinkedMemo,
@@ -26,6 +27,8 @@ export function ManagementPersonList({
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
+  const rowRefs = useRef(new Map<string, HTMLButtonElement>());
+
   return (
     <div className="management-person-list">
       {people.map((person) => {
@@ -53,10 +56,36 @@ export function ManagementPersonList({
                 : "management-person-row"
             }
             data-testid="management-person"
+            data-person-id={person.id}
             aria-pressed={selected}
             aria-label={accessibleLabel}
             title={accessibleLabel}
+            ref={(element) => {
+              if (element) rowRefs.current.set(person.id, element);
+              else rowRefs.current.delete(person.id);
+            }}
             onClick={() => onSelect(person.id)}
+            onKeyDown={(event) => {
+              if (
+                (event.key !== "ArrowDown" && event.key !== "ArrowUp") ||
+                event.nativeEvent.isComposing
+              ) {
+                return;
+              }
+              event.preventDefault();
+              const currentIndex = people.findIndex(
+                (candidate) => candidate.id === person.id,
+              );
+              const nextIndex = listIndexAfterKey(
+                people.length,
+                currentIndex,
+                event.key === "ArrowDown" ? "down" : "up",
+              );
+              if (nextIndex === null) return;
+              const nextPerson = people[nextIndex];
+              onSelect(nextPerson.id);
+              rowRefs.current.get(nextPerson.id)?.focus();
+            }}
           >
             <span className="cohort">{person.cohort ?? "--"}</span>
             <span className="management-person-copy">

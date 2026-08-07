@@ -51,6 +51,7 @@ import {
 import { useNotifications } from "./useNotifications";
 import { createDistributionLoader } from "./distributionLoader";
 import { useTextDraft } from "./drafts";
+import { listIndexAfterKey } from "./keyboardNavigation";
 
 export default function App() {
   const [screen, setScreen] = useState<"distribution" | "management">(
@@ -292,65 +293,109 @@ export default function App() {
   useEffect(() => {
     function handleKeydown(event: KeyboardEvent) {
       const modified = event.metaKey || event.ctrlKey;
+      const textEntry = isTextEntryTarget(event.target);
+      const activePersonId =
+        selectedPersonId ??
+        document.querySelector<HTMLElement>(
+          '[data-testid="person-row"][aria-selected="true"]',
+        )?.dataset.personId ??
+        null;
+
+      // WebKit/Tauri can keep focus on the dialog backdrop after a modal is
+      // mounted. Handle the confirmation's second Enter at the window level
+      // as well so keyboard users do not depend on native button activation.
+      if (
+        dialog?.type === "confirm-distribution" &&
+        event.key === "Enter" &&
+        !event.shiftKey &&
+        !event.altKey &&
+        !modified &&
+        !textEntry &&
+        !event.isComposing
+      ) {
+        event.preventDefault();
+        document
+          .querySelector<HTMLFormElement>(
+            '[data-testid="confirm-distribution-form"]',
+          )
+          ?.requestSubmit();
+        return;
+      }
+
+      // Dialogs own their keyboard interaction (including Enter and Escape).
+      // Keeping the global shortcuts out of an open dialog prevents the first
+      // Enter that opens a confirmation from submitting it immediately.
+      if (dialog || helpOpen) return;
+
       if (event.key === "/" && !isTextEntryTarget(event.target)) {
         event.preventDefault();
         searchRef.current?.focus();
-      } else if (event.key === "?" && !isTextEntryTarget(event.target)) {
+      } else if (event.key === "?" && !textEntry) {
         event.preventDefault();
         setHelpOpen(true);
-      } else if (
-        modified &&
-        !isTextEntryTarget(event.target) &&
-        event.key === "Enter"
-      ) {
+      } else if (modified && !textEntry && event.key === "Enter") {
         event.preventDefault();
         const person = visiblePeople.find(
-          (candidate) => candidate.personId === selectedPersonId,
+          (candidate) => candidate.personId === activePersonId,
         );
         if (person) void defaultDistribution(person);
       } else if (
-        modified &&
-        !isTextEntryTarget(event.target) &&
-        event.key.toLowerCase() === "n"
+        screen === "distribution" &&
+        !modified &&
+        !textEntry &&
+        event.key === "Enter" &&
+        event.target instanceof HTMLElement &&
+        event.target.matches('[data-testid="person-row"]')
       ) {
+        const person = visiblePeople.find(
+          (candidate) => candidate.personId === activePersonId,
+        );
+        if (person?.canDistribute) {
+          event.preventDefault();
+          setDialog({ type: "confirm-distribution", person });
+        }
+      } else if (modified && !textEntry && event.key.toLowerCase() === "n") {
         event.preventDefault();
         setDialog({ type: "draft" });
       } else if (
         modified &&
-        !isTextEntryTarget(event.target) &&
+        !textEntry &&
         event.shiftKey &&
         event.key.toLowerCase() === "m"
       ) {
         event.preventDefault();
         quickItemRef.current?.focus();
-      } else if (
-        modified &&
-        !isTextEntryTarget(event.target) &&
-        event.key.toLowerCase() === "z"
-      ) {
+      } else if (modified && !textEntry && event.key.toLowerCase() === "z") {
         event.preventDefault();
         if (event.shiftKey) void redoAction();
         else void undoAction();
       } else if (
-        !isTextEntryTarget(event.target) &&
+        screen === "distribution" &&
+        !textEntry &&
+        event.key === "ArrowRight" &&
+        activePersonId
+      ) {
+        event.preventDefault();
+        quickItemRef.current?.focus();
+      } else if (
+        screen === "distribution" &&
+        !textEntry &&
         (event.key === "ArrowDown" || event.key === "ArrowUp")
       ) {
         event.preventDefault();
         // 브라우저가 행 클릭 직후 키 이벤트를 전달하는 경계에서는 React
         // 상태보다 DOM의 선택 표시가 먼저 반영될 수 있다. 두 값을 함께
         // 읽어 방향키가 첫 행으로 되돌아가지 않게 한다.
-        const domSelectedId = document.querySelector<HTMLElement>(
-          '[data-testid="person-row"][aria-selected="true"]',
-        )?.dataset.personId;
-        const anchorId = selectedPersonId ?? domSelectedId ?? null;
         const current = visiblePeople.findIndex(
-          (person) => person.personId === anchorId,
+          (person) => person.personId === activePersonId,
         );
-        const next =
-          event.key === "ArrowDown"
-            ? Math.min(current + 1, Math.max(visiblePeople.length - 1, 0))
-            : Math.max(current < 0 ? 0 : current - 1, 0);
-        const nextPersonId = visiblePeople[next]?.personId ?? null;
+        const next = listIndexAfterKey(
+          visiblePeople.length,
+          current,
+          event.key === "ArrowDown" ? "down" : "up",
+        );
+        const nextPersonId =
+          next === null ? null : (visiblePeople[next]?.personId ?? null);
         setSelectedPersonId(nextPersonId);
         if (nextPersonId) {
           personRowRefs.current.get(nextPersonId)?.focus();
@@ -369,8 +414,11 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeydown);
   }, [
     defaultDistribution,
+    dialog,
+    helpOpen,
     personContextMenu,
     redoAction,
+    screen,
     selectedPersonId,
     undoAction,
     visiblePeople,
@@ -550,6 +598,18 @@ export default function App() {
                   data-testid="people-search"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key !== "ArrowDown" ||
+                      event.nativeEvent.isComposing
+                    )
+                      return;
+                    const firstPerson = visiblePeople[0];
+                    if (!firstPerson) return;
+                    event.preventDefault();
+                    setSelectedPersonId(firstPerson.personId);
+                    personRowRefs.current.get(firstPerson.personId)?.focus();
+                  }}
                   placeholder="또래 또는 이름 검색"
                   aria-label="QT 신청자 검색"
                 />
@@ -774,6 +834,17 @@ export default function App() {
                 onChange={(event) =>
                   quickItemDraft.setValue(event.target.value)
                 }
+                onKeyDown={(event) => {
+                  if (
+                    event.key !== "Enter" ||
+                    event.shiftKey ||
+                    event.nativeEvent.isComposing
+                  ) {
+                    return;
+                  }
+                  event.preventDefault();
+                  submitQuickItem();
+                }}
                 placeholder="메모를 입력하세요…"
               />
               <div>

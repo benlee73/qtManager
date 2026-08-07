@@ -857,6 +857,288 @@ describe("QT Manager desktop flow", () => {
     expect(quickFocused).toBe("quick-item");
   });
 
+  it("navigates distribution rows from search, confirms with Enter, and submits a memo", async () => {
+    const keyboardFixture = `가상키보드${Date.now()}`;
+    await registerE2ePerson(`${keyboardFixture}가`);
+    await registerE2ePerson(`${keyboardFixture}나`);
+    await setPersonFilterPreset("남은 배부");
+    await setInput('[data-testid="people-search"]', keyboardFixture);
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(
+          () => document.querySelectorAll('[data-testid="person-row"]').length,
+        )) === 2,
+      { timeoutMsg: "키보드 탐색용 신청자 두 명을 찾지 못했습니다." },
+    );
+
+    await browser.execute(() => {
+      const search = document.querySelector<HTMLInputElement>(
+        '[data-testid="people-search"]',
+      );
+      search?.focus();
+      search?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+      );
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const rows = [
+            ...document.querySelectorAll<HTMLElement>(
+              '[data-testid="person-row"]',
+            ),
+          ];
+          return (
+            rows[0]?.getAttribute("aria-selected") === "true" &&
+            document.activeElement === rows[0]
+          );
+        }),
+      { timeoutMsg: "검색창에서 첫 신청자 행으로 이동하지 못했습니다." },
+    );
+
+    await browser.execute(() => {
+      const row = document.querySelector<HTMLElement>(
+        '[data-testid="person-row"]',
+      );
+      row?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+      );
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const rows = [
+            ...document.querySelectorAll<HTMLElement>(
+              '[data-testid="person-row"]',
+            ),
+          ];
+          return (
+            rows[1]?.getAttribute("aria-selected") === "true" &&
+            document.activeElement === rows[1]
+          );
+        }),
+      { timeoutMsg: "아래 방향키로 다음 신청자를 선택하지 못했습니다." },
+    );
+
+    await browser.execute(() => {
+      const row = document.querySelector<HTMLElement>(
+        '[data-testid="person-row"][aria-selected="true"]',
+      );
+      row?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }),
+      );
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const rows = [
+            ...document.querySelectorAll<HTMLElement>(
+              '[data-testid="person-row"]',
+            ),
+          ];
+          return (
+            rows[0]?.getAttribute("aria-selected") === "true" &&
+            document.activeElement === rows[0]
+          );
+        }),
+      { timeoutMsg: "위 방향키로 이전 신청자를 선택하지 못했습니다." },
+    );
+    await browser.execute(() => {
+      const row = document.querySelector<HTMLElement>(
+        '[data-testid="person-row"][aria-selected="true"]',
+      );
+      row?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+      );
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const rows = [
+            ...document.querySelectorAll<HTMLElement>(
+              '[data-testid="person-row"]',
+            ),
+          ];
+          return (
+            rows[1]?.getAttribute("aria-selected") === "true" &&
+            document.activeElement === rows[1]
+          );
+        }),
+      { timeoutMsg: "아래 방향키로 배부 대상 신청자에게 돌아가지 못했습니다." },
+    );
+
+    await browser.execute(() => {
+      const row = document.querySelector<HTMLElement>(
+        '[data-testid="person-row"][aria-selected="true"]',
+      );
+      row?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+    });
+    await waitForText("#dialog-title", "배부하시겠습니까?");
+    await browser.keys("Enter");
+    await waitForText(".toast", "배부했습니다");
+
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLElement>('[data-testid="person-row"]')
+        ?.focus();
+    });
+    await browser.keys("ArrowRight");
+    expect(await browser.execute(() => document.activeElement?.id ?? "")).toBe(
+      "quick-item",
+    );
+    await setInput("#quick-item", `키보드 메모 ${keyboardFixture}`);
+    await browser.keys("Enter");
+    await waitForText(".memo-list", `키보드 메모 ${keyboardFixture}`);
+
+    await browser.execute(() => {
+      const memo = document.querySelector<HTMLTextAreaElement>("#quick-item");
+      memo?.focus();
+    });
+    await setInput("#quick-item", "첫 줄");
+    expect(await browser.$("#quick-item").getValue()).toBe("첫 줄");
+    await browser.$("#quick-item").click();
+    const shiftEnter = await browser.execute(() => {
+      const memo = document.querySelector<HTMLTextAreaElement>("#quick-item");
+      if (!memo) throw new Error("메모 입력을 찾지 못했습니다.");
+      const event = new KeyboardEvent("keydown", {
+        key: "Enter",
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      memo.dispatchEvent(event);
+      return { defaultPrevented: event.defaultPrevented, value: memo.value };
+    });
+    // Shift+Enter는 textarea의 기본 줄바꿈에 맡기고 앱이 저장/초기화하지 않아야 한다.
+    expect(shiftEnter).toEqual({ defaultPrevented: false, value: "첫 줄" });
+  });
+
+  it("moves through management applicants from the search field and refreshes detail", async () => {
+    const keyboardFixture = `가상관리키보드${Date.now()}`;
+    await registerE2ePerson(`${keyboardFixture}가`);
+    await registerE2ePerson(`${keyboardFixture}나`);
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
+        ?.click();
+    });
+    await waitForText("h2", "신청자 관리");
+    await setInput('[data-testid="management-search"]', keyboardFixture);
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(
+          () =>
+            document.querySelectorAll('[data-testid="management-person"]')
+              .length,
+        )) === 2,
+      { timeoutMsg: "관리 키보드 탐색용 신청자 두 명을 찾지 못했습니다." },
+    );
+
+    await browser.execute(() => {
+      const search = document.querySelector<HTMLInputElement>(
+        '[data-testid="management-search"]',
+      );
+      search?.focus();
+      search?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+      );
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const rows = [
+            ...document.querySelectorAll<HTMLElement>(
+              '[data-testid="management-person"]',
+            ),
+          ];
+          return (
+            rows[0]?.getAttribute("aria-pressed") === "true" &&
+            document.activeElement === rows[0]
+          );
+        }),
+      { timeoutMsg: "관리 검색창에서 첫 신청자를 선택하지 못했습니다." },
+    );
+
+    await browser.execute(() => {
+      const row = document.querySelector<HTMLElement>(
+        '[data-testid="management-person"]',
+      );
+      row?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+      );
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const rows = [
+            ...document.querySelectorAll<HTMLElement>(
+              '[data-testid="management-person"]',
+            ),
+          ];
+          return (
+            rows[1]?.getAttribute("aria-pressed") === "true" &&
+            document.activeElement === rows[1]
+          );
+        }),
+      { timeoutMsg: "관리 목록에서 다음 신청자로 이동하지 못했습니다." },
+    );
+    await browser.execute(() => {
+      const row = document.querySelector<HTMLElement>(
+        '[data-testid="management-person"][aria-pressed="true"]',
+      );
+      row?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }),
+      );
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const rows = [
+            ...document.querySelectorAll<HTMLElement>(
+              '[data-testid="management-person"]',
+            ),
+          ];
+          return (
+            rows[0]?.getAttribute("aria-pressed") === "true" &&
+            document.activeElement === rows[0]
+          );
+        }),
+      {
+        timeoutMsg:
+          "관리 목록에서 위 방향키로 이전 신청자로 이동하지 못했습니다.",
+      },
+    );
+    await browser.execute(() => {
+      const row = document.querySelector<HTMLElement>(
+        '[data-testid="management-person"][aria-pressed="true"]',
+      );
+      row?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+      );
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const rows = [
+            ...document.querySelectorAll<HTMLElement>(
+              '[data-testid="management-person"]',
+            ),
+          ];
+          return (
+            rows[1]?.getAttribute("aria-pressed") === "true" &&
+            document.activeElement === rows[1]
+          );
+        }),
+      {
+        timeoutMsg:
+          "관리 목록에서 아래 방향키로 다음 신청자로 돌아가지 못했습니다.",
+      },
+    );
+    await waitForText('[data-testid="person-detail"]', `${keyboardFixture}나`);
+  });
+
   it("keeps one action menu open, closes it outside, toggles selection and filters the list", async () => {
     const menuFixture = `가상메뉴대상${Date.now()}`;
     await registerE2ePerson(menuFixture);
