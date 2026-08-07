@@ -113,7 +113,7 @@ describe("management loader selection/detail consistency", () => {
     });
   });
 
-  it("clears the previous detail immediately and keeps it empty when the current selection fails", async () => {
+  it("keeps the previous detail visible while the next selection loads", async () => {
     const { loader, detailRequests, selections, errors } = setup();
 
     const selectA = loader.select("person-a");
@@ -123,7 +123,7 @@ describe("management loader selection/detail consistency", () => {
     const selectB = loader.select("person-b");
     expect(selections.at(-1)).toEqual({
       selectedId: "person-b",
-      detail: null,
+      detail: detail("person-a"),
     });
 
     const failure = new Error("상세 조회 실패");

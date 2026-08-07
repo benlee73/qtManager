@@ -354,7 +354,13 @@ export default function App() {
 
       if (event.key === "/" && !isTextEntryTarget(event.target)) {
         event.preventDefault();
-        searchRef.current?.focus();
+        const targetSearch =
+          screen === "management"
+            ? document.querySelector<HTMLInputElement>(
+                '[data-testid="management-search"]',
+              )
+            : searchRef.current;
+        targetSearch?.focus();
       } else if (event.key === "?" && !textEntry) {
         event.preventDefault();
         setHelpOpen(true);

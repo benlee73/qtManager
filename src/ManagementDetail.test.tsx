@@ -201,6 +201,11 @@ describe("PersonDetailPanel", () => {
 
     expect(markup).toContain('data-testid="delete-person"');
     expect(markup).toContain("신청자 삭제");
+    expect(markup).toContain('data-testid="archive-person"');
+    expect(markup).toContain('data-testid="person-detail-actions"');
+    expect(markup).toContain("person-detail-action-archive");
+    expect(markup).toContain("person-detail-action-delete");
+    expect(markup).not.toContain('class="danger-link"');
   });
 
   it("does not add an empty-state sentence to the linked memo section", () => {

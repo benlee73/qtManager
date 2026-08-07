@@ -77,7 +77,14 @@ export function ManagementPersonList({
               if (element) rowRefs.current.set(person.id, element);
               else rowRefs.current.delete(person.id);
             }}
-            onClick={() => onSelect(person.id)}
+            onClick={(event) => {
+              onSelect(person.id);
+              // WebKit can leave focus on the document after a mouse click
+              // when the detail pane is updated asynchronously. Keep the
+              // clicked row as the keyboard anchor so the next ArrowUp/Down
+              // moves through applicants instead of scrolling the panel.
+              event.currentTarget.focus();
+            }}
             onKeyDown={(event) => {
               if (
                 (event.key !== "ArrowDown" && event.key !== "ArrowUp") ||
@@ -357,26 +364,32 @@ function PersonDetailContent({
         </div>
       </DetailSection>
 
-      <button
-        className="danger-link"
-        type="button"
-        disabled={busy}
-        onClick={() => onToggleArchived(detail)}
+      <div
+        className="person-detail-footer-actions"
+        data-testid="person-detail-actions"
       >
-        {detail.status === "보관됨" ? "보관 해제" : "이 신청자 보관"}
-      </button>
-      {onDelete && (
         <button
-          className="danger-link destructive-person-delete"
-          data-testid="delete-person"
+          className="person-detail-action person-detail-action-archive"
+          data-testid="archive-person"
           type="button"
           disabled={busy}
-          title="구독·배부·개별 구매·메모 이력이 없는 신청자만 영구 삭제할 수 있습니다."
-          onClick={() => void onDelete(detail)}
+          onClick={() => onToggleArchived(detail)}
         >
-          신청자 삭제
+          {detail.status === "보관됨" ? "보관 해제" : "신청자 보관"}
         </button>
-      )}
+        {onDelete && (
+          <button
+            className="person-detail-action person-detail-action-delete"
+            data-testid="delete-person"
+            type="button"
+            disabled={busy}
+            title="구독·배부·개별 구매·메모 이력이 없는 신청자만 영구 삭제할 수 있습니다."
+            onClick={() => void onDelete(detail)}
+          >
+            신청자 삭제
+          </button>
+        )}
+      </div>
       {memoDetail && (
         <MemoDetailDialog
           memo={{

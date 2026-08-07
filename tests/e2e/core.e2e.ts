@@ -1156,6 +1156,77 @@ describe("QT Manager desktop flow", () => {
       { timeoutMsg: "관리 검색창에서 첫 신청자를 선택하지 못했습니다." },
     );
 
+    // A mouse-selected row must remain the keyboard anchor. This catches the
+    // WebKit/Tauri case where the asynchronous detail refresh used to return
+    // focus to the scroll container and let ArrowDown scroll instead.
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLElement>(
+          '[data-testid="management-person"][aria-pressed="true"]',
+        )
+        ?.click();
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.activeElement?.matches(
+              '[data-testid="management-person"][aria-pressed="true"]',
+            ) ?? false,
+        ),
+      {
+        timeoutMsg: "마우스로 선택한 신청자 행에 포커스를 유지하지 못했습니다.",
+      },
+    );
+    await browser.keys("ArrowDown");
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const rows = [
+            ...document.querySelectorAll<HTMLElement>(
+              '[data-testid="management-person"]',
+            ),
+          ];
+          return (
+            rows[1]?.getAttribute("aria-pressed") === "true" &&
+            document.activeElement === rows[1] &&
+            document.querySelector(".detail-empty") === null
+          );
+        }),
+      {
+        timeoutMsg:
+          "마우스 선택 후 아래 방향키가 신청자 이동으로 동작하지 않았습니다.",
+      },
+    );
+    await browser.keys("ArrowUp");
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.activeElement?.matches(
+              '[data-testid="management-person"][aria-pressed="true"]',
+            ) ?? false,
+        ),
+      {
+        timeoutMsg:
+          "마우스 선택 후 위 방향키가 신청자 이동으로 동작하지 않았습니다.",
+      },
+    );
+    await browser.keys("/");
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.activeElement?.matches(
+              '[data-testid="management-search"]',
+            ) ?? false,
+        ),
+      {
+        timeoutMsg:
+          "신청자 관리 화면의 슬래시 단축키가 검색창으로 이동하지 않았습니다.",
+      },
+    );
+
     await browser.execute(() => {
       const row = document.querySelector<HTMLElement>(
         '[data-testid="management-person"][aria-pressed="true"]',
@@ -1841,7 +1912,7 @@ describe("QT Manager desktop flow", () => {
     expect(layout.fontMeta).toBe("13px");
     expect(layout.tableHeadFontSize).toBe("14px");
     expect(layout.summaryLabelFontSize).toBe("14px");
-    expect(layout.summaryCellPadding).toBe("9px 16px 10px");
+    expect(layout.summaryCellPadding).toBe("9px 20px 10px");
     expect(layout.toolbarBorderBottom).toBe("none");
     expect(layout.tableHeadBorderTop).toBe("none");
     expect(layout.tableHeadBorderBottom).toBe("solid");
@@ -2895,7 +2966,7 @@ describe("QT Manager desktop flow", () => {
     await waitForText(".toast", "새 연간 구독을 추가했습니다");
     await waitForText('[data-testid="person-detail"]', "구독 이력 2건");
 
-    await clickButtonByText("이 신청자 보관");
+    await clickButtonByText("신청자 보관");
     await waitForText(".toast", "신청자를 보관했습니다");
 
     await browser.execute(() => {

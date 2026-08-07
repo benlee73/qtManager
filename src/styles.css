@@ -459,6 +459,7 @@ p {
   width: clamp(340px, 42vw, 460px);
   min-width: 0;
   flex: 0 1 460px;
+  margin-left: clamp(8px, 1.2vw, 18px);
   height: 64px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow: hidden;
@@ -477,7 +478,7 @@ p {
   min-height: 64px;
   /* Keep the four cells equal while giving the widest value (e.g. 0/165권)
      enough breathing room on both sides. */
-  padding: 9px 16px 10px;
+  padding: 9px 20px 10px;
   border-right: 1px solid var(--line);
   text-align: center;
 }
@@ -1975,5 +1976,6 @@ kbd {
   .summary-grid {
     width: clamp(320px, 42vw, 410px);
     flex-basis: 410px;
+    margin-left: 6px;
   }
 }

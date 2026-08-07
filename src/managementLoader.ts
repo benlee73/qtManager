@@ -38,7 +38,18 @@ export function createManagementLoader({
     const canPreserve =
       preserveCurrentDetail && currentDetail?.id === nextId && nextId !== null;
     selectedId = nextId;
-    if (!canPreserve) publishSelection(null);
+    // Keep the previous detail mounted while the next person is loading. The
+    // management list is a keyboard-driven surface, so replacing it with the
+    // empty state for one render makes Up/Down navigation look like a flicker
+    // and can also steal focus from the selected row. A failed request still
+    // clears the stale detail in the catch block below.
+    if (canPreserve) {
+      onSelection({ selectedId, detail: currentDetail });
+    } else if (nextId !== null && currentDetail !== null) {
+      onSelection({ selectedId, detail: currentDetail });
+    } else {
+      publishSelection(null);
+    }
     if (!nextId) return;
 
     try {
