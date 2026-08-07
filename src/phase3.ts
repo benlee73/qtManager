@@ -150,6 +150,10 @@ export function setPersonArchived(personId: string, archived: boolean) {
   return invoke<void>("set_person_archived_command", { personId, archived });
 }
 
+export function deletePerson(personId: string) {
+  return invoke<void>("delete_person_command", { personId });
+}
+
 export function renewSubscription(
   personId: string,
   issue: Issue,

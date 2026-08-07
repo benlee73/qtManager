@@ -74,4 +74,38 @@ describe("배부 확인", () => {
     expect(markup).toContain('data-testid="confirm-distribution-form"');
     expect(markup).toContain('type="submit" autofocus');
   });
+
+  it("marks the partial distribution dialog for balanced quantity spacing", () => {
+    const person: DeskPerson = {
+      personId: "person-partial",
+      subscriptionId: "subscription-partial",
+      distributionTargets: [],
+      name: "가상 신청자",
+      cohort: "00",
+      phone: null,
+      personStatus: "정상",
+      subscriptionStatus: "유효",
+      distributionStatus: "미배부",
+      targetQuantity: 3,
+      distributedQuantity: 0,
+      remainingQuantity: 3,
+      lastIssue: "2026년 11~12월호",
+      endDate: "2026-12-31",
+      isLastIssue: false,
+      hasMemo: false,
+      canDistribute: true,
+    };
+    const markup = renderToStaticMarkup(
+      <Phase2DialogContent
+        dialog={{ type: "partial", person }}
+        issue={{ year: 2026, startMonth: 9 }}
+        busy={false}
+        onClose={vi.fn()}
+        mutate={vi.fn().mockResolvedValue(true)}
+        recordAction={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain('class="dialog partial-distribution-dialog"');
+  });
 });

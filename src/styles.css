@@ -459,7 +459,7 @@ p {
   width: clamp(340px, 42vw, 460px);
   min-width: 0;
   flex: 0 1 460px;
-  height: 58px;
+  height: 64px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow: hidden;
   border: 1px solid var(--line);
@@ -474,8 +474,10 @@ p {
   align-content: center;
   justify-items: center;
   overflow: hidden;
-  min-height: 58px;
-  padding: 7px 10px 8px;
+  min-height: 64px;
+  /* Keep the four cells equal while giving the widest value (e.g. 0/165권)
+     enough breathing room on both sides. */
+  padding: 9px 16px 10px;
   border-right: 1px solid var(--line);
   text-align: center;
 }
@@ -495,7 +497,7 @@ p {
   width: 100%;
   min-width: 0;
   overflow: hidden;
-  margin-top: 4px;
+  margin-top: 5px;
   font-size: var(--font-lg);
   line-height: 20px;
   text-overflow: ellipsis;
@@ -550,7 +552,6 @@ p {
   display: flex;
   gap: 7px;
   padding: 9px;
-  border-bottom: 1px solid var(--line);
 }
 
 .search-box {
@@ -761,7 +762,6 @@ kbd {
 
 .table-head {
   padding: 0 11px;
-  border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   color: var(--faint);
   background: var(--panel-high);
@@ -1698,6 +1698,20 @@ kbd {
   color: var(--text);
   background: var(--input);
   resize: vertical;
+}
+
+.partial-distribution-dialog .dialog-description {
+  margin-bottom: 18px;
+}
+
+.partial-distribution-dialog .field {
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.partial-distribution-dialog .field input[type="number"] {
+  min-height: 48px;
+  padding: 12px 16px;
 }
 
 .check-field {

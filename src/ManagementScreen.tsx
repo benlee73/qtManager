@@ -26,6 +26,7 @@ import {
   type PersonInput,
   loadManagement,
   loadPersonDetail,
+  deletePerson,
   setPersonArchived,
   updatePerson,
 } from "./phase3";
@@ -65,6 +66,7 @@ export function ManagementScreen({
   });
   const [dialog, setDialog] = useState<ManagementDialog>(null);
   const [busy, setBusy] = useState(false);
+  const managementSearchRef = useRef<HTMLInputElement>(null);
   const notifyRef = useRef(notify);
   notifyRef.current = notify;
   const loaderRef = useRef<ReturnType<typeof createManagementLoader> | null>(
@@ -191,6 +193,7 @@ export function ManagementScreen({
           <label className="search-box management-search">
             <span aria-hidden="true">⌕</span>
             <input
+              ref={managementSearchRef}
               data-testid="management-search"
               value={query}
               onChange={(event) => {
@@ -262,6 +265,10 @@ export function ManagementScreen({
             people={visibleManagementPeople}
             selectedId={selection.selectedId}
             onSelect={(id) => void loader.select(id)}
+            onReturnToSearch={() => {
+              loader.select(null);
+              managementSearchRef.current?.focus();
+            }}
           />
         </div>
 
@@ -329,6 +336,19 @@ export function ManagementScreen({
                 : "QT 신청자를 보관했습니다.",
             )
           }
+          onDelete={(person) => {
+            if (
+              !window.confirm(
+                "이 신청자를 영구 삭제할까요? 구독·배부·개별 구매·메모 이력이 있는 신청자는 삭제할 수 없고 보관만 가능합니다.",
+              )
+            ) {
+              return Promise.resolve(false);
+            }
+            return mutate(
+              () => deletePerson(person.id),
+              "QT 신청자를 삭제했습니다.",
+            );
+          }}
         />
       </section>
 

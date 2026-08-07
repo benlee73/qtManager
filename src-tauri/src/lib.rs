@@ -11,12 +11,12 @@ use qt_application::{
     UpdateCheckItemRequest, UpdateCheckItemStatusRequest, UpdateMemoRequest,
     UpdateMemoStatusRequest, UpdatePersonRequest, UpdatePinnedNoteRequest, apply_state_import,
     cancel_latest_purchase, create_check_item, create_draft, create_memo, create_pinned_note,
-    delete_check_item, delete_memo, delete_pinned_note, export_state, import_applications,
-    issue_containing_date, load_distribution_desk, load_people_management, load_person_detail,
-    preview_applications, preview_duplicates, preview_state_import, record_distribution,
-    record_purchase, register_person, renew_subscription, save_operator, set_person_archived,
-    undo_last_distribution, undo_state_import, update_check_item, update_check_item_status,
-    update_memo, update_memo_status, update_person, update_pinned_note,
+    delete_check_item, delete_memo, delete_person, delete_pinned_note, export_state,
+    import_applications, issue_containing_date, load_distribution_desk, load_people_management,
+    load_person_detail, preview_applications, preview_duplicates, preview_state_import,
+    record_distribution, record_purchase, register_person, renew_subscription, save_operator,
+    set_person_archived, undo_last_distribution, undo_state_import, update_check_item,
+    update_check_item_status, update_memo, update_memo_status, update_person, update_pinned_note,
 };
 use qt_domain::Issue;
 use qt_infrastructure::{
@@ -781,6 +781,29 @@ fn set_person_archived_command(
 }
 
 #[tauri::command]
+fn delete_person_command(app: tauri::AppHandle, person_id: String) -> Result<(), String> {
+    let mut repository = open_operational_repository(&app)?;
+    let runtime = SystemRuntime;
+    let logger = event_logger(&app);
+    logger.info("person_delete_started");
+    let result = delete_person(
+        &mut repository,
+        &RuntimeServices {
+            clock: &runtime,
+            ids: &runtime,
+        },
+        &person_id,
+    )
+    .map_err(|error| error.to_string());
+    if result.is_ok() {
+        logger.info("person_delete_completed");
+    } else {
+        logger.error("person_delete_failed");
+    }
+    result
+}
+
+#[tauri::command]
 fn renew_subscription_command(
     app: tauri::AppHandle,
     request: RenewSubscriptionRequest,
@@ -996,6 +1019,7 @@ pub fn run() {
             register_person_command,
             update_person_command,
             set_person_archived_command,
+            delete_person_command,
             renew_subscription_command,
             preview_applications_command,
             import_applications_command,

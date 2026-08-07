@@ -346,6 +346,11 @@ export function HelpPanel({
                       이동합니다.
                     </li>
                     <li>
+                      신청자 상세의 `신청자 삭제`는 이력이 없는 잘못된 등록만
+                      확인 후 영구 삭제합니다. 구독·배부·개별 구매·메모 이력이
+                      있으면 기록 보존을 위해 보관만 사용할 수 있습니다.
+                    </li>
+                    <li>
                       상세에서 메모를 바로 추가하고, 해당 신청자에 연결된 메모를
                       수정·보관·삭제할 수 있습니다.
                     </li>
@@ -461,6 +466,14 @@ export function HelpPanel({
                       <dd>되돌린 동작 다시 실행</dd>
                     </div>
                     <div>
+                      <dt>⌘/Ctrl + 1</dt>
+                      <dd>현장 배부로 이동</dd>
+                    </div>
+                    <div>
+                      <dt>⌘/Ctrl + 2</dt>
+                      <dd>신청자 관리로 이동</dd>
+                    </div>
+                    <div>
                       <dt>?</dt>
                       <dd>도움말 열기</dd>
                     </div>
@@ -479,6 +492,14 @@ export function HelpPanel({
                     <li>
                       배부 화면의 `ArrowRight`는 메모 입력으로 이동합니다.
                       `Enter`는 저장하고 `Shift+Enter`는 줄바꿈합니다.
+                    </li>
+                    <li>
+                      첫 번째 행에서 `ArrowUp`은 검색창으로, 메모 입력에서
+                      `ArrowLeft`는 선택한 신청자 행으로 돌아갑니다.
+                    </li>
+                    <li>
+                      macOS는 `⌘+1`·`⌘+2`, Windows는 `Ctrl+1`·`Ctrl+2`로 현장
+                      배부와 신청자 관리 화면을 전환합니다.
                     </li>
                   </HelpList>
                 </HelpCard>

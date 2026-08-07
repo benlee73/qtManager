@@ -56,8 +56,9 @@ pub use phase3::{
     DistributionView, DuplicateCandidate, LinkedCheckItemView, LinkedMemoView, ManagedPersonRecord,
     PeopleManagement, PeopleManagementRepository, PersonDetail, PersonSummary,
     RegisterPersonRequest, RenewSubscriptionRequest, SubscriptionPeriodState, SubscriptionView,
-    UpdatePersonRequest, issue_containing_date, load_people_management, load_person_detail,
-    preview_duplicates, register_person, renew_subscription, set_person_archived, update_person,
+    UpdatePersonRequest, delete_person, issue_containing_date, load_people_management,
+    load_person_detail, preview_duplicates, register_person, renew_subscription,
+    set_person_archived, update_person,
 };
 pub use phase4::{
     ApplyStateImportRequest, ImportMode, ImportPreview, MergePersonConflict, MergePersonResolution,
@@ -194,6 +195,10 @@ pub enum ApplicationError {
     DuplicatePersonConfirmationRequired,
     #[error("기존 구독과 기간이 겹칩니다. 두 구독을 모두 유지할지 확인해 주세요.")]
     OverlappingSubscriptionConfirmationRequired,
+    #[error(
+        "이 신청자는 구독·배부·개별 구매·메모 이력이 있어 삭제할 수 없습니다. 대신 보관해 주세요."
+    )]
+    PersonHasHistory,
     #[error("추가할 Google 응답 행을 한 개 이상 선택해 주세요.")]
     NoApplicationRowsSelected,
     #[error("{0}행은 이미 추가한 Google 응답입니다.")]

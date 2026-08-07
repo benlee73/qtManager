@@ -165,6 +165,39 @@ impl PeopleManagementRepository for SqliteCoreRepository {
         }))
     }
 
+    fn person_has_history(&self, id: &str) -> Result<bool, PortError> {
+        for query in [
+            "SELECT EXISTS(SELECT 1 FROM subscriptions WHERE person_id = ?1)",
+            "SELECT EXISTS(SELECT 1 FROM one_time_purchases WHERE person_id = ?1)",
+            "SELECT EXISTS(SELECT 1 FROM check_items WHERE person_id = ?1)",
+            "SELECT EXISTS(SELECT 1 FROM memos WHERE person_id = ?1)",
+        ] {
+            let exists: bool = self
+                .connection
+                .query_row(query, [id], |row| row.get(0))
+                .map_err(port_error)?;
+            if exists {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    fn delete_person(&mut self, id: &str, change: &ChangeLog) -> Result<(), PortError> {
+        let transaction = self.connection.transaction().map_err(port_error)?;
+        let deleted = transaction
+            .execute("DELETE FROM people WHERE id = ?1", [id])
+            .map_err(port_error)?;
+        if deleted != 1 {
+            return Err(PortError::new("삭제할 QT 신청자를 찾지 못했습니다."));
+        }
+        change
+            .validate()
+            .map_err(|error| PortError::new(error.to_string()))?;
+        upsert_change(&transaction, change)?;
+        transaction.commit().map_err(port_error)
+    }
+
     fn list_person_check_items(&self, person_id: &str) -> Result<Vec<CheckItem>, PortError> {
         let mut statement = self
             .connection

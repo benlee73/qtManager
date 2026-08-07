@@ -22,6 +22,8 @@ pub trait PeopleManagementRepository {
         include_archived: bool,
     ) -> Result<Vec<ManagedPersonRecord>, PortError>;
     fn load_person(&self, id: &str) -> Result<Option<ManagedPersonRecord>, PortError>;
+    fn person_has_history(&self, id: &str) -> Result<bool, PortError>;
+    fn delete_person(&mut self, id: &str, change: &ChangeLog) -> Result<(), PortError>;
     fn list_person_check_items(&self, _person_id: &str) -> Result<Vec<CheckItem>, PortError> {
         Ok(Vec::new())
     }
@@ -590,6 +592,40 @@ where
     Ok(())
 }
 
+/// Permanently removes only an applicant that has no operational history.
+/// Historical applicants must be archived so subscriptions and distributions remain auditable.
+pub fn delete_person<R, C, I>(
+    repository: &mut R,
+    runtime: &RuntimeServices<C, I>,
+    person_id: &str,
+) -> Result<(), ApplicationError>
+where
+    R: PeopleManagementRepository,
+    C: Clock,
+    I: IdGenerator,
+{
+    repository.migrate()?;
+    let operator = operator(repository)?;
+    repository
+        .load_person(person_id)?
+        .ok_or(ApplicationError::MissingDeskRecord)?;
+    if repository.person_has_history(person_id)? {
+        return Err(ApplicationError::PersonHasHistory);
+    }
+    let now = runtime.clock.now();
+    let change = change(
+        runtime.ids.next_id(),
+        &now,
+        &operator,
+        "person_deleted",
+        "person",
+        person_id,
+        "QT 신청자 영구 삭제",
+    );
+    repository.delete_person(person_id, &change)?;
+    Ok(())
+}
+
 pub fn renew_subscription<R, C, I>(
     repository: &mut R,
     runtime: &RuntimeServices<C, I>,
@@ -771,6 +807,26 @@ mod tests {
                 .iter()
                 .find(|item| item.person.id == id)
                 .cloned())
+        }
+        fn person_has_history(&self, id: &str) -> Result<bool, PortError> {
+            Ok(self
+                .records
+                .iter()
+                .find(|item| item.person.id == id)
+                .map(|item| {
+                    !item.subscriptions.is_empty()
+                        || !item.distributions.is_empty()
+                        || self
+                            .check_items
+                            .iter()
+                            .any(|check| check.person_id.as_deref() == Some(id))
+                })
+                .unwrap_or(false))
+        }
+        fn delete_person(&mut self, id: &str, change: &ChangeLog) -> Result<(), PortError> {
+            self.records.retain(|item| item.person.id != id);
+            self.changes.push(change.clone());
+            Ok(())
         }
         fn list_person_check_items(&self, person_id: &str) -> Result<Vec<CheckItem>, PortError> {
             Ok(self
@@ -1300,5 +1356,85 @@ mod tests {
             result,
             Err(ApplicationError::DuplicatePersonConfirmationRequired)
         ));
+    }
+
+    #[test]
+    fn deletes_an_applicant_without_related_history() {
+        let runtime = FixedRuntime(Cell::new(0));
+        let now = runtime.now();
+        let person = Person {
+            id: "person-delete".into(),
+            name: "가상삭제".into(),
+            cohort: Some("00".into()),
+            phone: None,
+            normalized_phone: None,
+            status: PersonStatus::Active,
+            person_note: None,
+            created_at: now.clone(),
+            updated_at: now,
+        };
+        let mut repository = MemoryRepository {
+            operator: Some("가상담당자".into()),
+            records: vec![ManagedPersonRecord {
+                person,
+                subscriptions: vec![],
+                distributions: vec![],
+            }],
+            check_items: vec![],
+            changes: vec![],
+        };
+
+        delete_person(&mut repository, &services(&runtime), "person-delete").unwrap();
+
+        assert!(repository.records.is_empty());
+        assert_eq!(repository.changes[0].action_type, "person_deleted");
+    }
+
+    #[test]
+    fn refuses_to_delete_an_applicant_with_subscription_history() {
+        let runtime = FixedRuntime(Cell::new(0));
+        let now = runtime.now();
+        let person = Person {
+            id: "person-history-delete".into(),
+            name: "가상이력삭제".into(),
+            cohort: Some("00".into()),
+            phone: None,
+            normalized_phone: None,
+            status: PersonStatus::Active,
+            person_note: None,
+            created_at: now.clone(),
+            updated_at: now.clone(),
+        };
+        let subscription = annual_subscription(NewSubscription {
+            id: "subscription-history-delete".into(),
+            person_id: person.id.clone(),
+            start_issue: Issue::new(2026, 7).unwrap(),
+            quantity: 1,
+            applied_at: None,
+            source: SubscriptionSource::Manual,
+            memo: None,
+            now: &now,
+        })
+        .unwrap();
+        let mut repository = MemoryRepository {
+            operator: Some("가상담당자".into()),
+            records: vec![ManagedPersonRecord {
+                person,
+                subscriptions: vec![subscription],
+                distributions: vec![],
+            }],
+            check_items: vec![],
+            changes: vec![],
+        };
+
+        assert!(matches!(
+            delete_person(
+                &mut repository,
+                &services(&runtime),
+                "person-history-delete"
+            ),
+            Err(ApplicationError::PersonHasHistory)
+        ));
+        assert_eq!(repository.records.len(), 1);
     }
 }

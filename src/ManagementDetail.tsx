@@ -1,7 +1,7 @@
 import { type ReactNode } from "react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTextDraft } from "./drafts";
-import { listIndexAfterKey } from "./keyboardNavigation";
+import { listIndexAfterKey, shouldReturnToSearch } from "./keyboardNavigation";
 
 import type {
   LinkedMemo,
@@ -10,6 +10,7 @@ import type {
   SubscriptionPeriodState,
 } from "./phase3";
 import { MemoDetailDialog } from "./MemoDetailDialog";
+import { formatApplicationDate } from "./dateFormat";
 
 const subscriptionStateLabels: Record<SubscriptionPeriodState, string> = {
   current: "현재 구독",
@@ -22,12 +23,24 @@ export function ManagementPersonList({
   people,
   selectedId,
   onSelect,
+  onReturnToSearch,
 }: {
   people: PersonSummary[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onReturnToSearch?: () => void;
 }) {
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
+  const pendingFocusId = useRef<string | null>(null);
+
+  useEffect(() => {
+    const nextId = pendingFocusId.current;
+    if (!nextId || selectedId !== nextId) return;
+    pendingFocusId.current = null;
+    const row = rowRefs.current.get(nextId);
+    row?.focus();
+    requestAnimationFrame(() => rowRefs.current.get(nextId)?.focus());
+  }, [people, selectedId]);
 
   return (
     <div className="management-person-list">
@@ -73,18 +86,36 @@ export function ManagementPersonList({
                 return;
               }
               event.preventDefault();
+              event.stopPropagation();
               const currentIndex = people.findIndex(
                 (candidate) => candidate.id === person.id,
               );
+              if (
+                shouldReturnToSearch(
+                  people.length,
+                  currentIndex,
+                  event.key === "ArrowDown" ? "down" : "up",
+                )
+              ) {
+                onReturnToSearch?.();
+                return;
+              }
               const nextIndex = listIndexAfterKey(
                 people.length,
                 currentIndex,
                 event.key === "ArrowDown" ? "down" : "up",
               );
-              if (nextIndex === null) return;
+              if (nextIndex === null || nextIndex === currentIndex) return;
               const nextPerson = people[nextIndex];
+              pendingFocusId.current = nextPerson.id;
               onSelect(nextPerson.id);
-              rowRefs.current.get(nextPerson.id)?.focus();
+              const focusNextRow = () =>
+                rowRefs.current.get(nextPerson.id)?.focus();
+              focusNextRow();
+              // Selecting a person loads the detail asynchronously. Refocus on
+              // the same row after React commits that selection so the browser
+              // does not fall back to scrolling the management panel.
+              requestAnimationFrame(focusNextRow);
             }}
           >
             <span className="cohort">{person.cohort ?? "--"}</span>
@@ -126,6 +157,7 @@ export type PersonDetailPanelProps = {
   onUpdateMemo?: (memo: LinkedMemo, content: string) => Promise<boolean>;
   onArchiveMemo?: (memo: LinkedMemo, archived: boolean) => Promise<boolean>;
   onDeleteMemo?: (memo: LinkedMemo) => void | Promise<boolean>;
+  onDelete?: (detail: PersonDetail) => void | Promise<boolean>;
 };
 
 export function PersonDetailPanel(props: PersonDetailPanelProps) {
@@ -161,6 +193,7 @@ function PersonDetailContent({
   onUpdateMemo,
   onArchiveMemo,
   onDeleteMemo,
+  onDelete,
 }: PersonDetailContentProps) {
   const memoDraftState = useTextDraft(`person-memo:${detail.id}`);
   const memoDraft = memoDraftState.value;
@@ -278,7 +311,7 @@ function PersonDetailContent({
               </span>
               {subscription.appliedAt && (
                 <p className="subscription-applied-at">
-                  신청 {subscription.appliedAt}
+                  신청 {formatApplicationDate(subscription.appliedAt)}
                 </p>
               )}
               {subscription.memo &&
@@ -332,6 +365,18 @@ function PersonDetailContent({
       >
         {detail.status === "보관됨" ? "보관 해제" : "이 신청자 보관"}
       </button>
+      {onDelete && (
+        <button
+          className="danger-link destructive-person-delete"
+          data-testid="delete-person"
+          type="button"
+          disabled={busy}
+          title="구독·배부·개별 구매·메모 이력이 없는 신청자만 영구 삭제할 수 있습니다."
+          onClick={() => void onDelete(detail)}
+        >
+          신청자 삭제
+        </button>
+      )}
       {memoDetail && (
         <MemoDetailDialog
           memo={{

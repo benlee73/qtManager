@@ -51,7 +51,11 @@ import {
 import { useNotifications } from "./useNotifications";
 import { createDistributionLoader } from "./distributionLoader";
 import { useTextDraft } from "./drafts";
-import { listIndexAfterKey } from "./keyboardNavigation";
+import {
+  listIndexAfterKey,
+  screenForShortcut,
+  shouldReturnToSearch,
+} from "./keyboardNavigation";
 
 export default function App() {
   const [screen, setScreen] = useState<"distribution" | "management">(
@@ -97,6 +101,7 @@ export default function App() {
   const searchRef = useRef<HTMLInputElement>(null);
   const quickItemRef = useRef<HTMLTextAreaElement>(null);
   const personRowRefs = useRef(new Map<string, HTMLElement>());
+  const hadDialog = useRef(false);
   const distributionLoader = useMemo(
     () => createDistributionLoader(loadDesk),
     [],
@@ -107,6 +112,19 @@ export default function App() {
     document.documentElement.dataset.theme = theme;
     persistTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (hadDialog.current && !dialog && selectedPersonId) {
+      const row = personRowRefs.current.get(selectedPersonId);
+      row?.focus();
+      // Escape closes a dialog before React has committed its unmount. A
+      // second focus pass keeps Enter bound to the selected row in Tauri/WebKit.
+      requestAnimationFrame(() =>
+        personRowRefs.current.get(selectedPersonId)?.focus(),
+      );
+    }
+    hadDialog.current = Boolean(dialog);
+  }, [dialog, selectedPersonId]);
 
   const refresh = useCallback(async () => {
     try {
@@ -294,7 +312,14 @@ export default function App() {
     function handleKeydown(event: KeyboardEvent) {
       const modified = event.metaKey || event.ctrlKey;
       const textEntry = isTextEntryTarget(event.target);
+      const shortcutScreen = screenForShortcut(event.key, modified);
+      const focusedPersonId =
+        document.activeElement instanceof HTMLElement &&
+        document.activeElement.matches('[data-testid="person-row"]')
+          ? (document.activeElement.dataset.personId ?? null)
+          : null;
       const activePersonId =
+        focusedPersonId ??
         selectedPersonId ??
         document.querySelector<HTMLElement>(
           '[data-testid="person-row"][aria-selected="true"]',
@@ -333,6 +358,9 @@ export default function App() {
       } else if (event.key === "?" && !textEntry) {
         event.preventDefault();
         setHelpOpen(true);
+      } else if (shortcutScreen) {
+        event.preventDefault();
+        setScreen(shortcutScreen);
       } else if (modified && !textEntry && event.key === "Enter") {
         event.preventDefault();
         const person = visiblePeople.find(
@@ -371,11 +399,23 @@ export default function App() {
         else void undoAction();
       } else if (
         screen === "distribution" &&
+        event.key === "ArrowLeft" &&
+        activePersonId &&
+        (!textEntry ||
+          event.target === quickItemRef.current ||
+          (event.target instanceof HTMLElement &&
+            event.target.id === "quick-item"))
+      ) {
+        event.preventDefault();
+        personRowRefs.current.get(activePersonId)?.focus();
+      } else if (
+        screen === "distribution" &&
         !textEntry &&
         event.key === "ArrowRight" &&
         activePersonId
       ) {
         event.preventDefault();
+        setSelectedPersonId(activePersonId);
         quickItemRef.current?.focus();
       } else if (
         screen === "distribution" &&
@@ -389,10 +429,17 @@ export default function App() {
         const current = visiblePeople.findIndex(
           (person) => person.personId === activePersonId,
         );
+        const direction = event.key === "ArrowDown" ? "down" : "up";
+        if (shouldReturnToSearch(visiblePeople.length, current, direction)) {
+          event.preventDefault();
+          setSelectedPersonId(null);
+          searchRef.current?.focus();
+          return;
+        }
         const next = listIndexAfterKey(
           visiblePeople.length,
           current,
-          event.key === "ArrowDown" ? "down" : "up",
+          direction,
         );
         const nextPersonId =
           next === null ? null : (visiblePeople[next]?.personId ?? null);

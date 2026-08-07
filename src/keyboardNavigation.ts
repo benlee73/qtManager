@@ -1,4 +1,24 @@
 export type ListDirection = "down" | "up";
+export type AppScreen = "distribution" | "management";
+
+export function screenForShortcut(
+  key: string,
+  modified: boolean,
+): AppScreen | null {
+  if (!modified) return null;
+  if (key === "1") return "distribution";
+  if (key === "2") return "management";
+  return null;
+}
+
+/** True when an upward move should return focus to the field that opened the list. */
+export function shouldReturnToSearch(
+  length: number,
+  currentIndex: number,
+  direction: ListDirection,
+): boolean {
+  return length > 0 && currentIndex === 0 && direction === "up";
+}
 
 export function listIndexAfterKey(
   length: number,

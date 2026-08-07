@@ -350,7 +350,11 @@ export function Phase2DialogContent({
     );
   }
   return (
-    <FormDialog title="일부 수량만 배부" onClose={onClose}>
+    <FormDialog
+      title="일부 수량만 배부"
+      className="partial-distribution-dialog"
+      onClose={onClose}
+    >
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -395,10 +399,12 @@ export function Phase2DialogContent({
 function FormDialog({
   title,
   children,
+  className,
   onClose,
 }: {
   title: string;
   children: ReactNode;
+  className?: string;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -414,7 +420,7 @@ function FormDialog({
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section
-        className="dialog"
+        className={className ? `dialog ${className}` : "dialog"}
         role="dialog"
         aria-modal="true"
         aria-labelledby="dialog-title"

@@ -114,6 +114,21 @@ describe("QT Manager desktop flow", () => {
 
     await clickButtonByText("", `${applicant} 메뉴`);
     await clickButtonByText("일부만 배부");
+    const partialInputSpacing = await browser.execute(() => {
+      const input = document.querySelector<HTMLInputElement>(
+        ".partial-distribution-dialog input[name='quantity']",
+      );
+      if (!input) return null;
+      const style = getComputedStyle(input);
+      return {
+        minHeight: style.minHeight,
+        padding: style.padding,
+      };
+    });
+    expect(partialInputSpacing).toEqual({
+      minHeight: "48px",
+      padding: "12px 16px",
+    });
     await setInput("input[name='quantity']", "1");
     await clickButtonByText("일부 배부 기록");
     await browser.waitUntil(
@@ -898,12 +913,49 @@ describe("QT Manager desktop flow", () => {
 
     await browser.execute(() => {
       const row = document.querySelector<HTMLElement>(
-        '[data-testid="person-row"]',
+        '[data-testid="person-row"][aria-selected="true"]',
       );
       row?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }),
+      );
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.activeElement?.getAttribute("data-testid") ===
+              "people-search" &&
+            !document.querySelector(
+              '[data-testid="person-row"][aria-selected="true"]',
+            ),
+        ),
+      {
+        timeoutMsg: "첫 신청자에서 위 방향키로 검색창으로 돌아가지 못했습니다.",
+      },
+    );
+
+    await browser.execute(() => {
+      const search = document.querySelector<HTMLInputElement>(
+        '[data-testid="people-search"]',
+      );
+      search?.dispatchEvent(
         new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
       );
     });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.activeElement?.matches('[data-testid="person-row"]') &&
+            Boolean(
+              document.querySelector(
+                '[data-testid="person-row"][aria-selected="true"]',
+              ),
+            ),
+        ),
+      { timeoutMsg: "검색창에서 첫 신청자로 다시 이동하지 못했습니다." },
+    );
+    await browser.keys("ArrowDown");
     await browser.waitUntil(
       async () =>
         browser.execute(() => {
@@ -976,6 +1028,17 @@ describe("QT Manager desktop flow", () => {
       );
     });
     await waitForText("#dialog-title", "배부하시겠습니까?");
+
+    await browser.keys("Escape");
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(() =>
+          document.querySelector("#dialog-title"),
+        )) === null,
+      { timeoutMsg: "Escape로 배부 확인창을 닫지 못했습니다." },
+    );
+    await browser.keys("Enter");
+    await waitForText("#dialog-title", "배부하시겠습니까?");
     await browser.keys("Enter");
     await waitForText(".toast", "배부했습니다");
 
@@ -984,6 +1047,16 @@ describe("QT Manager desktop flow", () => {
         .querySelector<HTMLElement>('[data-testid="person-row"]')
         ?.focus();
     });
+    await browser.keys("ArrowRight");
+    expect(await browser.execute(() => document.activeElement?.id ?? "")).toBe(
+      "quick-item",
+    );
+    await browser.keys("ArrowLeft");
+    expect(
+      await browser.execute(
+        () => document.activeElement?.getAttribute("data-testid") ?? "",
+      ),
+    ).toBe("person-row");
     await browser.keys("ArrowRight");
     expect(await browser.execute(() => document.activeElement?.id ?? "")).toBe(
       "quick-item",
@@ -1025,6 +1098,28 @@ describe("QT Manager desktop flow", () => {
         ?.click();
     });
     await waitForText("h2", "신청자 관리");
+    await dispatchShortcut("1");
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () => document.querySelector(".desk.screen-visible") !== null,
+        ),
+      {
+        timeoutMsg: "Command/Ctrl+1로 현장 배부 화면으로 이동하지 못했습니다.",
+      },
+    );
+    await dispatchShortcut("2");
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.querySelector(".management-host.screen-visible") !== null,
+        ),
+      {
+        timeoutMsg:
+          "Command/Ctrl+2로 신청자 관리 화면으로 이동하지 못했습니다.",
+      },
+    );
     await setInput('[data-testid="management-search"]', keyboardFixture);
     await browser.waitUntil(
       async () =>
@@ -1059,6 +1154,51 @@ describe("QT Manager desktop flow", () => {
           );
         }),
       { timeoutMsg: "관리 검색창에서 첫 신청자를 선택하지 못했습니다." },
+    );
+
+    await browser.execute(() => {
+      const row = document.querySelector<HTMLElement>(
+        '[data-testid="management-person"][aria-pressed="true"]',
+      );
+      row?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }),
+      );
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.activeElement?.getAttribute("data-testid") ===
+            "management-search",
+        ),
+      {
+        timeoutMsg:
+          "관리 첫 신청자에서 위 방향키로 검색창으로 돌아가지 못했습니다.",
+      },
+    );
+
+    await browser.execute(() => {
+      const search = document.querySelector<HTMLInputElement>(
+        '[data-testid="management-search"]',
+      );
+      search?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+      );
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.activeElement?.matches(
+              '[data-testid="management-person"]',
+            ) &&
+            Boolean(
+              document.querySelector(
+                '[data-testid="management-person"][aria-pressed="true"]',
+              ),
+            ),
+        ),
+      { timeoutMsg: "관리 검색창에서 첫 신청자로 다시 이동하지 못했습니다." },
     );
 
     await browser.execute(() => {
@@ -1657,6 +1797,18 @@ describe("QT Manager desktop flow", () => {
         summaryLabelFontSize: getComputedStyle(
           document.querySelector<HTMLElement>(".summary-grid span")!,
         ).fontSize,
+        summaryCellPadding: getComputedStyle(
+          document.querySelector<HTMLElement>(".summary-grid > div")!,
+        ).padding,
+        toolbarBorderBottom: getComputedStyle(
+          document.querySelector<HTMLElement>(".table-toolbar")!,
+        ).borderBottomStyle,
+        tableHeadBorderTop: getComputedStyle(
+          document.querySelector<HTMLElement>(".table-head")!,
+        ).borderTopStyle,
+        tableHeadBorderBottom: getComputedStyle(
+          document.querySelector<HTMLElement>(".table-head")!,
+        ).borderBottomStyle,
         brandGap: Number.parseFloat(brand.rowGap),
         placeholderAlpha,
         hasOperatorStatus: document.querySelector(".operator-status") !== null,
@@ -1689,6 +1841,10 @@ describe("QT Manager desktop flow", () => {
     expect(layout.fontMeta).toBe("13px");
     expect(layout.tableHeadFontSize).toBe("14px");
     expect(layout.summaryLabelFontSize).toBe("14px");
+    expect(layout.summaryCellPadding).toBe("9px 16px 10px");
+    expect(layout.toolbarBorderBottom).toBe("none");
+    expect(layout.tableHeadBorderTop).toBe("none");
+    expect(layout.tableHeadBorderBottom).toBe("solid");
     expect(layout.brandGap).toBeGreaterThanOrEqual(4);
     expect(layout.placeholderAlpha).toBeLessThanOrEqual(0.65);
     expect(layout.hasOperatorStatus).toBe(false);

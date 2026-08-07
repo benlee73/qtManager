@@ -166,7 +166,6 @@
   height: auto;
   margin-top: 0.7rem;
   padding: 0.65rem 0.1rem 0;
-  border-top: 1px solid var(--line-soft);
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
@@ -720,6 +719,12 @@
   text-decoration: underline;
 }
 
+.destructive-person-delete {
+  display: block;
+  margin-top: 0.65rem;
+  color: var(--red);
+}
+
 .detail-empty {
   display: grid;
   height: 28rem;
@@ -1210,7 +1215,6 @@
 
 .help-content > section {
   padding: 0 0 1.8rem;
-  border-bottom: 1px solid var(--line);
 }
 
 .help-section-heading {

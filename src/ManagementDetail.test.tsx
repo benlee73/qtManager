@@ -187,6 +187,22 @@ describe("PersonDetailPanel", () => {
     expect(markup).toContain("메모");
   });
 
+  it("exposes a guarded applicant delete action in the detail panel", () => {
+    const markup = renderToStaticMarkup(
+      <PersonDetailPanel
+        detail={{ ...detail, subscriptions: [], distributions: [], memos: [] }}
+        busy={false}
+        onEdit={vi.fn()}
+        onRenew={vi.fn()}
+        onToggleArchived={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain('data-testid="delete-person"');
+    expect(markup).toContain("신청자 삭제");
+  });
+
   it("does not add an empty-state sentence to the linked memo section", () => {
     const markup = renderToStaticMarkup(
       <PersonDetailPanel
@@ -251,6 +267,29 @@ describe("PersonDetailPanel", () => {
     expect(markup).toContain("배부 호");
     expect(markup).toContain("처리");
     expect(markup).toContain("처리 시각");
+  });
+
+  it("formats ISO application timestamps for people-facing history", () => {
+    const markup = renderToStaticMarkup(
+      <PersonDetailPanel
+        detail={{
+          ...detail,
+          subscriptions: [
+            {
+              ...detail.subscriptions[0],
+              appliedAt: "2026-08-07T01:56:21.985413Z",
+            },
+          ],
+        }}
+        busy={false}
+        onEdit={vi.fn()}
+        onRenew={vi.fn()}
+        onToggleArchived={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain("신청 2026. 8. 7. 오전 10:56");
+    expect(markup).not.toContain("신청 2026-08-07T01:56:21");
   });
 });
 
