@@ -320,7 +320,6 @@ export function HelpPanel({
                 <HelpCard title="상세에서 확인">
                   <HelpList>
                     <li>정보 보완이나 보관 상태는 작은 표시로 구분합니다.</li>
-                    <li>신청자 목록에는 또래와 이름만 기본 표시됩니다.</li>
                     <li>
                       `정보 보완 필요 N명`은 현장 간이 등록 상태가 아직 보완되지
                       않은 신청자 수입니다. 일반 등록자의 또래 누락만으로는 이
@@ -329,15 +328,13 @@ export function HelpPanel({
                       있습니다.
                     </li>
                     <li>
-                      전화번호는 신청자 관리 목록에서는 숨기고, 선택한 신청자의
-                      상세 또는 정보 수정 화면에서 전체 전화번호를 확인합니다.
-                    </li>
-                    <li>
                       구독 수·마지막 호는 상세에서 확인합니다. 구독 표는 오늘이
-                      포함된 호를 기준으로 현재·예정·지난·보관을 나눕니다.
+                      포함된 호를 기준으로 현재·예정·지난·보관된 구독을
+                      나눕니다. 보관된 구독은 과거 기록을 보존하면서 기본
+                      목록에서 구분하는 관리 상태입니다.
                     </li>
                     <li>
-                      실제 배부 자격은 현장 배부에서 선택한 QT 호가 구독 기간에
+                      배부 자격은 현장 배부에서 선택한 QT 호가 구독 기간에
                       포함되는지로 판단합니다.
                     </li>
                     <li>
@@ -375,12 +372,6 @@ export function HelpPanel({
                   </HelpList>
                 </HelpCard>
               </div>
-              <p className="help-note">
-                긴 신청자 목록은 왼쪽 목록 안에서, 긴 구독·배부 이력은 오른쪽
-                상세 안에서 각각 스크롤합니다. 신청자 관리 상단에는 제목 하나만
-                표시되며, 초기 창은 1120×760이고 최소 900×640까지 조절할 수
-                있습니다.
-              </p>
             </HelpSection>
 
             <HelpSection
@@ -390,8 +381,14 @@ export function HelpPanel({
             >
               <HelpCard title="한 호만 구매한 경우">
                 <HelpList>
-                  <li>배부 화면의 더보기 메뉴에서 ‘개별 구매’를 선택합니다.</li>
-                  <li>구매 호와 수량을 기록하면 전달 완료로 저장됩니다.</li>
+                  <li>
+                    현장 배부 상단 검색창 오른쪽의 점 세 개(기타 기능) 메뉴에서
+                    ‘현장 개별 구매’를 선택합니다.
+                  </li>
+                  <li>
+                    현재 선택한 호의 구매자 이름·수량·메모를 입력하면 구매·전달
+                    기록으로 저장됩니다.
+                  </li>
                   <li>구독 수량·배부 완료 상태에는 영향을 주지 않습니다.</li>
                 </HelpList>
               </HelpCard>
@@ -403,7 +400,7 @@ export function HelpPanel({
               sectionRef={(element) => registerSection("handover", element)}
             >
               <div className="help-card-grid">
-                <HelpCard title="백업과 복원 순서">
+                <HelpCard title="인수인계 백업과 복원 순서">
                   <HelpList>
                     <li>신청자 관리에서 ‘데이터 백업·복원’을 엽니다.</li>
                     <li>전체 상태를 XLSX 한 파일로 내보냅니다.</li>
@@ -438,7 +435,7 @@ export function HelpPanel({
               title="단축키"
               sectionRef={(element) => registerSection("shortcuts", element)}
             >
-              <div className="help-card-grid">
+              <div className="help-card-grid help-card-grid-stacked">
                 <HelpCard title="자주 쓰는 동작">
                   <dl className="shortcut-list">
                     <div>
@@ -481,21 +478,19 @@ export function HelpPanel({
                 </HelpCard>
                 <HelpCard title="검색과 이동">
                   <HelpList>
-                    <li>검색창에서 `ArrowDown`으로 첫 신청자를 선택합니다.</li>
+                    <li>검색창에서 아래 방향키로 첫 신청자를 선택합니다.</li>
+                    <li>목록에서 위·아래 방향키로 한 명씩 이동합니다.</li>
                     <li>
-                      목록에서 `ArrowUp`·`ArrowDown`으로 한 명씩 이동합니다.
+                      배부 행에서 Enter 키를 누르면 확인창이 열리고, 다시 Enter
+                      키를 누르면 확정합니다.
                     </li>
                     <li>
-                      배부 행에서 `Enter`를 누르면 확인창이 열리고, 다시
-                      `Enter`를 누르면 확정합니다.
+                      배부 화면에서 오른쪽 방향키는 메모 입력으로 이동합니다.
+                      Enter 키는 저장하고 Shift+Enter는 줄바꿈합니다.
                     </li>
                     <li>
-                      배부 화면의 `ArrowRight`는 메모 입력으로 이동합니다.
-                      `Enter`는 저장하고 `Shift+Enter`는 줄바꿈합니다.
-                    </li>
-                    <li>
-                      첫 번째 행에서 `ArrowUp`은 검색창으로, 메모 입력에서
-                      `ArrowLeft`는 선택한 신청자 행으로 돌아갑니다.
+                      첫 번째 행에서 위 방향키는 검색창으로, 메모 입력에서 왼쪽
+                      방향키는 선택한 신청자 행으로 돌아갑니다.
                     </li>
                     <li>
                       macOS는 `⌘+1`·`⌘+2`, Windows는 `Ctrl+1`·`Ctrl+2`로 현장
@@ -532,7 +527,7 @@ export function HelpPanel({
               title="앱 정보와 문제 보고"
               sectionRef={(element) => registerSection("app-info", element)}
             >
-              <div className="help-card-grid">
+              <div className="help-card-grid help-card-grid-stacked">
                 <HelpCard title="오프라인 운영">
                   <HelpList>
                     <li>맑은샘광천교회 2026 교육국 제작입니다.</li>
@@ -574,6 +569,7 @@ export function HelpPanel({
                     </p>
                   )}
                   <button
+                    className="help-secondary-action"
                     type="button"
                     onClick={() => {
                       void openLogDirectory().catch(() =>

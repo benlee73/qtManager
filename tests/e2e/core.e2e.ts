@@ -327,7 +327,7 @@ describe("QT Manager desktop flow", () => {
     );
   });
 
-  it("keeps help shortcut and support details one step smaller than body text", async () => {
+  it("keeps help layouts and shortcut wording readable", async () => {
     await browser.execute(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }));
     });
@@ -354,6 +354,26 @@ describe("QT Manager desktop flow", () => {
         return shortcutList ? getComputedStyle(shortcutList).fontSize : "";
       }),
     ).toBe("14px");
+    expect(
+      await browser.execute(() => {
+        const section = document.querySelector<HTMLElement>(
+          '[data-testid="help-shortcuts"] .help-card-grid',
+        );
+        const text =
+          document.querySelector<HTMLElement>('[data-testid="help-shortcuts"]')
+            ?.textContent ?? "";
+        return {
+          stacked:
+            section?.classList.contains("help-card-grid-stacked") ?? false,
+          usesKoreanDirection: text.includes("아래 방향키"),
+          hasBrowserKeyName: text.includes("ArrowDown"),
+        };
+      }),
+    ).toEqual({
+      stacked: true,
+      usesKoreanDirection: true,
+      hasBrowserKeyName: false,
+    });
     await browser.saveScreenshot("test-results/ui-help-shortcuts-dark.png");
 
     await browser.execute(() => {
@@ -391,6 +411,25 @@ describe("QT Manager desktop flow", () => {
     ).toEqual({
       supportLabelFontSize: "14px",
       supportValueFontSize: "14px",
+    });
+    expect(
+      await browser.execute(() => {
+        const cards = document.querySelector<HTMLElement>(
+          '[data-testid="help-app-info"] .help-card-grid',
+        );
+        const action = document.querySelector<HTMLButtonElement>(
+          '[data-testid="help-app-info"] .help-secondary-action',
+        );
+        return {
+          stacked: cards?.classList.contains("help-card-grid-stacked") ?? false,
+          actionFontSize: action ? getComputedStyle(action).fontSize : "",
+          actionText: action?.textContent?.trim() ?? "",
+        };
+      }),
+    ).toEqual({
+      stacked: true,
+      actionFontSize: "14px",
+      actionText: "로그 폴더 열기",
     });
     await browser.saveScreenshot("test-results/ui-help-support-dark.png");
     await browser.execute(() => {
