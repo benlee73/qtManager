@@ -1469,7 +1469,7 @@ describe("QT Manager desktop flow", () => {
       ),
     ).toBe(true);
     await setPersonFilterPreset("남은 배부");
-    expect(await textOf(".filter-trigger")).toBe("남은 배부 · 2");
+    expect(await textOf(".filter-trigger")).toBe("필터 · 2개");
     expect(
       await browser.execute(
         () =>

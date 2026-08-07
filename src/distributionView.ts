@@ -93,12 +93,6 @@ export function filterLabel(filters: ReadonlySet<PersonFilter>) {
 }
 
 export function filterTriggerLabel(filters: ReadonlySet<PersonFilter>) {
-  if (
-    filters.size === DEFAULT_PERSON_FILTERS.length &&
-    DEFAULT_PERSON_FILTERS.every((filter) => filters.has(filter))
-  )
-    return "남은 배부 · 2";
-  if (PERSON_FILTERS.every((filter) => filters.has(filter))) return "전체 · 4";
   return `필터 · ${filters.size}개`;
 }
 
