@@ -10,6 +10,8 @@ const nativeCommandTimeoutMs = 5_000;
 
 describe("QT Manager desktop flow", () => {
   before(async () => {
+    // CI checkouts do not contain the ignored screenshot directory yet.
+    mkdirSync(resolve("test-results"), { recursive: true });
     if (nativeVisualEnabled) await assertNativeVisualPreflight();
   });
 
