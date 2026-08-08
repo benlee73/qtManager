@@ -334,6 +334,39 @@ describe("QT Manager desktop flow", () => {
         ?.click();
     });
     await waitForText("#help-title", "QT Manager 도움말");
+    expect(
+      await browser.execute(() => {
+        const panel = document.querySelector<HTMLElement>(
+          '[data-testid="help-panel"]',
+        );
+        if (!panel) return null;
+        const rect = panel.getBoundingClientRect();
+        return {
+          widthRatio: rect.width / window.innerWidth,
+          heightRatio: rect.height / window.innerHeight,
+          flexDirection: getComputedStyle(panel).flexDirection,
+        };
+      }),
+    ).toMatchObject({
+      widthRatio: expect.any(Number),
+      heightRatio: expect.any(Number),
+      flexDirection: "column",
+    });
+    expect(
+      await browser.execute(() => {
+        const panel = document.querySelector<HTMLElement>(
+          '[data-testid="help-panel"]',
+        );
+        if (!panel) return false;
+        const rect = panel.getBoundingClientRect();
+        return (
+          rect.width / window.innerWidth >= 0.6 &&
+          rect.width / window.innerWidth <= 0.8 &&
+          rect.height / window.innerHeight >= 0.6 &&
+          rect.height / window.innerHeight <= 0.8
+        );
+      }),
+    ).toBe(true);
     await setInput('[data-testid="help-search"]', "백업");
     await browser.waitUntil(
       async () => {
@@ -786,7 +819,7 @@ describe("QT Manager desktop flow", () => {
       const card = [
         ...document.querySelectorAll<HTMLElement>(".memo-card"),
       ].find((candidate) => candidate.textContent?.includes(content));
-      card?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     }, linked);
     await waitForText(".memo-detail-dialog", linked);
     expect(
@@ -805,7 +838,7 @@ describe("QT Manager desktop flow", () => {
       const card = [
         ...document.querySelectorAll<HTMLElement>(".memo-card"),
       ].find((candidate) => candidate.textContent?.includes(content));
-      card?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     }, edited);
     await browser.execute(() => {
       document
@@ -836,6 +869,29 @@ describe("QT Manager desktop flow", () => {
     await browser.execute(() => {
       document
         .querySelector<HTMLButtonElement>(
+          ".memo-archive-dialog .memo-archive-actions .danger-link-button",
+        )
+        ?.click();
+    });
+    await waitForText(".delete-confirm-dialog", "영구 삭제");
+    await browser.execute(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(
+          () => document.querySelector(".delete-confirm-dialog") === null,
+        )) === true,
+      { timeoutMsg: "메모 삭제 확인창 Escape 닫기가 반영되지 않았습니다." },
+    );
+    expect(
+      await browser.execute(
+        () => document.querySelector(".memo-archive-dialog") !== null,
+      ),
+    ).toBe(true);
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>(
           ".memo-archive-dialog .memo-archive-actions .quiet-button",
         )
         ?.click();
@@ -847,7 +903,7 @@ describe("QT Manager desktop flow", () => {
       const card = [
         ...document.querySelectorAll<HTMLElement>(".memo-card"),
       ].find((candidate) => candidate.textContent?.includes(content));
-      card?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     }, edited);
     await browser.execute(() => {
       document
@@ -882,7 +938,7 @@ describe("QT Manager desktop flow", () => {
       const card = [
         ...document.querySelectorAll<HTMLElement>(".memo-card"),
       ].find((candidate) => candidate.textContent?.includes(content));
-      card?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     }, archivedOnly);
     await waitForText(".memo-detail-dialog", archivedOnly);
     await browser.execute(() => {
@@ -1301,6 +1357,25 @@ describe("QT Manager desktop flow", () => {
       { timeoutMsg: "관리 목록의 마지막 신청자를 선택하지 못했습니다." },
     );
     await browser.keys("ArrowDown");
+    await browser.keys("ArrowUp");
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const rows = [
+            ...document.querySelectorAll<HTMLElement>(
+              '[data-testid="management-person"]',
+            ),
+          ];
+          return (
+            rows[0]?.getAttribute("aria-pressed") === "true" &&
+            document.activeElement === rows[0]
+          );
+        }),
+      {
+        timeoutMsg: "마지막 신청자에서 ArrowDown 후 ArrowUp 이동이 깨졌습니다.",
+      },
+    );
+    await browser.keys("ArrowDown");
     await browser.waitUntil(
       async () =>
         browser.execute(() => {
@@ -1312,16 +1387,14 @@ describe("QT Manager desktop flow", () => {
           const last = rows.at(-1);
           return (
             last?.getAttribute("aria-pressed") === "true" &&
-            document.activeElement !== last &&
-            last?.matches(":focus-visible") !== true &&
-            last?.matches(":focus") !== true &&
+            document.activeElement === last &&
             rows.filter((row) => row.getAttribute("aria-pressed") === "true")
               .length === 1
           );
         }),
       {
         timeoutMsg:
-          "관리 목록 마지막 신청자에서 아래 방향키가 포커스 테두리를 만들었습니다.",
+          "관리 목록 마지막 신청자에서 아래 방향키가 포커스를 잃었습니다.",
       },
     );
     await browser.execute(() => {
@@ -2235,7 +2308,7 @@ describe("QT Manager desktop flow", () => {
           '[data-testid="linked-memos-editor"] .linked-memo-content',
         ),
       ].find((candidate) => candidate.textContent?.includes(content));
-      memo?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      memo?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     }, editMemo);
     await waitForText(".memo-detail-dialog", editMemo);
     const editedEditMemo = `${editMemo} 수정`;
@@ -2250,7 +2323,7 @@ describe("QT Manager desktop flow", () => {
           '[data-testid="linked-memos-editor"] .linked-memo-content',
         ),
       ].find((candidate) => candidate.textContent?.includes(content));
-      memo?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      memo?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     }, editedEditMemo);
     await waitForText(".memo-detail-dialog", editedEditMemo);
     expect(

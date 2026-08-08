@@ -13,11 +13,11 @@ export function MemoCard({
       className="memo-card"
       data-testid="memo-card"
       data-memo-id={memo.id}
-      onDoubleClick={() => onOpenDetail(memo)}
+      onClick={() => onOpenDetail(memo)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") onOpenDetail(memo);
       }}
-      title="두 번 클릭하면 메모 상세를 엽니다"
+      title="클릭하면 메모 상세를 엽니다"
     >
       <span className="memo-card-content">{memo.content}</span>
       {memo.personName && (

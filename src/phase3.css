@@ -1173,15 +1173,18 @@
 }
 
 .help-backdrop {
-  justify-content: flex-end;
-  padding: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
 }
 
 .help-panel {
-  width: calc(100vw - 32px);
-  height: calc(100vh - 32px);
-  max-width: calc(100vw - 32px);
-  max-height: calc(100vh - 32px);
+  display: flex;
+  width: min(70vw, 1100px);
+  height: min(70vh, 760px);
+  max-width: calc(100vw - 4rem);
+  max-height: calc(100vh - 4rem);
+  flex-direction: column;
   overflow: hidden;
   color: var(--text);
   background: var(--panel);
@@ -1239,7 +1242,8 @@
 .help-layout {
   display: grid;
   grid-template-columns: 11rem 1fr;
-  height: calc(100% - 5.3rem);
+  height: auto;
+  flex: 1 1 auto;
   min-height: 0;
 }
 
@@ -1450,7 +1454,7 @@
   }
 
   .help-layout {
-    height: calc(100% - 8.5rem);
+    height: auto;
     grid-template-columns: 9rem minmax(0, 1fr);
   }
 

@@ -24,6 +24,7 @@ export function MemoDetailDialog({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (document.querySelector(".delete-confirm-dialog")) return;
         event.preventDefault();
         if (editing && dirty) {
           setContent(memo.content);

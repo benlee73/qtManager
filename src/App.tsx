@@ -1369,6 +1369,7 @@ function DeleteConfirmDialog({
     const closeWithEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
+      event.stopImmediatePropagation();
       onClose();
     };
     window.addEventListener("keydown", closeWithEscape);
@@ -1389,6 +1390,12 @@ function DeleteConfirmDialog({
         aria-modal="true"
         aria-labelledby="delete-dialog-title"
         onMouseDown={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+        }}
       >
         <div className="dialog-heading">
           <div>

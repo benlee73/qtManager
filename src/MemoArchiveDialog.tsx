@@ -20,6 +20,7 @@ export function MemoArchiveDialog({
   useEffect(() => {
     const closeWithEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      if (document.querySelector(".delete-confirm-dialog")) return;
       event.preventDefault();
       onClose();
     };
@@ -57,10 +58,11 @@ export function MemoArchiveDialog({
               <button
                 type="button"
                 className="memo-archive-content"
-                onDoubleClick={() => onOpen(memo)}
+                onClick={() => onOpen(memo)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") onOpen(memo);
                 }}
+                title="클릭하면 메모 상세를 엽니다"
               >
                 <span>{memo.content}</span>
                 {memo.personName && <small>{memo.personName}</small>}

@@ -177,6 +177,7 @@ export function HelpPanel({
     >
       <section
         className="help-panel"
+        data-testid="help-panel"
         role="dialog"
         aria-modal="true"
         aria-labelledby="help-title"
@@ -339,7 +340,7 @@ export function HelpPanel({
                   <HelpList>
                     <li>카드에는 긴 내용도 여러 줄로 모두 표시됩니다.</li>
                     <li>
-                      카드를 두 번 클릭하면 전문·수정·보관·삭제 화면이 열립니다.
+                      메모 카드를 클릭하면 전문·수정·보관·삭제 화면이 열립니다.
                     </li>
                     <li>
                       보관은 처리 완료 표시이며 보관함에서 다시 복원할 수

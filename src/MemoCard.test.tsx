@@ -25,5 +25,6 @@ describe("MemoCard", () => {
     expect(markup).toContain("둘째 줄");
     expect(markup).toContain("가상 신청자");
     expect(markup).not.toContain("일반");
+    expect(markup).toContain('title="클릭하면 메모 상세를 엽니다"');
   });
 });

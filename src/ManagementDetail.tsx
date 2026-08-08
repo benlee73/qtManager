@@ -74,8 +74,9 @@ export function ManagementPersonList({
     const nextIndex = listIndexAfterKey(people.length, currentIndex, direction);
     if (nextIndex === null || nextIndex === currentIndex) {
       // At either end, consume the key without allowing the scroll container
-      // or the browser's button focus ring to move.
-      row?.blur();
+      // or the browser's button focus ring to move. Keep the row focused so
+      // the opposite arrow still navigates from the same applicant.
+      row?.focus();
       return;
     }
     const nextPerson = people[nextIndex];

@@ -237,12 +237,12 @@ function LinkedMemos({
             className="linked-memo-content"
             type="button"
             key={memo.id}
-            onDoubleClick={() => setSelectedMemo(memo)}
+            onClick={() => setSelectedMemo(memo)}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ")
                 setSelectedMemo(memo);
             }}
-            title="두 번 클릭하면 메모 상세를 엽니다"
+            title="클릭하면 메모 상세를 엽니다"
           >
             {memo.content}
           </button>

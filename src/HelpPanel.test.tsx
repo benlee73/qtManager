@@ -56,5 +56,8 @@ describe("HelpPanel", () => {
     expect(markup).toContain("⌘/Ctrl + 2");
     expect(markup).toContain("신청자 상세의 `신청자 삭제`");
     expect(markup).toContain('data-testid="help-backdrop"');
+    expect(markup).toContain('data-testid="help-panel"');
+    expect(markup).toContain("메모 카드를 클릭하면 전문");
+    expect(markup).not.toContain("카드를 두 번 클릭하면");
   });
 });

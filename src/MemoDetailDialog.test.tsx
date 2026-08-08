@@ -31,6 +31,7 @@ describe("MemoDetailDialog", () => {
     expect(markup).not.toContain('class="memo-detail-editor"');
     expect(markup).toContain(">보관<");
     expect(markup).toContain(">삭제<");
+    expect(markup).toContain('class="memo-detail-content"');
   });
 
   it("places the linked applicant beside the memo title", () => {
