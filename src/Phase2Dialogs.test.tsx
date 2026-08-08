@@ -75,6 +75,22 @@ describe("배부 확인", () => {
     expect(markup).toContain('type="submit" autofocus');
   });
 
+  it("renders explicit existing-person search and new-person entry controls", () => {
+    const markup = renderToStaticMarkup(
+      <Phase2DialogContent
+        dialog={{ type: "purchase" }}
+        issue={{ year: 2026, startMonth: 7 }}
+        busy={false}
+        onClose={vi.fn()}
+        mutate={vi.fn().mockResolvedValue(true)}
+        recordAction={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain('data-testid="purchase-person-search"');
+    expect(markup).toContain("기존 신청자를 선택하면 구매");
+  });
+
   it("marks the partial distribution dialog for balanced quantity spacing", () => {
     const person: DeskPerson = {
       personId: "person-partial",

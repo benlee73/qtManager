@@ -5,16 +5,17 @@ use qt_application::{
     CreateDraftRequest, CreateMemoRequest, CreatePinnedNoteRequest, DistributionDesk,
     DuplicateCandidate, IdGenerator, ImportApplicationsRequest, ImportApplicationsResult,
     ImportMode, ImportPreview, MergePersonResolution, PeopleManagement, PersonDetail, Phase0Report,
-    Phase1Report, PreviewApplicationsRequest, RecordDistributionRequest, RecordPurchaseRequest,
-    RegisterPersonRequest, RenewSubscriptionRequest, RestorePointView, RunPhase0Probe,
-    RunPhase1Probe, RuntimeServices, StateCounts, UndoDistributionRequest, UndoDistributionResult,
-    UpdateCheckItemRequest, UpdateCheckItemStatusRequest, UpdateMemoRequest,
-    UpdateMemoStatusRequest, UpdatePersonRequest, UpdatePinnedNoteRequest, apply_state_import,
-    cancel_latest_purchase, create_check_item, create_draft, create_memo, create_pinned_note,
-    delete_check_item, delete_memo, delete_person, delete_pinned_note, export_state,
-    import_applications, issue_containing_date, load_distribution_desk, load_people_management,
-    load_person_detail, preview_applications, preview_duplicates, preview_state_import,
-    record_distribution, record_purchase, register_person, renew_subscription, save_operator,
+    Phase1Report, PreviewApplicationsRequest, RecordDistributionRequest,
+    RecordPurchasePersonRequest, RecordPurchaseRequest, RegisterPersonRequest,
+    RenewSubscriptionRequest, RestorePointView, RunPhase0Probe, RunPhase1Probe, RuntimeServices,
+    StateCounts, UndoDistributionRequest, UndoDistributionResult, UpdateCheckItemRequest,
+    UpdateCheckItemStatusRequest, UpdateMemoRequest, UpdateMemoStatusRequest, UpdatePersonRequest,
+    UpdatePinnedNoteRequest, apply_state_import, cancel_latest_purchase, create_check_item,
+    create_draft, create_memo, create_pinned_note, delete_check_item, delete_memo, delete_person,
+    delete_pinned_note, export_state, import_applications, issue_containing_date,
+    load_distribution_desk, load_people_management, load_person_detail, preview_applications,
+    preview_duplicates, preview_state_import, record_distribution, record_purchase,
+    record_purchase_for_new_person, register_person, renew_subscription, save_operator,
     set_person_archived, undo_last_distribution, undo_state_import, update_check_item,
     update_check_item_status, update_memo, update_memo_status, update_person, update_pinned_note,
 };
@@ -618,7 +619,9 @@ fn record_purchase_command(
 ) -> Result<(), String> {
     let mut repository = open_operational_repository(&app)?;
     let runtime = SystemRuntime;
-    record_purchase(
+    let logger = event_logger(&app);
+    logger.info("one_time_purchase_started");
+    let result = record_purchase(
         &mut repository,
         &RuntimeServices {
             clock: &runtime,
@@ -626,7 +629,39 @@ fn record_purchase_command(
         },
         request,
     )
-    .map_err(|error| error.to_string())
+    .map_err(|error| error.to_string());
+    if result.is_ok() {
+        logger.info("one_time_purchase_completed");
+    } else {
+        logger.error("one_time_purchase_failed");
+    }
+    result
+}
+
+#[tauri::command]
+fn record_purchase_for_new_person_command(
+    app: tauri::AppHandle,
+    request: RecordPurchasePersonRequest,
+) -> Result<String, String> {
+    let mut repository = open_operational_repository(&app)?;
+    let runtime = SystemRuntime;
+    let logger = event_logger(&app);
+    logger.info("one_time_purchase_person_started");
+    let result = record_purchase_for_new_person(
+        &mut repository,
+        &RuntimeServices {
+            clock: &runtime,
+            ids: &runtime,
+        },
+        request,
+    )
+    .map_err(|error| error.to_string());
+    if result.is_ok() {
+        logger.info("one_time_purchase_person_completed");
+    } else {
+        logger.error("one_time_purchase_person_failed");
+    }
+    result
 }
 
 #[tauri::command]
@@ -1012,6 +1047,7 @@ pub fn run() {
             update_pinned_note_command,
             delete_pinned_note_command,
             record_purchase_command,
+            record_purchase_for_new_person_command,
             cancel_latest_purchase_command,
             load_people_management_command,
             load_person_detail_command,

@@ -172,6 +172,80 @@ describe("QT Manager desktop flow", () => {
     await waitForText('[data-testid="person-row"]', "일부 배부");
   });
 
+  it("explicitly links a one-time purchase or creates a purchase-only applicant", async () => {
+    const existing = `가상구매연결${Date.now()}`;
+    await registerE2ePerson(existing);
+
+    await clickButtonByText("", "기타 기능");
+    await clickButtonByText("현장 개별 구매");
+    await setInput("input[name='buyerName']", existing);
+    await waitForText('[data-testid="purchase-person-result"]', existing);
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="purchase-person-result"]',
+        )
+        ?.click();
+    });
+    await waitForText(".purchase-person-selected", existing);
+    await setInput("input[name='quantity']", "1");
+    await clickButtonByText("구매·전달 기록");
+    await waitForText(".toast", "개별 구매와 전달을 기록했습니다");
+
+    await clickButtonByText("신청자 관리");
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.querySelector(".management-host.screen-visible") !== null,
+        ),
+      { timeoutMsg: "신청자 관리 화면이 표시되지 않았습니다." },
+    );
+    await setInput('[data-testid="management-search"]', existing);
+    await waitForText('[data-testid="management-person"]', existing);
+    await waitForText('[data-testid="person-detail"]', "개별 구매 이력 1건");
+    await waitForText('[data-testid="purchase-history"]', "구매·전달 1권");
+
+    const newPerson = `가상구매신규${Date.now()}`;
+    await clickButtonByText("현장 배부");
+    await clickButtonByText("", "기타 기능");
+    await clickButtonByText("현장 개별 구매");
+    await setInput("input[name='buyerName']", newPerson);
+    await waitForText(
+      '[data-testid="purchase-new-person-toggle"]',
+      "신규 인원으로 추가",
+    );
+    await clickButtonByText("신규 인원으로 추가");
+    await setInput("input[name='purchaseCohort']", "01");
+    await setInput("input[name='quantity']", "1");
+    await clickButtonByText("구매·전달 기록");
+    await waitForText(".toast", "개별 구매와 전달을 기록했습니다");
+    await clickButtonByText("", "마지막 동작 되돌리기");
+    await waitForText(".toast", "현장 개별 구매: 되돌렸습니다.");
+    await clickButtonByText("", "되돌린 동작 다시 실행");
+    await waitForText(".toast", "현장 개별 구매: 다시 실행했습니다.");
+
+    await clickButtonByText("신청자 관리");
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.querySelector(".management-host.screen-visible") !== null,
+        ),
+      { timeoutMsg: "신청자 관리 화면이 표시되지 않았습니다." },
+    );
+    await setInput('[data-testid="management-search"]', newPerson);
+    await waitForText('[data-testid="management-person"]', newPerson);
+    expect(
+      await browser.execute(
+        () =>
+          document.querySelectorAll('[data-testid="management-person"]').length,
+      ),
+    ).toBe(1);
+    await waitForText('[data-testid="person-detail"]', "개별 구매 이력 3건");
+    await waitForText('[data-testid="purchase-history"]', "구매·전달 1권");
+  });
+
   it("searches by cohort and name, blocks an expired subscription, renews it, and marks a last issue", async () => {
     await setPersonFilterPreset("전체");
     const selected = await selectedIssue();

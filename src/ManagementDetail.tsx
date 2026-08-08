@@ -186,7 +186,7 @@ export function PersonDetailPanel(props: PersonDetailPanelProps) {
     );
   }
 
-  const detailKey = `${props.detail.id}:${(props.detail.memos ?? []).map((memo) => `${memo.id}:${memo.updatedAt}`).join("|")}`;
+  const detailKey = `${props.detail.id}:${(props.detail.memos ?? []).map((memo) => `${memo.id}:${memo.updatedAt}`).join("|")}:${(props.detail.purchases ?? []).map((purchase) => `${purchase.issue}:${purchase.purchasedAt}:${purchase.reversed}`).join("|")}`;
   return (
     <PersonDetailContent key={detailKey} {...props} detail={props.detail} />
   );
@@ -367,6 +367,33 @@ function PersonDetailContent({
             </div>
           ))}
           {detail.distributions.length === 0 && <p>배부 이력이 없습니다.</p>}
+        </div>
+      </DetailSection>
+
+      <DetailSection
+        title={`개별 구매 이력 ${(detail.purchases ?? []).length}건`}
+      >
+        <div className="purchase-history" data-testid="purchase-history">
+          {(detail.purchases ?? []).map((purchase, index) => (
+            <div
+              className="purchase-history-row"
+              key={`${purchase.issue}-${purchase.purchasedAt}-${index}`}
+            >
+              <strong title={purchase.issue}>{purchase.issue}</strong>
+              <span>
+                {purchase.reversed ? "취소" : "구매·전달"} {purchase.quantity}권
+              </span>
+              <time
+                dateTime={purchase.purchasedAt}
+                title={purchase.purchasedAt}
+              >
+                {displayDate(purchase.purchasedAt)}
+              </time>
+            </div>
+          ))}
+          {(detail.purchases ?? []).length === 0 && (
+            <p>개별 구매 이력이 없습니다.</p>
+          )}
         </div>
       </DetailSection>
 

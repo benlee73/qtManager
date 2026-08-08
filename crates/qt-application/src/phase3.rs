@@ -1,6 +1,6 @@
 use qt_domain::{
-    ChangeLog, CheckItem, CheckItemStatus, Distribution, Issue, Memo, MemoStatus, Person,
-    PersonStatus, Subscription, SubscriptionSource, SubscriptionStatus, format_phone,
+    ChangeLog, CheckItem, CheckItemStatus, Distribution, Issue, Memo, MemoStatus, OneTimePurchase,
+    Person, PersonStatus, Subscription, SubscriptionSource, SubscriptionStatus, format_phone,
     normalize_phone,
 };
 use serde::{Deserialize, Serialize};
@@ -29,6 +29,9 @@ pub trait PeopleManagementRepository {
         Ok(Vec::new())
     }
     fn list_person_memos(&self, _person_id: &str) -> Result<Vec<Memo>, PortError> {
+        Ok(Vec::new())
+    }
+    fn list_person_purchases(&self, _person_id: &str) -> Result<Vec<OneTimePurchase>, PortError> {
         Ok(Vec::new())
     }
     fn duplicate_candidates(
@@ -84,6 +87,7 @@ pub struct PersonDetail {
     pub person_note: Option<String>,
     pub subscriptions: Vec<SubscriptionView>,
     pub distributions: Vec<DistributionView>,
+    pub purchases: Vec<PurchaseView>,
     pub check_items: Vec<LinkedCheckItemView>,
     pub memos: Vec<LinkedMemoView>,
 }
@@ -135,6 +139,15 @@ pub struct DistributionView {
     pub issue: String,
     pub quantity: u32,
     pub distributed_at: String,
+    pub reversed: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PurchaseView {
+    pub issue: String,
+    pub quantity: u32,
+    pub purchased_at: String,
     pub reversed: bool,
 }
 
@@ -307,6 +320,24 @@ pub fn load_person_detail<R: PeopleManagementRepository>(
             reversed: item.reversal_of.is_some(),
         })
         .collect::<Vec<_>>();
+    let mut purchases = repository.list_person_purchases(person_id)?;
+    purchases.sort_by(|left, right| {
+        right
+            .issue
+            .cmp(&left.issue)
+            .then_with(|| right.purchased_at.cmp(&left.purchased_at))
+            .then_with(|| right.updated_at.cmp(&left.updated_at))
+            .then_with(|| right.id.cmp(&left.id))
+    });
+    let purchases = purchases
+        .into_iter()
+        .map(|item| PurchaseView {
+            issue: item.issue.display_name(),
+            quantity: item.quantity,
+            purchased_at: item.purchased_at,
+            reversed: item.reversal_of.is_some(),
+        })
+        .collect::<Vec<_>>();
     let check_items = repository
         .list_person_check_items(person_id)?
         .into_iter()
@@ -332,6 +363,7 @@ pub fn load_person_detail<R: PeopleManagementRepository>(
         person_note: record.person.person_note,
         subscriptions,
         distributions,
+        purchases,
         check_items,
         memos,
     })
@@ -777,13 +809,14 @@ mod tests {
     use std::cell::Cell;
 
     use super::*;
-    use qt_domain::{CheckItem, CheckItemStatus};
+    use qt_domain::{CheckItem, CheckItemStatus, OneTimePurchase};
 
     #[derive(Default)]
     struct MemoryRepository {
         operator: Option<String>,
         records: Vec<ManagedPersonRecord>,
         check_items: Vec<CheckItem>,
+        purchases: Vec<OneTimePurchase>,
         changes: Vec<ChangeLog>,
     }
 
@@ -822,6 +855,10 @@ mod tests {
                     !item.subscriptions.is_empty()
                         || !item.distributions.is_empty()
                         || self
+                            .purchases
+                            .iter()
+                            .any(|purchase| purchase.person_id.as_deref() == Some(id))
+                        || self
                             .check_items
                             .iter()
                             .any(|check| check.person_id.as_deref() == Some(id))
@@ -841,6 +878,17 @@ mod tests {
                     item.person_id.as_deref() == Some(person_id)
                         && item.status != CheckItemStatus::Archived
                 })
+                .cloned()
+                .collect())
+        }
+        fn list_person_purchases(
+            &self,
+            person_id: &str,
+        ) -> Result<Vec<OneTimePurchase>, PortError> {
+            Ok(self
+                .purchases
+                .iter()
+                .filter(|purchase| purchase.person_id.as_deref() == Some(person_id))
                 .cloned()
                 .collect())
         }
@@ -1217,6 +1265,55 @@ mod tests {
     }
 
     #[test]
+    fn includes_linked_one_time_purchases_in_person_detail() {
+        let runtime = FixedRuntime(Cell::new(0));
+        let person = Person {
+            id: "person-purchase-history".into(),
+            name: "가상 구매 이력".into(),
+            cohort: Some("00".into()),
+            phone: None,
+            normalized_phone: None,
+            status: PersonStatus::Active,
+            person_note: None,
+            created_at: runtime.now(),
+            updated_at: runtime.now(),
+        };
+        let purchase = OneTimePurchase {
+            id: "purchase-history-1".into(),
+            person_id: Some(person.id.clone()),
+            buyer_name: Some(person.name.clone()),
+            issue: Issue::new(2026, 7).unwrap(),
+            quantity: 2,
+            purchased_at: "2026-07-27T09:23:00+09:00".into(),
+            note: None,
+            reversal_of: None,
+            created_at: "2026-07-27T09:23:00+09:00".into(),
+            updated_at: "2026-07-27T09:23:00+09:00".into(),
+        };
+        let mut repository = MemoryRepository {
+            records: vec![ManagedPersonRecord {
+                person,
+                subscriptions: vec![],
+                distributions: vec![],
+            }],
+            purchases: vec![purchase],
+            ..Default::default()
+        };
+
+        let detail = load_person_detail(
+            &mut repository,
+            "person-purchase-history",
+            Issue::new(2026, 7).unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(detail.purchases.len(), 1);
+        assert_eq!(detail.purchases[0].issue, "2026년 7~8월호");
+        assert_eq!(detail.purchases[0].quantity, 2);
+        assert!(!detail.purchases[0].reversed);
+    }
+
+    #[test]
     fn registers_full_person_and_six_issue_subscription_with_two_changes() {
         let mut repository = MemoryRepository {
             operator: Some("가상담당자".into()),
@@ -1283,6 +1380,7 @@ mod tests {
                 distributions: vec![],
             }],
             check_items: vec![],
+            purchases: vec![],
             changes: vec![],
         };
         update_person(
@@ -1339,6 +1437,7 @@ mod tests {
                 distributions: vec![],
             }],
             check_items: vec![],
+            purchases: vec![],
             changes: vec![],
         };
         let result = register_person(
@@ -1386,6 +1485,7 @@ mod tests {
                 distributions: vec![],
             }],
             check_items: vec![],
+            purchases: vec![],
             changes: vec![],
         };
 
@@ -1429,6 +1529,7 @@ mod tests {
                 distributions: vec![],
             }],
             check_items: vec![],
+            purchases: vec![],
             changes: vec![],
         };
 

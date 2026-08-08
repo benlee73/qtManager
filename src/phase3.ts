@@ -64,6 +64,12 @@ export type PersonDetail = {
     distributedAt: string;
     reversed: boolean;
   }[];
+  purchases?: {
+    issue: string;
+    quantity: number;
+    purchasedAt: string;
+    reversed: boolean;
+  }[];
   /** 구버전 확인할 일 응답 호환용 */
   checkItems?: LinkedCheckItem[];
   memos?: LinkedMemo[];

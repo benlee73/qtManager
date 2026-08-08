@@ -89,6 +89,14 @@ const detail: PersonDetail = {
       reversed: false,
     },
   ],
+  purchases: [
+    {
+      issue: "2026년 7~8월호",
+      quantity: 1,
+      purchasedAt: "2026-07-27T09:23:00+09:00",
+      reversed: false,
+    },
+  ],
   checkItems: [
     {
       id: "check-needed",
@@ -185,6 +193,8 @@ describe("PersonDetailPanel", () => {
     expect(markup).toContain("연락처 확인 완료");
     expect(markup).toContain('data-testid="person-memo-form"');
     expect(markup).toContain("메모");
+    expect(markup).toContain('data-testid="purchase-history"');
+    expect(markup).toContain("2026년 7~8월호");
   });
 
   it("exposes a guarded applicant delete action in the detail panel", () => {

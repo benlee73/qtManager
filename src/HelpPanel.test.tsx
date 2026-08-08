@@ -37,7 +37,9 @@ describe("HelpPanel", () => {
     expect(markup).toContain(
       "현장 배부 상단 검색창 오른쪽의 점 세 개(기타 기능)",
     );
-    expect(markup).toContain("현재 선택한 호의 구매자 이름·수량·메모");
+    expect(markup).toContain(
+      "구매자 이름이나 또래를 입력해 기존 신청자를 검색",
+    );
     expect(markup).toContain("인수인계 백업과 복원 순서");
     expect(markup).toContain('data-testid="help-search"');
     expect(markup).toContain("받은 백업 엑셀이 있다면 신청자 관리");

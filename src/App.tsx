@@ -979,6 +979,7 @@ export default function App() {
       )}
       {dialog && (
         <Phase2DialogContent
+          key={dialog.type}
           dialog={dialog}
           issue={issue}
           busy={busy}

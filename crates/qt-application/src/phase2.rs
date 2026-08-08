@@ -89,6 +89,18 @@ pub trait DistributionDeskRepository {
         purchase: &OneTimePurchase,
         change: &ChangeLog,
     ) -> Result<(), PortError>;
+    /// 구매 전용 인원을 신청자와 구매 기록으로 함께 저장한다.
+    /// 기존 어댑터는 이 선택적 기능을 구현하지 않으면 명시적 오류를 반환한다.
+    fn save_person_and_purchase(
+        &mut self,
+        _person: &Person,
+        _purchase: &OneTimePurchase,
+        _changes: &[ChangeLog],
+    ) -> Result<(), PortError> {
+        Err(PortError::new(
+            "개별 구매 인원 저장 포트가 구현되지 않았습니다.",
+        ))
+    }
     fn latest_reversible_purchase(
         &self,
         issue: Issue,
@@ -311,6 +323,18 @@ pub struct UpdatePinnedNoteRequest {
 pub struct RecordPurchaseRequest {
     pub person_id: Option<String>,
     pub buyer_name: Option<String>,
+    pub issue_year: i32,
+    pub issue_month: u8,
+    pub quantity: u32,
+    pub note: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordPurchasePersonRequest {
+    pub name: String,
+    pub cohort: Option<String>,
+    pub phone: Option<String>,
     pub issue_year: i32,
     pub issue_month: u8,
     pub quantity: u32,
@@ -1200,6 +1224,72 @@ where
     Ok(())
 }
 
+/// 현장 개별 구매를 위해 신청자를 새로 만들고, 구독 없이 구매 기록만 연결한다.
+/// 이름이 같은 기존 신청자를 자동으로 합치지 않는 것은 잘못된 사람의 이력에
+/// 구매를 붙이는 것보다 별도 인원으로 남기는 편이 되돌리기 쉽기 때문이다.
+pub fn record_purchase_for_new_person<R, C, I>(
+    repository: &mut R,
+    services: &RuntimeServices<'_, C, I>,
+    request: RecordPurchasePersonRequest,
+) -> Result<String, ApplicationError>
+where
+    R: DistributionDeskRepository,
+    C: Clock,
+    I: IdGenerator,
+{
+    let now = services.clock.now();
+    let name = request.name.trim().to_owned();
+    let cohort = clean_optional(request.cohort);
+    let phone = format_phone(request.phone.as_deref().unwrap_or_default())?;
+    let person = Person {
+        id: services.ids.next_id(),
+        name,
+        cohort,
+        normalized_phone: phone.as_deref().map(normalize_phone),
+        phone,
+        status: PersonStatus::Active,
+        person_note: None,
+        created_at: now.clone(),
+        updated_at: now.clone(),
+    };
+    person.validate()?;
+
+    let purchase = OneTimePurchase {
+        id: services.ids.next_id(),
+        person_id: Some(person.id.clone()),
+        buyer_name: Some(person.name.clone()),
+        issue: Issue::new(request.issue_year, request.issue_month)?,
+        quantity: request.quantity,
+        purchased_at: now.clone(),
+        note: clean_optional(request.note),
+        reversal_of: None,
+        created_at: now.clone(),
+        updated_at: now.clone(),
+    };
+    purchase.validate()?;
+    let operator = required_operator(repository)?;
+    let person_change = change_log(
+        services.ids.next_id(),
+        &now,
+        &operator,
+        "person_created_for_one_time_purchase",
+        "person",
+        &person.id,
+        "개별 구매 인원 추가",
+    );
+    let purchase_change = change_log(
+        services.ids.next_id(),
+        &now,
+        &operator,
+        "one_time_purchase_recorded",
+        "one_time_purchase",
+        &purchase.id,
+        &format!("현장 개별 구매 {}권", purchase.quantity),
+    );
+    repository.save_person_and_purchase(&person, &purchase, &[person_change, purchase_change])?;
+    Ok(person.id)
+}
+
 pub fn cancel_latest_purchase<R, C, I>(
     repository: &mut R,
     services: &RuntimeServices<'_, C, I>,
@@ -1552,6 +1642,21 @@ mod tests {
             purchase: &OneTimePurchase,
             _change: &ChangeLog,
         ) -> Result<(), PortError> {
+            self.purchases.push(purchase.clone());
+            Ok(())
+        }
+        fn save_person_and_purchase(
+            &mut self,
+            person: &Person,
+            purchase: &OneTimePurchase,
+            _changes: &[ChangeLog],
+        ) -> Result<(), PortError> {
+            self.records.push(DeskRecord {
+                person: person.clone(),
+                subscriptions: vec![],
+                distributions: vec![],
+                has_memo: false,
+            });
             self.purchases.push(purchase.clone());
             Ok(())
         }
@@ -2077,6 +2182,83 @@ mod tests {
         assert_eq!(repository.purchase_summary(issue).unwrap(), (0, 0));
         assert_eq!(repository.records[0].subscriptions[0].quantity, 1);
         assert_eq!(repository.purchases.len(), 2);
+    }
+
+    #[test]
+    fn one_time_purchase_preserves_an_explicit_existing_person_link() {
+        let mut repository = MemoryRepository {
+            operator: Some("담당자".into()),
+            records: vec![record(1)],
+            ..Default::default()
+        };
+        let ids = SequenceIds(Cell::new(0));
+        let services = RuntimeServices {
+            clock: &FixedClock,
+            ids: &ids,
+        };
+
+        record_purchase(
+            &mut repository,
+            &services,
+            RecordPurchaseRequest {
+                person_id: Some("person-1".into()),
+                buyer_name: Some("가상 신청자".into()),
+                issue_year: 2026,
+                issue_month: 7,
+                quantity: 1,
+                note: None,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(repository.purchases.len(), 1);
+        assert_eq!(
+            repository.purchases[0].person_id.as_deref(),
+            Some("person-1")
+        );
+        assert_eq!(repository.records[0].subscriptions[0].quantity, 1);
+    }
+
+    #[test]
+    fn one_time_purchase_can_create_a_linked_person_without_subscription() {
+        let mut repository = MemoryRepository {
+            operator: Some("담당자".into()),
+            ..Default::default()
+        };
+        let ids = SequenceIds(Cell::new(0));
+        let services = RuntimeServices {
+            clock: &FixedClock,
+            ids: &ids,
+        };
+
+        let person_id = record_purchase_for_new_person(
+            &mut repository,
+            &services,
+            RecordPurchasePersonRequest {
+                name: "가상 구매자".into(),
+                cohort: Some("00".into()),
+                phone: None,
+                issue_year: 2026,
+                issue_month: 7,
+                quantity: 1,
+                note: Some("현장 구매".into()),
+            },
+        )
+        .unwrap();
+
+        let person = repository
+            .records
+            .iter()
+            .find(|record| record.person.id == person_id)
+            .expect("구매 전용 인원이 저장되어야 합니다.");
+        assert_eq!(person.person.name, "가상 구매자");
+        assert_eq!(person.person.status, PersonStatus::Active);
+        assert!(person.subscriptions.is_empty());
+        assert_eq!(repository.purchases.len(), 1);
+        assert_eq!(
+            repository.purchases[0].person_id.as_deref(),
+            Some(person_id.as_str())
+        );
     }
 
     #[test]

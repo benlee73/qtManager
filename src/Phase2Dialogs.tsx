@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { ReversibleAction } from "./actionHistory";
 import { validateDraftInput } from "./draftValidation";
 import { handlePhoneInput } from "./phone";
+import { filterPurchasePeople, purchasePersonLabel } from "./purchasePeople";
 import { distributionAllocations } from "./distributionView";
 import {
   type DeskPerson,
@@ -14,10 +15,12 @@ import {
   createDraft,
   distributeAllocations,
   recordPurchase,
+  recordPurchaseForNewPerson,
   setOperator,
   undoDistributionAllocations,
   updateMemoStatus,
 } from "./phase2";
+import { loadManagement, type PersonSummary } from "./phase3";
 
 export type Phase2Dialog =
   | { type: "operator" }
@@ -49,6 +52,30 @@ export function Phase2DialogContent({
   recordAction: (action: ReversibleAction) => void;
 }) {
   const [draftError, setDraftError] = useState<string | null>(null);
+  const [purchasePeople, setPurchasePeople] = useState<PersonSummary[]>([]);
+  const [purchasePeopleLoading, setPurchasePeopleLoading] = useState(true);
+  const [purchaseQuery, setPurchaseQuery] = useState("");
+  const [selectedPurchasePerson, setSelectedPurchasePerson] =
+    useState<PersonSummary | null>(null);
+  const [purchaseNewPersonMode, setPurchaseNewPersonMode] = useState(false);
+
+  useEffect(() => {
+    if (dialog.type !== "purchase") return;
+    let active = true;
+    void loadManagement("", false)
+      .then((management) => {
+        if (active) setPurchasePeople(management.people);
+      })
+      .catch(() => {
+        if (active) setPurchasePeople([]);
+      })
+      .finally(() => {
+        if (active) setPurchasePeopleLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [dialog.type]);
 
   useEffect(() => {
     if (!draftError) return;
@@ -216,38 +243,188 @@ export function Phase2DialogContent({
     );
   }
   if (dialog.type === "purchase") {
+    const purchaseMatches = filterPurchasePeople(purchasePeople, purchaseQuery);
     return (
-      <FormDialog title="현장 개별 구매" onClose={onClose}>
+      <FormDialog
+        title="현장 개별 구매"
+        className="purchase-dialog"
+        onClose={onClose}
+      >
         <form
           onSubmit={(event) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
+            const buyerName = String(data.get("buyerName") ?? "").trim();
+            const quantity = Number(data.get("quantity"));
+            const note = String(data.get("note") ?? "");
             const input = {
-              buyerName: String(data.get("buyerName") ?? ""),
-              quantity: Number(data.get("quantity")),
-              note: String(data.get("note") ?? ""),
+              buyerName,
+              personId: selectedPurchasePerson?.id ?? null,
+              quantity,
+              note,
             };
-            void mutate(
-              () => recordPurchase(issue, input),
-              "개별 구매와 전달을 기록했습니다.",
-            ).then((saved) => {
-              if (saved) {
-                recordAction({
-                  description: "현장 개별 구매",
-                  undo: () => cancelLatestPurchase(issue),
-                  redo: () => recordPurchase(issue, input),
-                });
-              }
-            });
+            const newPersonInput = {
+              name: buyerName,
+              cohort: String(data.get("purchaseCohort") ?? ""),
+              phone: String(data.get("purchasePhone") ?? ""),
+              quantity,
+              note,
+            };
+            // Undo/redo keeps the newly created applicant identity stable. A
+            // redo must add another purchase to the same record, rather than
+            // creating a second applicant with the same name.
+            let createdPersonId: string | null = null;
+            const work: () => Promise<void> = purchaseNewPersonMode
+              ? async () => {
+                  if (createdPersonId) {
+                    await recordPurchase(issue, {
+                      ...input,
+                      personId: createdPersonId,
+                    });
+                    return;
+                  }
+                  createdPersonId = await recordPurchaseForNewPerson(
+                    issue,
+                    newPersonInput,
+                  );
+                }
+              : () => recordPurchase(issue, input);
+            void mutate(work, "개별 구매와 전달을 기록했습니다.").then(
+              (saved) => {
+                if (saved) {
+                  recordAction({
+                    description: "현장 개별 구매",
+                    undo: () => cancelLatestPurchase(issue),
+                    redo: work,
+                  });
+                }
+              },
+            );
           }}
         >
           <p className="dialog-description">
-            연간 구독과 별개로 이번 호를 현장에서 구매해 바로 전달한 경우에만
-            사용합니다.
+            이번 호만 구매해 바로 전달합니다. 기존 신청자를 선택하면 구매 이력이
+            연결되고, 찾지 못한 경우에만 새 인원을 추가합니다.
           </p>
-          <Field label="구매자 이름">
-            <input name="buyerName" autoFocus placeholder="모르면 비워두세요" />
-          </Field>
+          <div className="purchase-person-picker">
+            <Field label="구매자 이름 또는 또래">
+              <input
+                name="buyerName"
+                value={purchaseQuery}
+                autoFocus
+                required={purchaseNewPersonMode}
+                placeholder="이름·또래 검색 (비워두면 익명)"
+                data-testid="purchase-person-search"
+                onChange={(event) => {
+                  setPurchaseQuery(event.currentTarget.value);
+                  setSelectedPurchasePerson(null);
+                  setPurchaseNewPersonMode(false);
+                }}
+              />
+            </Field>
+            {selectedPurchasePerson ? (
+              <div className="purchase-person-selected">
+                <span>
+                  연결할 신청자:{" "}
+                  <strong>{purchasePersonLabel(selectedPurchasePerson)}</strong>
+                </span>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => {
+                    setSelectedPurchasePerson(null);
+                    setPurchaseQuery("");
+                  }}
+                >
+                  선택 해제
+                </button>
+              </div>
+            ) : (
+              <>
+                {purchasePeopleLoading && (
+                  <p className="purchase-person-hint">
+                    신청자 목록을 불러오는 중…
+                  </p>
+                )}
+                {!purchasePeopleLoading && purchaseQuery.trim() && (
+                  <div className="purchase-person-results" role="listbox">
+                    {purchaseMatches.map((person) => (
+                      <button
+                        key={person.id}
+                        type="button"
+                        className="purchase-person-result"
+                        data-testid="purchase-person-result"
+                        onClick={() => {
+                          setSelectedPurchasePerson(person);
+                          setPurchaseQuery(person.name);
+                          setPurchaseNewPersonMode(false);
+                        }}
+                      >
+                        <span className="purchase-person-cohort">
+                          {person.cohort ?? "--"}
+                        </span>
+                        <span>{person.name}</span>
+                      </button>
+                    ))}
+                    {purchaseMatches.length === 0 && (
+                      <p className="purchase-person-hint">
+                        일치하는 기존 신청자가 없습니다.
+                      </p>
+                    )}
+                  </div>
+                )}
+                {purchaseQuery.trim() && (
+                  <button
+                    type="button"
+                    className="purchase-new-person-toggle"
+                    data-testid="purchase-new-person-toggle"
+                    onClick={() =>
+                      setPurchaseNewPersonMode((current) => !current)
+                    }
+                  >
+                    {purchaseNewPersonMode
+                      ? "기존 신청자 선택으로 돌아가기"
+                      : "신규 인원으로 추가"}
+                  </button>
+                )}
+              </>
+            )}
+            {purchaseNewPersonMode && !selectedPurchasePerson && (
+              <div className="purchase-new-person-fields">
+                <p className="purchase-person-hint">
+                  구독 없이 이번 구매 이력만 연결된 신청자로 저장합니다.
+                </p>
+                <div className="field-grid">
+                  <Field label="또래 (선택)">
+                    <input
+                      name="purchaseCohort"
+                      inputMode="numeric"
+                      pattern="[0-9]{2}"
+                      maxLength={2}
+                      placeholder="94"
+                      onInput={(event) => {
+                        const input = event.currentTarget;
+                        const digits = input.value
+                          .replace(/[^0-9]/g, "")
+                          .slice(0, 2);
+                        if (digits !== input.value) input.value = digits;
+                      }}
+                    />
+                  </Field>
+                  <Field label="연락처 (선택)">
+                    <input
+                      name="purchasePhone"
+                      inputMode="tel"
+                      placeholder="010-1234-5678"
+                      maxLength={13}
+                      pattern="010-[0-9]{4}-[0-9]{4}"
+                      onInput={handlePhoneInput}
+                    />
+                  </Field>
+                </div>
+              </div>
+            )}
+          </div>
           <Field label="수량">
             <input
               name="quantity"

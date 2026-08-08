@@ -295,16 +295,44 @@ export function deletePinnedNote(id: string) {
 
 export function recordPurchase(
   issue: Issue,
-  input: { buyerName: string; quantity: number; note: string },
+  input: {
+    buyerName: string;
+    personId?: string | null;
+    quantity: number;
+    note: string;
+  },
 ) {
   return invoke<void>("record_purchase_command", {
     request: {
-      personId: null,
+      personId: input.personId ?? null,
       buyerName: input.buyerName || null,
       issueYear: issue.year,
       issueMonth: issue.startMonth,
       quantity: input.quantity,
       note: input.note || null,
+    },
+  });
+}
+
+export function recordPurchaseForNewPerson(
+  issue: Issue,
+  input: {
+    name: string;
+    cohort: string;
+    phone: string;
+    quantity: number;
+    note: string;
+  },
+) {
+  return invoke<string>("record_purchase_for_new_person_command", {
+    request: {
+      name: input.name.trim(),
+      cohort: input.cohort.trim() || null,
+      phone: input.phone.trim() || null,
+      issueYear: issue.year,
+      issueMonth: issue.startMonth,
+      quantity: input.quantity,
+      note: input.note.trim() || null,
     },
   });
 }

@@ -1,5 +1,5 @@
 use qt_application::{CoreRepository, ManagedPersonRecord, PeopleManagementRepository, PortError};
-use qt_domain::{ChangeLog, CheckItem, Distribution, Memo, Person, Subscription};
+use qt_domain::{ChangeLog, CheckItem, Distribution, Memo, OneTimePurchase, Person, Subscription};
 use rusqlite::{OptionalExtension, params};
 use std::collections::HashMap;
 
@@ -8,7 +8,7 @@ use crate::sqlite_core_repository::{
     distribution_from_row, person_from_row, subscription_from_row, upsert_change, upsert_person,
     upsert_subscription,
 };
-use crate::sqlite_distribution_desk::{check_item_from_row, memo_from_row};
+use crate::sqlite_distribution_desk::{check_item_from_row, memo_from_row, purchase_from_row};
 
 impl PeopleManagementRepository for SqliteCoreRepository {
     fn migrate(&mut self) -> Result<(), PortError> {
@@ -233,6 +233,27 @@ impl PeopleManagementRepository for SqliteCoreRepository {
             .map_err(port_error)?;
         statement
             .query_map([person_id], memo_from_row)
+            .map_err(port_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(port_error)
+    }
+
+    fn list_person_purchases(&self, person_id: &str) -> Result<Vec<OneTimePurchase>, PortError> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "
+                SELECT id, person_id, buyer_name, issue_year, issue_month, quantity,
+                       purchased_at, note, reversal_of, created_at, updated_at
+                FROM one_time_purchases
+                WHERE person_id = ?1
+                ORDER BY issue_year DESC, issue_month DESC,
+                         purchased_at DESC, updated_at DESC, rowid DESC
+                ",
+            )
+            .map_err(port_error)?;
+        statement
+            .query_map([person_id], purchase_from_row)
             .map_err(port_error)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(port_error)

@@ -5,11 +5,11 @@ use qt_domain::{
     ChangeLog, CheckItem, CheckItemStatus, Distribution, Issue, Memo, MemoStatus, OneTimePurchase,
     Person, PinnedNote, PinnedNoteStatus, Subscription,
 };
-use rusqlite::{OptionalExtension, Row, params};
+use rusqlite::{OptionalExtension, Row, Transaction, params};
 
 use crate::SqliteCoreRepository;
 use crate::sqlite_core_repository::{
-    distribution_from_row, person_from_row, subscription_from_row, upsert_change,
+    distribution_from_row, person_from_row, subscription_from_row, upsert_change, upsert_person,
 };
 
 impl DistributionDeskRepository for SqliteCoreRepository {
@@ -430,40 +430,37 @@ impl DistributionDeskRepository for SqliteCoreRepository {
             .validate()
             .map_err(|error| PortError::new(error.to_string()))?;
         let transaction = self.connection.transaction().map_err(port_error)?;
-        transaction
-            .execute(
-                "
-                INSERT INTO one_time_purchases(
-                    id, person_id, buyer_name, issue_year, issue_month, quantity, purchased_at,
-                    note, reversal_of, created_at, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
-                ON CONFLICT(id) DO UPDATE SET
-                    person_id = excluded.person_id,
-                    buyer_name = excluded.buyer_name,
-                    issue_year = excluded.issue_year,
-                    issue_month = excluded.issue_month,
-                    quantity = excluded.quantity,
-                    purchased_at = excluded.purchased_at,
-                    note = excluded.note,
-                    reversal_of = excluded.reversal_of,
-                    updated_at = excluded.updated_at
-                ",
-                params![
-                    purchase.id,
-                    purchase.person_id,
-                    purchase.buyer_name,
-                    purchase.issue.year,
-                    purchase.issue.start_month,
-                    purchase.quantity,
-                    purchase.purchased_at,
-                    purchase.note,
-                    purchase.reversal_of,
-                    purchase.created_at,
-                    purchase.updated_at
-                ],
-            )
-            .map_err(port_error)?;
+        upsert_purchase(&transaction, purchase)?;
         upsert_change(&transaction, change)?;
+        transaction.commit().map_err(port_error)
+    }
+
+    fn save_person_and_purchase(
+        &mut self,
+        person: &Person,
+        purchase: &OneTimePurchase,
+        changes: &[ChangeLog],
+    ) -> Result<(), PortError> {
+        person
+            .validate()
+            .map_err(|error| PortError::new(error.to_string()))?;
+        purchase
+            .validate()
+            .map_err(|error| PortError::new(error.to_string()))?;
+        if purchase.person_id.as_deref() != Some(person.id.as_str()) {
+            return Err(PortError::new(
+                "개별 구매 인원과 구매 기록의 연결이 올바르지 않습니다.",
+            ));
+        }
+        let transaction = self.connection.transaction().map_err(port_error)?;
+        upsert_person(&transaction, person)?;
+        upsert_purchase(&transaction, purchase)?;
+        for change in changes {
+            change
+                .validate()
+                .map_err(|error| PortError::new(error.to_string()))?;
+            upsert_change(&transaction, change)?;
+        }
         transaction.commit().map_err(port_error)
     }
 
@@ -670,7 +667,7 @@ fn pinned_note_from_row(row: &Row<'_>) -> rusqlite::Result<PinnedNote> {
     })
 }
 
-fn purchase_from_row(row: &Row<'_>) -> rusqlite::Result<OneTimePurchase> {
+pub(crate) fn purchase_from_row(row: &Row<'_>) -> rusqlite::Result<OneTimePurchase> {
     let year = row.get(3)?;
     let month = row.get(4)?;
     Ok(OneTimePurchase {
@@ -691,6 +688,46 @@ fn purchase_from_row(row: &Row<'_>) -> rusqlite::Result<OneTimePurchase> {
         created_at: row.get(9)?,
         updated_at: row.get(10)?,
     })
+}
+
+fn upsert_purchase(
+    transaction: &Transaction<'_>,
+    purchase: &OneTimePurchase,
+) -> Result<(), PortError> {
+    transaction
+        .execute(
+            "
+            INSERT INTO one_time_purchases(
+                id, person_id, buyer_name, issue_year, issue_month, quantity, purchased_at,
+                note, reversal_of, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            ON CONFLICT(id) DO UPDATE SET
+                person_id = excluded.person_id,
+                buyer_name = excluded.buyer_name,
+                issue_year = excluded.issue_year,
+                issue_month = excluded.issue_month,
+                quantity = excluded.quantity,
+                purchased_at = excluded.purchased_at,
+                note = excluded.note,
+                reversal_of = excluded.reversal_of,
+                updated_at = excluded.updated_at
+            ",
+            params![
+                purchase.id,
+                purchase.person_id,
+                purchase.buyer_name,
+                purchase.issue.year,
+                purchase.issue.start_month,
+                purchase.quantity,
+                purchase.purchased_at,
+                purchase.note,
+                purchase.reversal_of,
+                purchase.created_at,
+                purchase.updated_at
+            ],
+        )
+        .map_err(port_error)?;
+    Ok(())
 }
 
 fn check_item_status(status: CheckItemStatus) -> &'static str {
