@@ -318,7 +318,7 @@ describe("ManagementScreen heading actions", () => {
       /class="primary-button compact"[^>]*data-testid="open-register-person"/,
     );
     expect(markup).toContain("데이터 백업·복원");
-    expect(markup).toContain("Google 응답 붙여넣기");
+    expect(markup).toContain("스프레드시트 붙여넣기");
     expect(markup).toContain("+ 신청자 등록");
     expect(markup).toContain("정보 보완 필요 0명");
     expect(markup).toContain(

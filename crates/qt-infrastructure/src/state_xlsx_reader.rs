@@ -101,12 +101,21 @@ fn parse_setting(row: &RowValues<'_>) -> Result<StateSetting, PortError> {
     })
 }
 fn parse_person(row: &RowValues<'_>) -> Result<Person, PortError> {
+    let phone = row
+        .optional("연락처")?
+        .map(|value| {
+            qt_domain::format_phone(&value)
+                .map_err(|error| PortError::new(format!("연락처를 읽을 수 없습니다: {error}")))
+        })
+        .transpose()?
+        .flatten();
+    let normalized_phone = phone.as_deref().map(qt_domain::normalize_phone);
     let value = Person {
         id: row.text("person_id")?,
         name: row.text("이름")?,
         cohort: row.optional("또래")?,
-        phone: row.optional("연락처")?,
-        normalized_phone: row.optional("normalized_phone")?,
+        phone,
+        normalized_phone,
         status: parse_person_status(&row.text("상태")?)?,
         person_note: row.optional_if_present("신청자메모")?,
         created_at: row.text("created_at")?,

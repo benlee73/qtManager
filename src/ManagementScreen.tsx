@@ -185,7 +185,7 @@ export function ManagementScreen({
             type="button"
             onClick={() => setDialog({ type: "applications" })}
           >
-            Google 응답 붙여넣기
+            스프레드시트 붙여넣기
           </button>
           <button
             className="primary-button compact"

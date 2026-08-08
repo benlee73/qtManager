@@ -2,7 +2,7 @@ use qt_application::{
     ApplicationClipboardParser, ClipboardColumnMapping, ClipboardParseResult, ParsedApplicationRow,
     stable_fingerprint,
 };
-use qt_domain::{Issue, normalize_phone, normalize_search_text};
+use qt_domain::{Issue, format_phone, normalize_phone, normalize_search_text};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 #[derive(Default)]
@@ -329,8 +329,8 @@ fn validate_cohort(value: Option<&str>) -> Option<String> {
 }
 
 fn validate_phone(value: Option<&str>) -> Option<String> {
-    let length = value.map(normalize_phone).map_or(0, |phone| phone.len());
-    (!(10..=11).contains(&length)).then(|| "연락처는 10~11자리 전화번호여야 합니다.".into())
+    let valid = value.is_some_and(|phone| format_phone(phone).is_ok_and(|item| item.is_some()));
+    (!valid).then(|| "연락처는 010-xxxx-xxxx 형식이어야 합니다.".into())
 }
 
 fn cell(cells: &[String], index: usize) -> Option<String> {

@@ -58,7 +58,12 @@ export function AppNavigation({
       </div>
 
       <div className="rail-utilities">
-        <button className="rail-item" type="button" onClick={onHelp}>
+        <button
+          className="rail-item"
+          data-testid="open-help"
+          type="button"
+          onClick={onHelp}
+        >
           <HelpIcon />
           <span>도움말</span>
         </button>

@@ -12,7 +12,7 @@ import { NotificationStack } from "./Notifications";
 import { PersonFilterMenu } from "./PersonFilterMenu";
 import { PersonContextMenu } from "./PersonContextMenu";
 import { type Phase2Dialog, Phase2DialogContent } from "./Phase2Dialogs";
-import { EditDialog } from "./Phase3Dialogs";
+import { EditDialog, RenewDialog } from "./Phase3Dialogs";
 import type { ReversibleAction } from "./actionHistory";
 import { persistTheme, readStoredTheme, type Theme } from "./appearance";
 import {
@@ -89,6 +89,7 @@ export default function App() {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [dialog, setDialog] = useState<Phase2Dialog>(null);
   const [editPerson, setEditPerson] = useState<PersonDetail | null>(null);
+  const [renewPerson, setRenewPerson] = useState<PersonDetail | null>(null);
   const [memoDetail, setMemoDetail] = useState<
     import("./phase2").MemoView | null
   >(null);
@@ -279,6 +280,20 @@ export default function App() {
     [notify],
   );
 
+  const openPersonRenewal = useCallback(
+    async (personId: string) => {
+      setBusy(true);
+      try {
+        setRenewPerson(await loadPersonDetail(personId));
+      } catch (reason) {
+        notify(errorMessage(reason), "error");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [notify],
+  );
+
   const toggleSort = (
     key: "cohort" | "name" | "subscription" | "distribution",
   ) => {
@@ -364,9 +379,6 @@ export default function App() {
               )
             : searchRef.current;
         targetSearch?.focus();
-      } else if (event.key === "?" && !textEntry) {
-        event.preventDefault();
-        setHelpOpen(true);
       } else if (shortcutScreen) {
         event.preventDefault();
         setScreen(shortcutScreen);
@@ -789,11 +801,7 @@ export default function App() {
                     setManagementFocusId(person.personId);
                     setScreen("management");
                   }}
-                  onRenew={() => {
-                    setManagementFocusId(person.personId);
-                    setManagementRenewPersonId(person.personId);
-                    setScreen("management");
-                  }}
+                  onRenew={() => void openPersonRenewal(person.personId)}
                   onMemo={() =>
                     setDialog({
                       type: "memo",
@@ -1063,6 +1071,20 @@ export default function App() {
             }
             return mutate(() => deleteMemo(memo.id), "메모를 삭제했습니다.");
           }}
+        />
+      )}
+      {renewPerson && (
+        <RenewDialog
+          person={renewPerson}
+          issue={issue}
+          busy={busy}
+          onClose={() => setRenewPerson(null)}
+          onSaved={(work) =>
+            mutate(work, "구독을 추가했습니다.").then((saved) => {
+              if (saved) setRenewPerson(null);
+              return saved;
+            })
+          }
         />
       )}
       {memoDetail && (

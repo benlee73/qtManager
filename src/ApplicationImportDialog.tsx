@@ -139,20 +139,20 @@ export function ApplicationImportDialog({
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="dialog-heading">
-          <h2 id="application-import-title">Google 응답 붙여넣기</h2>
+          <h2 id="application-import-title">스프레드시트 붙여넣기</h2>
           <button type="button" aria-label="닫기" onClick={onClose}>
             ×
           </button>
         </div>
         <p className="dialog-description import-description">
-          <span>Google 응답 시트에서 행을 복사해 붙여넣으세요.</span>
+          <span>스프레드시트나 Excel에서 행을 복사해 붙여넣으세요.</span>
           <span>
             제출 시각이 없는 행은 현재 선택한 {issueYear}년 호로 해석하며, 입금
             여부는 저장하지 않습니다.
           </span>
         </p>
         <label className="field">
-          응답 행
+          붙여넣은 행
           <textarea
             data-testid="application-paste-input"
             ref={rawInputRef}

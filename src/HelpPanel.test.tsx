@@ -39,8 +39,10 @@ describe("HelpPanel", () => {
     );
     expect(markup).toContain("현재 선택한 호의 구매자 이름·수량·메모");
     expect(markup).toContain("인수인계 백업과 복원 순서");
+    expect(markup).toContain('data-testid="help-search"');
+    expect(markup).toContain("받은 백업 엑셀이 있다면 신청자 관리");
     expect(markup).toContain('class="help-card"');
-    expect(markup).toContain("도움말 2026-08-04");
+    expect(markup).toContain("도움말 2026-08-08");
     expect(markup).not.toContain("인터넷 없이 보는 사용법");
     expect(markup).not.toContain("->");
     expect(markup).toContain('class="help-step-copy"');
@@ -48,6 +50,7 @@ describe("HelpPanel", () => {
     expect(markup).toContain('class="help-card-grid help-card-grid-stacked"');
     expect(markup).toContain("아래 방향키");
     expect(markup).not.toContain("ArrowDown");
+    expect(markup).not.toContain("도움말 열기");
     expect(markup).toContain('class="help-secondary-action"');
     expect(markup).toContain("⌘/Ctrl + 1");
     expect(markup).toContain("⌘/Ctrl + 2");

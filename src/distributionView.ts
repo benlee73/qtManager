@@ -34,7 +34,15 @@ export function filterPeople(
   people: DeskPerson[],
   filters: ReadonlySet<PersonFilter>,
 ) {
-  return people.filter((person) => filters.has(personFilter(person)));
+  // A person whose selected issue is outside every subscription is not a
+  // distribution candidate. Keep the filter vocabulary focused on actions the
+  // operator can actually perform; these rows are available in management.
+  return people.filter(
+    (person) =>
+      person.subscriptionStatus !== "대상 아님" &&
+      person.subscriptionStatus !== "예정" &&
+      filters.has(personFilter(person)),
+  );
 }
 
 export function subscriptionHeadline(person: DeskPerson): string | null {

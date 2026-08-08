@@ -53,10 +53,10 @@ export function MemoDetailDialog({
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="dialog-heading">
-          <div>
+          <div className="memo-detail-title-line">
             <h2 id="memo-detail-title">메모</h2>
             {memo.personName && (
-              <p className="memo-detail-person">{memo.personName}</p>
+              <span className="memo-detail-person">{memo.personName}</span>
             )}
           </div>
           <button type="button" aria-label="닫기" onClick={onClose}>

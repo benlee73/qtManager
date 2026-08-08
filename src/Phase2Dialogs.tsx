@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import type { ReversibleAction } from "./actionHistory";
 import { validateDraftInput } from "./draftValidation";
+import { handlePhoneInput } from "./phone";
 import { distributionAllocations } from "./distributionView";
 import {
   type DeskPerson,
@@ -148,7 +149,10 @@ export function Phase2DialogContent({
             <input
               name="phone"
               inputMode="tel"
-              placeholder="선택 입력"
+              placeholder="010-1234-5678 (선택)"
+              maxLength={13}
+              pattern="010-[0-9]{4}-[0-9]{4}"
+              onInput={handlePhoneInput}
               onChange={() => setDraftError(null)}
             />
           </Field>

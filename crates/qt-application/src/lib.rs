@@ -199,9 +199,9 @@ pub enum ApplicationError {
         "이 신청자는 구독·배부·개별 구매·메모 이력이 있어 삭제할 수 없습니다. 대신 보관해 주세요."
     )]
     PersonHasHistory,
-    #[error("추가할 Google 응답 행을 한 개 이상 선택해 주세요.")]
+    #[error("추가할 스프레드시트 행을 한 개 이상 선택해 주세요.")]
     NoApplicationRowsSelected,
-    #[error("{0}행은 이미 추가한 Google 응답입니다.")]
+    #[error("{0}행은 이미 추가한 스프레드시트 행입니다.")]
     ApplicationAlreadyImported(usize),
     #[error("{0}행의 기존 신청자 연결 또는 새 신청자 추가 방법을 선택해 주세요.")]
     ApplicationCandidateChoiceRequired(usize),

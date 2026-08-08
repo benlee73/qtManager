@@ -45,6 +45,10 @@ export function HelpPanel({
   const [support, setSupport] = useState<AppSupportInfo | null>(null);
   const [supportError, setSupportError] = useState("");
   const [activeTopic, setActiveTopic] = useState<HelpTopic>(topic);
+  const [helpQuery, setHelpQuery] = useState("");
+  const [matchingTopics, setMatchingTopics] = useState<Set<HelpTopic> | null>(
+    null,
+  );
   const contentRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Partial<Record<HelpTopic, HTMLElement>>>({});
 
@@ -77,6 +81,21 @@ export function HelpPanel({
     setActiveTopic((current) => (current === nextTopic ? current : nextTopic));
   }, []);
 
+  const moveToTopic = useCallback((nextTopic: HelpTopic) => {
+    setActiveTopic(nextTopic);
+    const content = contentRef.current;
+    const section = content
+      ? sectionForTopic(content, nextTopic, sectionRefs.current)
+      : null;
+    if (!content || !section) return;
+    const top = Math.max(0, sectionTopWithinContent(section, content) - 8);
+    content.scrollTop = top;
+    content.scrollTo({
+      top,
+      behavior: "smooth",
+    });
+  }, []);
+
   useEffect(() => {
     void loadAppSupportInfo()
       .then(setSupport)
@@ -92,6 +111,32 @@ export function HelpPanel({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const normalized = helpQuery.trim().toLocaleLowerCase();
+      if (!normalized) {
+        setMatchingTopics(null);
+        return;
+      }
+      const content = contentRef.current;
+      if (!content) {
+        setMatchingTopics(new Set<HelpTopic>());
+        return;
+      }
+      const matches = new Set<HelpTopic>();
+      for (const item of topics) {
+        const section = sectionForTopic(content, item.id, sectionRefs.current);
+        if (section?.textContent?.toLocaleLowerCase().includes(normalized)) {
+          matches.add(item.id);
+        }
+      }
+      setMatchingTopics(matches);
+      const first = topics.find((item) => matches.has(item.id));
+      if (first) moveToTopic(first.id);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [helpQuery, moveToTopic]);
 
   useEffect(() => {
     const content = contentRef.current;
@@ -121,21 +166,6 @@ export function HelpPanel({
     };
   }, [syncActiveTopic, topic]);
 
-  function moveToTopic(nextTopic: HelpTopic) {
-    setActiveTopic(nextTopic);
-    const content = contentRef.current;
-    const section = content
-      ? sectionForTopic(content, nextTopic, sectionRefs.current)
-      : null;
-    if (!content || !section) return;
-    const top = Math.max(0, sectionTopWithinContent(section, content) - 8);
-    content.scrollTop = top;
-    content.scrollTo({
-      top,
-      behavior: "smooth",
-    });
-  }
-
   return (
     <div
       className="modal-backdrop help-backdrop"
@@ -152,8 +182,19 @@ export function HelpPanel({
         aria-labelledby="help-title"
       >
         <header className="help-heading">
-          <div>
+          <div className="help-heading-copy">
             <h2 id="help-title">QT Manager 도움말</h2>
+            <label className="help-search">
+              <span className="sr-only">도움말 검색</span>
+              <input
+                data-testid="help-search"
+                type="search"
+                value={helpQuery}
+                onChange={(event) => setHelpQuery(event.target.value)}
+                placeholder="도움말 검색"
+                aria-label="도움말 검색"
+              />
+            </label>
           </div>
           <button type="button" aria-label="도움말 닫기" onClick={onClose}>
             ×
@@ -161,21 +202,28 @@ export function HelpPanel({
         </header>
         <div className="help-layout">
           <nav aria-label="도움말 목차">
-            {topics.map((item) => (
-              <a
-                key={item.id}
-                className={item.id === activeTopic ? "active" : ""}
-                href={`#help-${item.id}`}
-                data-testid={`help-nav-${item.id}`}
-                aria-current={item.id === activeTopic ? "location" : undefined}
-                onClick={(event) => {
-                  event.preventDefault();
-                  moveToTopic(item.id);
-                }}
-              >
-                {item.label}
-              </a>
-            ))}
+            {topics
+              .filter((item) => !matchingTopics || matchingTopics.has(item.id))
+              .map((item) => (
+                <a
+                  key={item.id}
+                  className={item.id === activeTopic ? "active" : ""}
+                  href={`#help-${item.id}`}
+                  data-testid={`help-nav-${item.id}`}
+                  aria-current={
+                    item.id === activeTopic ? "location" : undefined
+                  }
+                  onClick={(event) => {
+                    event.preventDefault();
+                    moveToTopic(item.id);
+                  }}
+                >
+                  {item.label}
+                </a>
+              ))}
+            {helpQuery.trim() && matchingTopics?.size === 0 && (
+              <p className="help-search-empty">일치하는 도움말이 없습니다.</p>
+            )}
           </nav>
           <div
             className="help-content"
@@ -185,9 +233,21 @@ export function HelpPanel({
             <HelpSection
               id="quick-start"
               title="처음 맡은 담당자의 빠른 시작"
+              hidden={Boolean(
+                helpQuery.trim() && !matchingTopics?.has("quick-start"),
+              )}
               sectionRef={(element) => registerSection("quick-start", element)}
             >
               <ol className="help-step-list">
+                <li>
+                  <div className="help-step-copy">
+                    <strong>백업 가져오기</strong>
+                    <span>
+                      받은 백업 엑셀이 있다면 신청자 관리 → 데이터 백업·복원 →
+                      XLSX 가져오기를 진행합니다.
+                    </span>
+                  </div>
+                </li>
                 <li>
                   <div className="help-step-copy">
                     <strong>담당자 설정</strong>
@@ -218,6 +278,9 @@ export function HelpPanel({
             <HelpSection
               id="distribution"
               title="검색과 배부"
+              hidden={Boolean(
+                helpQuery.trim() && !matchingTopics?.has("distribution"),
+              )}
               sectionRef={(element) => registerSection("distribution", element)}
             >
               <div className="help-card-grid">
@@ -247,6 +310,9 @@ export function HelpPanel({
             <HelpSection
               id="notes"
               title="메모"
+              hidden={Boolean(
+                helpQuery.trim() && !matchingTopics?.has("notes"),
+              )}
               sectionRef={(element) => registerSection("notes", element)}
             >
               <div className="help-card-grid">
@@ -299,6 +365,9 @@ export function HelpPanel({
             <HelpSection
               id="people"
               title="신규 신청과 갱신"
+              hidden={Boolean(
+                helpQuery.trim() && !matchingTopics?.has("people"),
+              )}
               sectionRef={(element) => registerSection("people", element)}
             >
               <div className="help-card-grid">
@@ -307,6 +376,10 @@ export function HelpPanel({
                     <li>
                       신청자 관리에서 이름을 입력하고, 또래·연락처를 선택적으로
                       입력해 신청자를 등록합니다.
+                    </li>
+                    <li>
+                      연락처는 숫자만 입력해도 `010-xxxx-xxxx` 형식으로 자동
+                      정리되며, 010이 아닌 번호는 저장할 수 없습니다.
                     </li>
                     <li>
                       현장 간이 등록자는 나중에 ‘정보 수정’으로 보완합니다.
@@ -353,13 +426,14 @@ export function HelpPanel({
                     </li>
                   </HelpList>
                 </HelpCard>
-                <HelpCard title="Google 응답 붙여넣기">
+                <HelpCard title="스프레드시트 붙여넣기">
                   <HelpList>
                     <li>
-                      Google 응답 행을 한 줄 또는 여러 줄 복사해 붙여넣습니다.
+                      스프레드시트나 Excel의 행을 한 줄 또는 여러 줄 복사해
+                      붙여넣습니다.
                     </li>
                     <li>
-                      응답 행 입력란에서 Tab을 눌러 탭 문자를 직접 넣을 수
+                      붙여넣은 행 입력란에서 Tab을 눌러 탭 문자를 직접 넣을 수
                       있습니다.
                     </li>
                     <li>
@@ -377,6 +451,9 @@ export function HelpPanel({
             <HelpSection
               id="purchase"
               title="현장 개별 구매"
+              hidden={Boolean(
+                helpQuery.trim() && !matchingTopics?.has("purchase"),
+              )}
               sectionRef={(element) => registerSection("purchase", element)}
             >
               <HelpCard title="한 호만 구매한 경우">
@@ -397,6 +474,9 @@ export function HelpPanel({
             <HelpSection
               id="handover"
               title="데이터 백업·복원"
+              hidden={Boolean(
+                helpQuery.trim() && !matchingTopics?.has("handover"),
+              )}
               sectionRef={(element) => registerSection("handover", element)}
             >
               <div className="help-card-grid">
@@ -433,6 +513,9 @@ export function HelpPanel({
             <HelpSection
               id="shortcuts"
               title="단축키"
+              hidden={Boolean(
+                helpQuery.trim() && !matchingTopics?.has("shortcuts"),
+              )}
               sectionRef={(element) => registerSection("shortcuts", element)}
             >
               <div className="help-card-grid help-card-grid-stacked">
@@ -470,10 +553,6 @@ export function HelpPanel({
                       <dt>⌘/Ctrl + 2</dt>
                       <dd>신청자 관리로 이동</dd>
                     </div>
-                    <div>
-                      <dt>?</dt>
-                      <dd>도움말 열기</dd>
-                    </div>
                   </dl>
                 </HelpCard>
                 <HelpCard title="검색과 이동">
@@ -504,6 +583,9 @@ export function HelpPanel({
             <HelpSection
               id="install"
               title="macOS와 Windows 최초 실행"
+              hidden={Boolean(
+                helpQuery.trim() && !matchingTopics?.has("install"),
+              )}
               sectionRef={(element) => registerSection("install", element)}
             >
               <HelpCard title="경고가 표시될 때">
@@ -525,6 +607,9 @@ export function HelpPanel({
             <HelpSection
               id="app-info"
               title="앱 정보와 문제 보고"
+              hidden={Boolean(
+                helpQuery.trim() && !matchingTopics?.has("app-info"),
+              )}
               sectionRef={(element) => registerSection("app-info", element)}
             >
               <div className="help-card-grid help-card-grid-stacked">
@@ -584,7 +669,7 @@ export function HelpPanel({
             </HelpSection>
 
             <footer>
-              앱 {support?.appVersion ?? "버전 확인 중"} · 도움말 2026-08-04
+              앱 {support?.appVersion ?? "버전 확인 중"} · 도움말 2026-08-08
             </footer>
           </div>
         </div>
@@ -596,16 +681,23 @@ export function HelpPanel({
 function HelpSection({
   id,
   title,
+  hidden = false,
   sectionRef,
   children,
 }: {
   id: HelpTopic;
   title: string;
+  hidden?: boolean;
   sectionRef?: (element: HTMLElement | null) => void;
   children: ReactNode;
 }) {
   return (
-    <section id={`help-${id}`} data-testid={`help-${id}`} ref={sectionRef}>
+    <section
+      id={`help-${id}`}
+      data-testid={`help-${id}`}
+      ref={sectionRef}
+      hidden={hidden}
+    >
       <div className="help-section-heading">
         <h3>{title}</h3>
       </div>

@@ -62,6 +62,17 @@ describe("distribution list filters", () => {
     expect(filterPeople(people, new Set(ALL_PERSON_FILTERS))).toHaveLength(4);
   });
 
+  it("does not put a scheduled or issue-ineligible person in distribution filters", () => {
+    const scheduled = person("대상 아님", "예정");
+    const notEligible = person("대상 아님", "대상 아님");
+    expect(
+      filterPeople(
+        [...people, scheduled, notEligible],
+        new Set(ALL_PERSON_FILTERS),
+      ),
+    ).toHaveLength(4);
+  });
+
   it("names the common presets and describes custom multi-selection", () => {
     expect(filterTriggerLabel(new Set(DEFAULT_PERSON_FILTERS))).toBe(
       "필터 · 2개",

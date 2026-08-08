@@ -1,6 +1,7 @@
 use qt_domain::{
     ChangeLog, CheckItem, CheckItemStatus, Distribution, Issue, Memo, MemoStatus, Person,
-    PersonStatus, Subscription, SubscriptionSource, SubscriptionStatus, normalize_phone,
+    PersonStatus, Subscription, SubscriptionSource, SubscriptionStatus, format_phone,
+    normalize_phone,
 };
 use serde::{Deserialize, Serialize};
 
@@ -439,7 +440,7 @@ where
     repository.migrate()?;
     let operator = operator(repository)?;
     let now = runtime.clock.now();
-    let phone = clean_owned(request.phone);
+    let phone = clean_phone(request.phone)?;
     let normalized_phone = phone.as_deref().map(normalize_phone);
     let duplicates = repository.duplicate_candidates(
         request.name.trim(),
@@ -512,7 +513,7 @@ where
         .load_person(&request.person_id)?
         .ok_or(ApplicationError::MissingDeskRecord)?
         .person;
-    let phone = clean_owned(request.phone);
+    let phone = clean_phone(request.phone)?;
     let normalized_phone = phone.as_deref().map(normalize_phone);
     let duplicates = repository.duplicate_candidates(
         request.name.trim(),
@@ -742,6 +743,10 @@ fn clean_owned(value: Option<String>) -> Option<String> {
         .filter(|item| !item.is_empty())
 }
 
+fn clean_phone(value: Option<String>) -> Result<Option<String>, ApplicationError> {
+    Ok(format_phone(value.as_deref().unwrap_or_default())?)
+}
+
 fn person_status(status: PersonStatus) -> &'static str {
     match status {
         PersonStatus::Active => "정식 등록",
@@ -760,7 +765,7 @@ fn management_person_status(person: &Person) -> &'static str {
 
 fn source_label(source: SubscriptionSource) -> &'static str {
     match source {
-        SubscriptionSource::GoogleForm => "Google Forms",
+        SubscriptionSource::GoogleForm => "스프레드시트",
         SubscriptionSource::OnSite => "현장 신청",
         SubscriptionSource::LegacyXlsx => "기존 XLSX",
         SubscriptionSource::Manual => "직접 등록",

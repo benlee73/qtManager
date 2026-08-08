@@ -1,7 +1,7 @@
 use qt_domain::{
     ChangeLog, CheckItem, CheckItemStatus, Distribution, DistributionStatus, Issue, Memo,
     MemoStatus, OneTimePurchase, Person, PersonStatus, PinnedNote, PinnedNoteStatus, Subscription,
-    SubscriptionSource, SubscriptionStatus, assess_distribution, plan_distribution,
+    SubscriptionSource, SubscriptionStatus, assess_distribution, format_phone, plan_distribution,
 };
 use serde::{Deserialize, Serialize};
 
@@ -317,6 +317,13 @@ pub struct RecordPurchaseRequest {
     pub note: Option<String>,
 }
 
+/// Distribution is issue-specific. People whose subscription starts after the
+/// selected issue ("예정") and people whose subscription does not cover it
+/// ("대상 아님") must not be mixed into the handout queue or its totals.
+fn is_distribution_candidate(person: &DeskPerson) -> bool {
+    person.subscription_status != "대상 아님" && person.subscription_status != "예정"
+}
+
 pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
     repository: &mut R,
     clock: &C,
@@ -334,8 +341,13 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
         .iter()
         .map(|person| (person.person_id.clone(), person.name.clone()))
         .collect::<std::collections::HashMap<_, _>>();
+    let eligible_people = all_people
+        .iter()
+        .filter(|person| is_distribution_candidate(person))
+        .cloned()
+        .collect::<Vec<_>>();
     let mut totals = DeskTotals::default();
-    for person in &all_people {
+    for person in &eligible_people {
         if person.subscription_status == "유효" {
             totals.target_people += 1;
             totals.target_quantity += person.target_quantity;
@@ -349,13 +361,16 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
         }
     }
     let mut people = if query.trim().is_empty() {
-        all_people
+        eligible_people
     } else {
         repository
             .list_desk_records(query, selected_issue)?
             .into_iter()
             .map(|record| desk_person(record, selected_issue))
             .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .filter(is_distribution_candidate)
+            .collect()
     };
     people.sort_by(|left, right| {
         (!left.can_distribute)
@@ -692,12 +707,13 @@ where
         return Err(qt_domain::DomainError::DraftNameRequired.into());
     }
     let now = services.clock.now();
+    let person_phone = format_phone(request.phone.as_deref().unwrap_or_default())?;
     let person = Person {
         id: services.ids.next_id(),
         name: name.into(),
         cohort,
-        normalized_phone: request.phone.as_deref().map(normalize_phone),
-        phone: clean_optional(request.phone),
+        phone: person_phone.clone(),
+        normalized_phone: person_phone.as_deref().map(normalize_phone),
         status: PersonStatus::Draft,
         person_note: None,
         created_at: now.clone(),
@@ -1631,6 +1647,31 @@ mod tests {
         assert_eq!(desk.totals.remaining_people, 1);
         assert_eq!(desk.totals.target_quantity, 2);
         assert_eq!(desk.people[0].phone.as_deref(), Some("010-1234-5678"));
+    }
+
+    #[test]
+    fn scheduled_and_issue_ineligible_people_are_not_distribution_candidates() {
+        let mut scheduled = record(1);
+        scheduled.subscriptions[0].start_issue = Issue::new(2026, 9).unwrap();
+        let mut repository = MemoryRepository {
+            operator: Some("담당자".into()),
+            records: vec![scheduled],
+            ..Default::default()
+        };
+
+        let desk = load_distribution_desk(
+            &mut repository,
+            &FixedClock,
+            Issue::new(2026, 5).unwrap(),
+            "",
+            true,
+        )
+        .unwrap();
+
+        assert!(desk.people.is_empty());
+        assert_eq!(desk.totals.target_people, 0);
+        assert_eq!(desk.totals.target_quantity, 0);
+        assert_eq!(desk.totals.remaining_people, 0);
     }
 
     #[test]

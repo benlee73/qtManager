@@ -10,8 +10,8 @@ pub use distribution::{
 pub use issue::Issue;
 pub use records::{ChangeLog, CheckItem, CheckItemStatus, Memo, MemoStatus, Person, PersonStatus};
 pub use records::{
-    OneTimePurchase, PinnedNote, PinnedNoteStatus, normalize_phone, normalize_search_text,
-    person_matches_search,
+    OneTimePurchase, PinnedNote, PinnedNoteStatus, format_phone, normalize_phone,
+    normalize_search_text, person_matches_search,
 };
 pub use subscription::{
     Subscription, SubscriptionAssessment, SubscriptionSource, SubscriptionStatus,
@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub const STATE_XLSX_FORMAT_VERSION: u16 = 2;
-pub const DATABASE_SCHEMA_VERSION: u16 = 4;
+pub const DATABASE_SCHEMA_VERSION: u16 = 5;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -88,6 +88,8 @@ pub enum DomainError {
     EmptyTitle,
     #[error("간이 등록에는 이름이 필요합니다.")]
     DraftNameRequired,
+    #[error("연락처는 010-xxxx-xxxx 형식이어야 합니다.")]
+    InvalidPhone,
 }
 
 #[cfg(test)]

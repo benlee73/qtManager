@@ -92,6 +92,6 @@ impl ApplicationImportRepository for SqliteCoreRepository {
 
 fn port_error(error: rusqlite::Error) -> PortError {
     PortError::new(format!(
-        "Google 응답 가져오기 데이터를 처리하지 못했습니다: {error}"
+        "스프레드시트 가져오기 데이터를 처리하지 못했습니다: {error}"
     ))
 }

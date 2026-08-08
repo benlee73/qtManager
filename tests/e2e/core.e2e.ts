@@ -329,9 +329,27 @@ describe("QT Manager desktop flow", () => {
 
   it("keeps help layouts and shortcut wording readable", async () => {
     await browser.execute(() => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }));
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="open-help"]')
+        ?.click();
     });
     await waitForText("#help-title", "QT Manager 도움말");
+    await setInput('[data-testid="help-search"]', "백업");
+    await browser.waitUntil(
+      async () => {
+        const result = await browser.execute(() => ({
+          hasBackup: Boolean(
+            document.querySelector('[data-testid="help-nav-handover"]'),
+          ),
+          hidesShortcuts: !document.querySelector(
+            '[data-testid="help-nav-shortcuts"]',
+          ),
+        }));
+        return result.hasBackup && result.hidesShortcuts;
+      },
+      { timeoutMsg: "도움말 검색 결과가 목차에 반영되지 않았습니다." },
+    );
+    await setInput('[data-testid="help-search"]', "");
     await browser.execute(() => {
       document
         .querySelector<HTMLAnchorElement>('[data-testid="help-nav-shortcuts"]')
@@ -1244,6 +1262,86 @@ describe("QT Manager desktop flow", () => {
         ),
       {
         timeoutMsg: "마우스로 선택한 신청자 행에 포커스를 유지하지 못했습니다.",
+      },
+    );
+    await browser.keys("Escape");
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const selected = document.querySelector<HTMLElement>(
+            '[data-testid="management-person"][aria-pressed="true"]',
+          );
+          return (
+            document.activeElement !== selected &&
+            selected?.matches(":focus-visible") !== true &&
+            selected?.matches(":focus") !== true
+          );
+        }),
+      {
+        timeoutMsg:
+          "신청자 관리에서 Escape 후 선택 행에 포커스 테두리가 남았습니다.",
+      },
+    );
+    await browser.execute(() => {
+      const rows = [
+        ...document.querySelectorAll<HTMLButtonElement>(
+          '[data-testid="management-person"]',
+        ),
+      ];
+      rows.at(-1)?.click();
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.activeElement?.matches(
+              '[data-testid="management-person"][aria-pressed="true"]',
+            ) ?? false,
+        ),
+      { timeoutMsg: "관리 목록의 마지막 신청자를 선택하지 못했습니다." },
+    );
+    await browser.keys("ArrowDown");
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const rows = [
+            ...document.querySelectorAll<HTMLElement>(
+              '[data-testid="management-person"]',
+            ),
+          ];
+          const last = rows.at(-1);
+          return (
+            last?.getAttribute("aria-pressed") === "true" &&
+            document.activeElement !== last &&
+            last?.matches(":focus-visible") !== true &&
+            last?.matches(":focus") !== true &&
+            rows.filter((row) => row.getAttribute("aria-pressed") === "true")
+              .length === 1
+          );
+        }),
+      {
+        timeoutMsg:
+          "관리 목록 마지막 신청자에서 아래 방향키가 포커스 테두리를 만들었습니다.",
+      },
+    );
+    await browser.execute(() => {
+      const rows = [
+        ...document.querySelectorAll<HTMLButtonElement>(
+          '[data-testid="management-person"]',
+        ),
+      ];
+      rows[0]?.click();
+    });
+    await browser.waitUntil(
+      async () =>
+        browser.execute(
+          () =>
+            document.activeElement?.matches(
+              '[data-testid="management-person"][aria-pressed="true"]',
+            ) ?? false,
+        ),
+      {
+        timeoutMsg: "관리 키보드 회귀 검증용 첫 신청자를 선택하지 못했습니다.",
       },
     );
     await browser.keys("ArrowDown");
@@ -2872,7 +2970,7 @@ describe("QT Manager desktop flow", () => {
           insideViewport: true,
         },
         {
-          text: "Google 응답 붙여넣기",
+          text: "스프레드시트 붙여넣기",
           expectedClass: "secondary-button",
           hasExpectedClass: true,
           hasOppositeClass: false,
@@ -3039,6 +3137,18 @@ describe("QT Manager desktop flow", () => {
 
     await browser.execute(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }));
+    });
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(() =>
+          Boolean(document.querySelector("#help-title")),
+        )) === false,
+      { timeoutMsg: "제거된 도움말 단축키가 도움말을 다시 열었습니다." },
+    );
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="open-help"]')
+        ?.click();
     });
     await waitForText("#help-title", "QT Manager 도움말");
     await waitForText(
@@ -3216,6 +3326,18 @@ describe("QT Manager desktop flow", () => {
     await browser.execute(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }));
     });
+    await browser.waitUntil(
+      async () =>
+        (await browser.execute(() =>
+          Boolean(document.querySelector("#help-title")),
+        )) === false,
+      { timeoutMsg: "제거된 도움말 단축키가 도움말을 다시 열었습니다." },
+    );
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="open-help"]')
+        ?.click();
+    });
     await waitForText("#help-title", "QT Manager 도움말");
     await browser.execute(() => {
       document
@@ -3319,7 +3441,7 @@ describe("QT Manager desktop flow", () => {
       const textarea = document.querySelector<HTMLTextAreaElement>(
         '[data-testid="application-paste-input"]',
       );
-      if (!textarea) throw new Error("응답 행 입력란을 찾지 못했습니다.");
+      if (!textarea) throw new Error("붙여넣은 행 입력란을 찾지 못했습니다.");
       textarea.focus();
       textarea.setSelectionRange(textarea.value.length, textarea.value.length);
       textarea.dispatchEvent(
@@ -3338,7 +3460,7 @@ describe("QT Manager desktop flow", () => {
               '[data-testid="application-paste-input"]',
             )?.value ?? "",
         )) === "셀1\t",
-      { timeoutMsg: "응답 행 입력란에 탭 문자를 넣지 못했습니다." },
+      { timeoutMsg: "붙여넣은 행 입력란에 탭 문자를 넣지 못했습니다." },
     );
     const firstResponse = [
       `2026. 2. 1 오후 7:48:08\t${applicant}\t00\t${phone}\t1-2월호\t2\t네 입금했습니다.`,
@@ -3399,7 +3521,7 @@ describe("QT Manager desktop flow", () => {
     await browser.waitUntil(
       async () =>
         Boolean((await textOf(".toast")) || (await textOf(".form-error"))),
-      { timeoutMsg: "Google 응답 추가 결과가 표시되지 않았습니다." },
+      { timeoutMsg: "스프레드시트 추가 결과가 표시되지 않았습니다." },
     );
     const importFeedback =
       (await textOf(".toast")) || (await textOf(".form-error"));
@@ -3435,10 +3557,7 @@ describe("QT Manager desktop flow", () => {
         ?.click();
     });
     await setInput('[data-testid="application-paste-input"]', secondResponse);
-    await waitForText(
-      '[data-testid="application-preview"]',
-      "이미 추가한 응답",
-    );
+    await waitForText('[data-testid="application-preview"]', "이미 추가한 행");
     await clickButtonByText("", "닫기");
     await browser.execute(() => {
       document
@@ -3451,7 +3570,7 @@ describe("QT Manager desktop flow", () => {
       '[data-testid="application-paste-input"]',
       "시각\t이름\t또래\t연락처\t시작\t수량\t입금\t추가열",
     );
-    await waitForText("#application-import-title", "Google 응답 붙여넣기");
+    await waitForText("#application-import-title", "스프레드시트 붙여넣기");
     await waitForText(
       "#mapping-panel-title",
       "열 순서를 자동으로 찾지 못했습니다.",

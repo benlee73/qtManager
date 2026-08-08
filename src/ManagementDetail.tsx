@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type KeyboardEvent, type ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useTextDraft } from "./drafts";
 import { listIndexAfterKey, shouldReturnToSearch } from "./keyboardNavigation";
@@ -42,8 +42,52 @@ export function ManagementPersonList({
     requestAnimationFrame(() => rowRefs.current.get(nextId)?.focus());
   }, [people, selectedId]);
 
+  const handleListKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.nativeEvent.isComposing) return;
+    const target = event.target as HTMLElement;
+    const row = target.closest<HTMLButtonElement>(
+      '[data-testid="management-person"]',
+    );
+    const currentId = row?.dataset.personId ?? selectedId;
+    if (!currentId) return;
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      (row ?? (document.activeElement as HTMLElement | null))?.blur();
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+
+    const currentIndex = people.findIndex(
+      (candidate) => candidate.id === currentId,
+    );
+    if (currentIndex < 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const direction = event.key === "ArrowDown" ? "down" : "up";
+    if (shouldReturnToSearch(people.length, currentIndex, direction)) {
+      row?.blur();
+      onReturnToSearch?.();
+      return;
+    }
+    const nextIndex = listIndexAfterKey(people.length, currentIndex, direction);
+    if (nextIndex === null || nextIndex === currentIndex) {
+      // At either end, consume the key without allowing the scroll container
+      // or the browser's button focus ring to move.
+      row?.blur();
+      return;
+    }
+    const nextPerson = people[nextIndex];
+    pendingFocusId.current = nextPerson.id;
+    onSelect(nextPerson.id);
+    const focusNextRow = () => rowRefs.current.get(nextPerson.id)?.focus();
+    focusNextRow();
+    requestAnimationFrame(focusNextRow);
+  };
+
   return (
-    <div className="management-person-list">
+    <div className="management-person-list" onKeyDown={handleListKeyDown}>
       {people.map((person) => {
         const selected = person.id === selectedId;
         const periodSummary = person.latestLastIssue
@@ -84,45 +128,6 @@ export function ManagementPersonList({
               // clicked row as the keyboard anchor so the next ArrowUp/Down
               // moves through applicants instead of scrolling the panel.
               event.currentTarget.focus();
-            }}
-            onKeyDown={(event) => {
-              if (
-                (event.key !== "ArrowDown" && event.key !== "ArrowUp") ||
-                event.nativeEvent.isComposing
-              ) {
-                return;
-              }
-              event.preventDefault();
-              event.stopPropagation();
-              const currentIndex = people.findIndex(
-                (candidate) => candidate.id === person.id,
-              );
-              if (
-                shouldReturnToSearch(
-                  people.length,
-                  currentIndex,
-                  event.key === "ArrowDown" ? "down" : "up",
-                )
-              ) {
-                onReturnToSearch?.();
-                return;
-              }
-              const nextIndex = listIndexAfterKey(
-                people.length,
-                currentIndex,
-                event.key === "ArrowDown" ? "down" : "up",
-              );
-              if (nextIndex === null || nextIndex === currentIndex) return;
-              const nextPerson = people[nextIndex];
-              pendingFocusId.current = nextPerson.id;
-              onSelect(nextPerson.id);
-              const focusNextRow = () =>
-                rowRefs.current.get(nextPerson.id)?.focus();
-              focusNextRow();
-              // Selecting a person loads the detail asynchronously. Refocus on
-              // the same row after React commits that selection so the browser
-              // does not fall back to scrolling the management panel.
-              requestAnimationFrame(focusNextRow);
             }}
           >
             <span className="cohort">{person.cohort ?? "--"}</span>

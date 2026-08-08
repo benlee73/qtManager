@@ -4,7 +4,7 @@ use calamine::{Data, ExcelDateTime, ExcelDateTimeType, Reader, Xlsx, XlsxError, 
 use qt_application::{StateSetting, StateSnapshot};
 use qt_domain::{
     ChangeLog, CheckItem, CheckItemStatus, Distribution, Issue, OneTimePurchase, Person,
-    PersonStatus, Subscription, SubscriptionSource, normalize_phone,
+    PersonStatus, Subscription, SubscriptionSource, format_phone, normalize_phone,
 };
 use uuid::Uuid;
 
@@ -142,7 +142,8 @@ pub fn read_legacy_2026(
                 }
                 let phone = phone_column
                     .and_then(|column| clean_text(row.get(column)))
-                    .filter(|value| normalize_phone(value).len() >= 8);
+                    .filter(|value| normalize_phone(value).len() >= 8)
+                    .map(|value| format_phone(&value).ok().flatten().unwrap_or(value));
                 let identity_key = identity_key(&name, cohort.as_deref(), phone.as_deref());
                 let person_index = if let Some(index) = people_by_identity.get(&identity_key) {
                     *index

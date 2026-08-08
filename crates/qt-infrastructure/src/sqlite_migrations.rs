@@ -287,6 +287,19 @@ SELECT
 FROM pinned_notes;
 ";
 
+// Older XLSX files sometimes stored a valid 010 number as digits only or
+// without consistent separators. Normalize only values that are unambiguous;
+// leave other legacy text untouched so migration never destroys evidence.
+const VERSION_5: &str = "
+UPDATE people
+SET
+    phone = '010-' || substr(replace(replace(replace(replace(replace(COALESCE(phone, ''), '-', ''), ' ', ''), '.', ''), '(', ''), ')', ''), 4, 4)
+        || '-' || substr(replace(replace(replace(replace(replace(COALESCE(phone, ''), '-', ''), ' ', ''), '.', ''), '(', ''), ')', ''), 8, 4),
+    normalized_phone = replace(replace(replace(replace(replace(COALESCE(phone, ''), '-', ''), ' ', ''), '.', ''), '(', ''), ')', '')
+WHERE length(replace(replace(replace(replace(replace(COALESCE(phone, ''), '-', ''), ' ', ''), '.', ''), '(', ''), ')', '')) = 11
+  AND substr(replace(replace(replace(replace(replace(COALESCE(phone, ''), '-', ''), ' ', ''), '.', ''), '(', ''), ')', ''), 1, 3) = '010';
+";
+
 pub(crate) fn configure(connection: &Connection) -> Result<(), PortError> {
     connection
         .pragma_update(None, "foreign_keys", "ON")
@@ -332,6 +345,7 @@ pub(crate) fn migrate(connection: &mut Connection) -> Result<MigrationReport, Po
         (2_u16, VERSION_2),
         (3_u16, VERSION_3),
         (4_u16, VERSION_4),
+        (5_u16, VERSION_5),
     ] {
         let exists: bool = transaction
             .query_row(
@@ -411,7 +425,7 @@ mod tests {
 
         let report = migrate(&mut connection).unwrap();
 
-        assert_eq!(report.newly_applied, 2);
+        assert_eq!(report.newly_applied, 3);
         let person_note: String = connection
             .query_row(
                 "SELECT person_note FROM people WHERE id = 'person-1'",
@@ -456,5 +470,47 @@ mod tests {
             )
             .unwrap();
         assert_eq!(memo_status, "archived");
+    }
+
+    #[test]
+    fn version_five_formats_unambiguous_010_numbers_without_touching_other_text() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection.execute_batch(VERSION_1).unwrap();
+        connection.execute_batch(VERSION_2).unwrap();
+        connection
+            .execute_batch(
+                "
+                INSERT INTO people VALUES
+                    ('person-1', '가상 신청자', '00', '01012345678', NULL, 'active', NULL, '2026-07-01', '2026-07-01'),
+                    ('person-2', '다른 신청자', '01', '02-1234-5678', NULL, 'active', NULL, '2026-07-01', '2026-07-01');
+                ",
+            )
+            .unwrap();
+        connection.execute_batch(VERSION_5).unwrap();
+
+        let phone: String = connection
+            .query_row(
+                "SELECT phone FROM people WHERE id = 'person-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let normalized: String = connection
+            .query_row(
+                "SELECT normalized_phone FROM people WHERE id = 'person-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let other: String = connection
+            .query_row(
+                "SELECT phone FROM people WHERE id = 'person-2'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(phone, "010-1234-5678");
+        assert_eq!(normalized, "01012345678");
+        assert_eq!(other, "02-1234-5678");
     }
 }

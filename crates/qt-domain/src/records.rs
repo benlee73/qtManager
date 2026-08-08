@@ -58,6 +58,25 @@ pub fn normalize_phone(value: &str) -> String {
     value.chars().filter(char::is_ascii_digit).collect()
 }
 
+/// Returns the canonical display form used by the desktop app. Phone numbers
+/// are optional, but when present they must be a Korean 010 number so that
+/// operators can compare entries consistently across forms and XLSX files.
+pub fn format_phone(value: &str) -> Result<Option<String>, DomainError> {
+    let digits = normalize_phone(value);
+    if digits.is_empty() {
+        return Ok(None);
+    }
+    if digits.len() != 11 || !digits.starts_with("010") {
+        return Err(DomainError::InvalidPhone);
+    }
+    Ok(Some(format!(
+        "{}-{}-{}",
+        &digits[..3],
+        &digits[3..7],
+        &digits[7..]
+    )))
+}
+
 pub fn normalize_search_text(value: &str) -> String {
     value.split_whitespace().collect::<String>().to_lowercase()
 }
@@ -272,6 +291,23 @@ pub(crate) fn timestamp(value: &str, field: &'static str) -> Result<(), DomainEr
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn formats_optional_010_phone_numbers_for_display() {
+        assert_eq!(
+            format_phone("01012345678"),
+            Ok(Some("010-1234-5678".to_owned()))
+        );
+        assert_eq!(
+            format_phone("010 1234 5678"),
+            Ok(Some("010-1234-5678".to_owned()))
+        );
+        assert_eq!(format_phone(""), Ok(None));
+        assert_eq!(
+            format_phone("011-1234-5678"),
+            Err(DomainError::InvalidPhone)
+        );
+    }
 
     #[test]
     fn person_preserves_optional_leading_zero_cohort() {

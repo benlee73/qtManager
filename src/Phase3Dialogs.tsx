@@ -12,6 +12,7 @@ import {
   renewSubscription,
   updatePerson,
 } from "./phase3";
+import { handlePhoneInput } from "./phone";
 
 export function RegisterDialog({
   issue,
@@ -423,7 +424,10 @@ function PersonFields({ person }: { person?: PersonDetail }) {
           name="phone"
           inputMode="tel"
           placeholder="010-1234-5678"
+          maxLength={13}
+          pattern="010-[0-9]{4}-[0-9]{4}"
           defaultValue={person?.phone ?? ""}
+          onInput={handlePhoneInput}
         />
       </Field>
     </>

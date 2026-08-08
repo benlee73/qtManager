@@ -1,5 +1,6 @@
 use qt_domain::{
-    ChangeLog, Issue, Person, PersonStatus, Subscription, SubscriptionSource, normalize_phone,
+    ChangeLog, Issue, Person, PersonStatus, Subscription, SubscriptionSource, format_phone,
+    normalize_phone,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -203,11 +204,11 @@ where
         } else if let Some(fingerprint) = &row.fingerprint {
             if !seen_fingerprints.insert(fingerprint.clone()) {
                 view.status = "already_imported".into();
-                view.message = "붙여넣은 내용 안에 같은 응답이 있습니다.".into();
+                view.message = "붙여넣은 내용 안에 같은 행이 있습니다.".into();
                 warning_count += 1;
             } else if repository.source_reference_exists(fingerprint)? {
                 view.status = "already_imported".into();
-                view.message = "이미 추가한 응답입니다.".into();
+                view.message = "이미 추가한 행입니다.".into();
                 warning_count += 1;
             } else {
                 add_candidates(
@@ -290,7 +291,10 @@ where
                     id: runtime.ids.next_id(),
                     name: row.name.trim().into(),
                     cohort: Some(row.cohort.clone()),
-                    phone: Some(row.phone.trim().into()),
+                    phone: Some(
+                        format_phone(&row.phone)?
+                            .ok_or(ApplicationError::InvalidApplicationRow(row.row_number))?,
+                    ),
                     normalized_phone: Some(normalize_phone(&row.phone)),
                     status: PersonStatus::Active,
                     person_note: None,
@@ -332,7 +336,7 @@ where
                 "person_created",
                 "person",
                 &existing.id,
-                "Google 응답에서 QT 신청자 생성",
+                "스프레드시트에서 QT 신청자 생성",
             ));
             Some(existing)
         } else {
@@ -345,7 +349,7 @@ where
             "subscription_created_from_google_form",
             "subscription",
             &subscription.id,
-            "Google 응답에서 연간 구독 생성",
+            "스프레드시트에서 연간 구독 생성",
         ));
         records.push(ApplicationImportRecord {
             row_number: row.row_number,
@@ -369,7 +373,7 @@ where
             "google_form_applications_imported",
             "import_batch",
             &batch_id,
-            &format!("Google 응답 {}건 가져오기", records.len()),
+            &format!("스프레드시트 {}건 가져오기", records.len()),
         ),
     };
     repository.save_application_import(&batch, &records)?;
@@ -437,7 +441,7 @@ fn validate_import_row(row: &ImportApplicationRowRequest) -> Result<(), Applicat
     if row.name.trim().is_empty()
         || row.cohort.len() != 2
         || !row.cohort.bytes().all(|value| value.is_ascii_digit())
-        || !(10..=11).contains(&normalize_phone(&row.phone).len())
+        || format_phone(&row.phone).ok().flatten().is_none()
         || row.quantity == 0
         || row.fingerprint.trim().is_empty()
     {
