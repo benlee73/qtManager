@@ -411,23 +411,51 @@ describe("QT Manager desktop flow", () => {
         ?.click();
     });
     await waitForText("#help-title", "QT Manager 도움말");
+    await browser.waitUntil(
+      async () =>
+        await browser.execute(() =>
+          document
+            .querySelector<HTMLElement>('[data-testid="help-backdrop"]')
+            ?.classList.contains("help-backdrop-open"),
+        ),
+      { timeoutMsg: "도움말 우측 패널 열기 애니메이션이 시작되지 않았습니다." },
+    );
     expect(
       await browser.execute(() => {
+        const backdrop = document.querySelector<HTMLElement>(
+          '[data-testid="help-backdrop"]',
+        );
         const panel = document.querySelector<HTMLElement>(
           '[data-testid="help-panel"]',
         );
-        if (!panel) return null;
+        if (!backdrop || !panel) return null;
         const rect = panel.getBoundingClientRect();
+        const backdropStyle = getComputedStyle(backdrop);
+        const panelStyle = getComputedStyle(panel);
         return {
           widthRatio: rect.width / window.innerWidth,
           heightRatio: rect.height / window.innerHeight,
           flexDirection: getComputedStyle(panel).flexDirection,
+          backdropDisplay: backdropStyle.display,
+          justifyContent: backdropStyle.justifyContent,
+          alignItems: backdropStyle.alignItems,
+          layoutRight: panel.offsetLeft + panel.offsetWidth,
+          topGap: rect.top,
+          transitionProperty: panelStyle.transitionProperty,
+          transitionDuration: panelStyle.transitionDuration,
+          animationName: panelStyle.animationName,
         };
       }),
     ).toMatchObject({
       widthRatio: expect.any(Number),
       heightRatio: expect.any(Number),
       flexDirection: "column",
+      backdropDisplay: "flex",
+      justifyContent: "flex-end",
+      alignItems: "stretch",
+      transitionProperty: expect.stringContaining("transform"),
+      transitionDuration: expect.stringContaining("0.18s"),
+      animationName: "help-panel-slide-in",
     });
     expect(
       await browser.execute(() => {
@@ -437,10 +465,12 @@ describe("QT Manager desktop flow", () => {
         if (!panel) return false;
         const rect = panel.getBoundingClientRect();
         return (
-          rect.width / window.innerWidth >= 0.6 &&
+          rect.width / window.innerWidth >= 0.7 &&
           rect.width / window.innerWidth <= 0.8 &&
-          rect.height / window.innerHeight >= 0.6 &&
-          rect.height / window.innerHeight <= 0.8
+          rect.height / window.innerHeight >= 0.98 &&
+          Math.abs(window.innerWidth - (panel.offsetLeft + panel.offsetWidth)) <
+            1 &&
+          rect.top < 1
         );
       }),
     ).toBe(true);
@@ -470,8 +500,8 @@ describe("QT Manager desktop flow", () => {
         };
       }),
     ).toEqual({
-      widthRatio: expect.closeTo(0.68, 0.01),
-      heightRatio: expect.closeTo(0.68, 0.01),
+      widthRatio: expect.any(Number),
+      heightRatio: expect.any(Number),
       headingVerticalPadding: expect.any(Number),
       contentPaddingBottom: expect.any(Number),
       sectionHeadingPaddingTop: expect.any(Number),

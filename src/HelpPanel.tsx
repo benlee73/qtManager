@@ -49,8 +49,27 @@ export function HelpPanel({
   const [matchingTopics, setMatchingTopics] = useState<Set<HelpTopic> | null>(
     null,
   );
+  const [isClosing, setIsClosing] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Partial<Record<HelpTopic, HTMLElement>>>({});
+  const closeTimerRef = useRef<number | null>(null);
+  const closingRef = useRef(false);
+
+  const closePanel = useCallback(() => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setIsClosing(true);
+    closeTimerRef.current = window.setTimeout(onClose, 180);
+  }, [onClose]);
+
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current !== null) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+    },
+    [],
+  );
 
   const registerSection = useCallback(
     (id: HelpTopic, element: HTMLElement | null) => {
@@ -106,11 +125,11 @@ export function HelpPanel({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
-      onClose();
+      closePanel();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  }, [closePanel]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -168,11 +187,13 @@ export function HelpPanel({
 
   return (
     <div
-      className="modal-backdrop help-backdrop"
+      className={`modal-backdrop help-backdrop ${
+        isClosing ? "help-backdrop-closing" : "help-backdrop-open"
+      }`}
       data-testid="help-backdrop"
       role="presentation"
       onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget) closePanel();
       }}
     >
       <section
@@ -197,7 +218,7 @@ export function HelpPanel({
               />
             </label>
           </div>
-          <button type="button" aria-label="도움말 닫기" onClick={onClose}>
+          <button type="button" aria-label="도움말 닫기" onClick={closePanel}>
             ×
           </button>
         </header>
