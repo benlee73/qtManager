@@ -1207,17 +1207,19 @@
 .help-backdrop {
   align-items: center;
   justify-content: center;
-  padding: 2rem;
+  padding: clamp(1rem, 2vw, 2rem);
 }
 
 .help-panel {
   display: flex;
-  width: min(70vw, 1100px);
-  height: min(70vh, 760px);
-  max-width: calc(100vw - 4rem);
-  max-height: calc(100vh - 4rem);
+  width: min(68vw, 1080px);
+  height: min(68vh, 720px);
+  max-width: calc(100vw - 2rem);
+  max-height: calc(100vh - 2rem);
   flex-direction: column;
   overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
   color: var(--text);
   background: var(--panel);
   box-shadow: -12px 0 45px rgb(20 44 31 / 18%);
@@ -1227,7 +1229,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1.4rem 1.7rem;
+  padding: 0.9rem 1.25rem;
   border-bottom: 1px solid var(--line);
 }
 
@@ -1262,7 +1264,9 @@
 }
 
 .help-heading h2 {
+  flex: 0 0 auto;
   margin-bottom: 0;
+  white-space: nowrap;
 }
 
 .help-heading button {
@@ -1283,13 +1287,13 @@
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  padding: 1.2rem 0.8rem;
+  padding: 0.9rem 0.7rem;
   border-right: 1px solid var(--line);
   background: var(--panel-high);
 }
 
 .help-layout nav a {
-  padding: 0.7rem 0.75rem;
+  padding: 0.6rem 0.65rem;
   border-radius: 0.5rem;
   color: var(--muted);
   font-size: 0.82rem;
@@ -1309,19 +1313,19 @@
   overflow-y: auto;
   scroll-behavior: smooth;
   scroll-padding-top: 0.5rem;
-  padding: 0 1.8rem 3rem;
+  padding: 0 1.5rem 1.25rem;
 }
 
 .help-content > section {
-  padding: 0 0 1.8rem;
+  padding: 0 0 1.25rem;
 }
 
 .help-section-heading {
   position: sticky;
   z-index: 2;
   top: 0;
-  margin-bottom: 1rem;
-  padding: 1.35rem 0 0.8rem;
+  margin-bottom: 0.8rem;
+  padding: 0.8rem 0 0.55rem;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
 }
@@ -1333,7 +1337,7 @@
 .help-card-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
+  gap: 0.65rem;
 }
 
 .help-card-grid-stacked {
@@ -1342,7 +1346,7 @@
 
 .help-card {
   min-width: 0;
-  padding: 0.9rem 1rem;
+  padding: 0.75rem 0.9rem;
   border: 1px solid var(--line);
   border-radius: 0.7rem;
   background: var(--panel-high);
@@ -1473,7 +1477,11 @@
   font-size: 0.72rem;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 960px) {
+  .help-heading {
+    align-items: flex-start;
+  }
+
   .help-heading-copy {
     align-items: flex-start;
     flex-direction: column;
@@ -1483,8 +1491,11 @@
   .help-search {
     width: min(100%, 22rem);
     min-width: 0;
+    flex: 0 0 auto;
   }
+}
 
+@media (max-width: 720px) {
   .help-layout {
     height: auto;
     grid-template-columns: 9rem minmax(0, 1fr);

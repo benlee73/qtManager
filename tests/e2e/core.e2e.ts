@@ -404,6 +404,7 @@ describe("QT Manager desktop flow", () => {
   });
 
   it("keeps help layouts and shortcut wording readable", async () => {
+    await browser.setWindowSize(1600, 1000);
     await browser.execute(() => {
       document
         .querySelector<HTMLButtonElement>('[data-testid="open-help"]')
@@ -443,6 +444,90 @@ describe("QT Manager desktop flow", () => {
         );
       }),
     ).toBe(true);
+    expect(
+      await browser.execute(() => {
+        const panel = document.querySelector<HTMLElement>(
+          '[data-testid="help-panel"]',
+        );
+        const heading = panel?.querySelector<HTMLElement>(".help-heading");
+        const content = panel?.querySelector<HTMLElement>(".help-content");
+        const sectionHeading = panel?.querySelector<HTMLElement>(
+          ".help-section-heading",
+        );
+        if (!panel || !heading || !content || !sectionHeading) return null;
+        const panelRect = panel.getBoundingClientRect();
+        const headingStyle = getComputedStyle(heading);
+        const contentStyle = getComputedStyle(content);
+        const sectionHeadingStyle = getComputedStyle(sectionHeading);
+        return {
+          widthRatio: panelRect.width / window.innerWidth,
+          heightRatio: panelRect.height / window.innerHeight,
+          headingVerticalPadding:
+            parseFloat(headingStyle.paddingTop) +
+            parseFloat(headingStyle.paddingBottom),
+          contentPaddingBottom: parseFloat(contentStyle.paddingBottom),
+          sectionHeadingPaddingTop: parseFloat(sectionHeadingStyle.paddingTop),
+        };
+      }),
+    ).toEqual({
+      widthRatio: expect.closeTo(0.68, 0.01),
+      heightRatio: expect.closeTo(0.68, 0.01),
+      headingVerticalPadding: expect.any(Number),
+      contentPaddingBottom: expect.any(Number),
+      sectionHeadingPaddingTop: expect.any(Number),
+    });
+    expect(
+      await browser.execute(() => {
+        const panel = document.querySelector<HTMLElement>(
+          '[data-testid="help-panel"]',
+        );
+        const heading = panel?.querySelector<HTMLElement>(".help-heading");
+        const content = panel?.querySelector<HTMLElement>(".help-content");
+        const sectionHeading = panel?.querySelector<HTMLElement>(
+          ".help-section-heading",
+        );
+        if (!heading || !content || !sectionHeading) return false;
+        const headingStyle = getComputedStyle(heading);
+        const contentStyle = getComputedStyle(content);
+        const sectionHeadingStyle = getComputedStyle(sectionHeading);
+        return (
+          parseFloat(headingStyle.paddingTop) +
+            parseFloat(headingStyle.paddingBottom) <=
+            36 &&
+          parseFloat(contentStyle.paddingBottom) <= 32 &&
+          parseFloat(sectionHeadingStyle.paddingTop) <= 16
+        );
+      }),
+    ).toBe(true);
+    expect(
+      await browser.execute(() => {
+        const title = document.querySelector<HTMLElement>("#help-title");
+        if (!title) return null;
+        const style = getComputedStyle(title);
+        return {
+          whiteSpace: style.whiteSpace,
+          height: title.getBoundingClientRect().height,
+        };
+      }),
+    ).toEqual({
+      whiteSpace: "nowrap",
+      height: expect.any(Number),
+    });
+    expect(
+      await browser.execute(
+        () =>
+          document.querySelector<HTMLElement>("#help-title")?.offsetHeight ?? 0,
+      ),
+    ).toBeLessThanOrEqual(32);
+    expect(
+      await browser.execute(() => {
+        const panel = document.querySelector<HTMLElement>(
+          '[data-testid="help-panel"]',
+        );
+        const layout = panel?.querySelector<HTMLElement>(".help-layout");
+        return layout?.getBoundingClientRect().height ?? 0;
+      }),
+    ).toBeGreaterThan(100);
     await setInput('[data-testid="help-search"]', "백업");
     await browser.waitUntil(
       async () => {
@@ -569,6 +654,7 @@ describe("QT Manager desktop flow", () => {
         )) === false,
       { timeoutMsg: "도움말 단축키 검증 후 닫히지 않았습니다." },
     );
+    await browser.setWindowSize(1120, 760);
   });
 
   // 이전 기록 타입의 UI 회귀 시나리오는 새 메모 화면으로 대체했다. 구버전
