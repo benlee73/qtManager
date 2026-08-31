@@ -15,6 +15,7 @@ import { type Phase2Dialog, Phase2DialogContent } from "./Phase2Dialogs";
 import { EditDialog, RenewDialog } from "./Phase3Dialogs";
 import type { ReversibleAction } from "./actionHistory";
 import { persistTheme, readStoredTheme, type Theme } from "./appearance";
+import { syncNativeTheme } from "./nativeTheme";
 import {
   DEFAULT_PERSON_FILTERS,
   distributionAllocations,
@@ -115,6 +116,7 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     persistTheme(theme);
+    void syncNativeTheme(theme);
   }, [theme]);
 
   useEffect(() => {

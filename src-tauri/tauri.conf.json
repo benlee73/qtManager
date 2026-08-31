@@ -15,6 +15,7 @@
       {
         "label": "main",
         "title": "QT Manager",
+        "theme": "Dark",
         "width": 1120,
         "height": 760,
         "minWidth": 900,

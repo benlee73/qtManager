@@ -1989,6 +1989,13 @@ describe("QT Manager desktop flow", () => {
     expect(
       await browser.execute(() => document.documentElement.dataset.theme),
     ).toBe("dark");
+    await browser.waitUntil(
+      async () =>
+        (await invokeTauri<"dark" | "light" | null>("plugin:window|theme", {
+          label: "main",
+        })) === "dark",
+      { timeoutMsg: "네이티브 제목 표시줄 다크 테마가 적용되지 않았습니다." },
+    );
     const darkScrollbar = await browser.execute(() =>
       getComputedStyle(document.documentElement)
         .getPropertyValue("--scroll-thumb")
@@ -2072,6 +2079,13 @@ describe("QT Manager desktop flow", () => {
     expect(
       await browser.execute(() => document.documentElement.dataset.theme),
     ).toBe("light");
+    await browser.waitUntil(
+      async () =>
+        (await invokeTauri<"dark" | "light" | null>("plugin:window|theme", {
+          label: "main",
+        })) === "light",
+      { timeoutMsg: "네이티브 제목 표시줄 라이트 테마가 적용되지 않았습니다." },
+    );
     const lightScrollbar = await browser.execute(() =>
       getComputedStyle(document.documentElement)
         .getPropertyValue("--scroll-thumb")
