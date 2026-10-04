@@ -9,6 +9,7 @@ export type PeopleManagement = {
 };
 
 export type PersonSummary = {
+  isGroup?: boolean;
   id: string;
   name: string;
   cohort: string | null;
@@ -40,6 +41,7 @@ export type LinkedMemo = {
 };
 
 export type PersonDetail = {
+  isGroup?: boolean;
   id: string;
   name: string;
   cohort: string | null;
@@ -48,6 +50,7 @@ export type PersonDetail = {
   /** 구버전 데이터 호환용. 새 화면은 memos를 사용한다. */
   personNote?: string | null;
   subscriptions: {
+    paymentStatus?: "pending" | "confirmed" | null;
     id: string;
     startIssue: string;
     lastIssue: string;
@@ -65,6 +68,8 @@ export type PersonDetail = {
     reversed: boolean;
   }[];
   purchases?: {
+    paymentStatus?: "pending" | "confirmed" | null;
+    isGroupDistribution?: boolean;
     issue: string;
     quantity: number;
     purchasedAt: string;

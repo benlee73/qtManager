@@ -147,8 +147,9 @@ export function ApplicationImportDialog({
         <p className="dialog-description import-description">
           <span>스프레드시트나 Excel에서 행을 복사해 붙여넣으세요.</span>
           <span>
-            제출 시각이 없는 행은 현재 선택한 {issueYear}년 호로 해석하며, 입금
-            여부는 저장하지 않습니다.
+            제출 시각이 없는 행은 현재 선택한 {issueYear}년 호로 해석합니다.
+            마지막 안내 확인 응답은 무시하고 새 구독은 입금 확인 전으로
+            등록합니다.
           </span>
         </p>
         <label className="field">
@@ -214,7 +215,8 @@ export function ApplicationImportDialog({
             </div>
             {preview.ignoredPaymentColumn && (
               <p className="payment-notice">
-                입금 여부 열은 확인하지 않고 가져오기에서 제외합니다.
+                마지막 안내 확인 응답은 가져오기에서 제외하며 입금 완료로
+                해석하지 않습니다.
               </p>
             )}
             <div className="import-preview" data-testid="application-preview">

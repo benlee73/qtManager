@@ -27,7 +27,7 @@ describe("HelpPanel", () => {
     expect(markup).not.toContain("정식 등록");
     expect(markup).toContain("정보 보완이나 보관 상태는 작은 표시");
     expect(markup).toContain("정보 보완 필요 N명");
-    expect(markup).toContain("일반 등록자의 또래 누락만으로는");
+    expect(markup).toContain("또래가 없는 일반 신청자 수입니다.");
     expect(markup).toContain("보관된 구독은 과거 기록을 보존");
     expect(markup).toContain('data-testid="help-nav-people"');
     expect(markup).toContain('aria-current="location"');

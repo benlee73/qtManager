@@ -120,3 +120,13 @@ export function filterSelectionDescription(filters: ReadonlySet<PersonFilter>) {
     .map((filter) => PERSON_FILTER_LABELS[filter])
     .join(", ");
 }
+
+export function searchMemos(memos: MemoView[], query: string) {
+  const normalized = query.replace(/\s/g, "").toLowerCase();
+  return memos.filter((memo) =>
+    `${memo.content} ${memo.personName ?? ""}`
+      .replace(/\s/g, "")
+      .toLowerCase()
+      .includes(normalized),
+  );
+}

@@ -478,7 +478,7 @@ p {
   min-height: 64px;
   /* Keep the four cells equal while giving the widest value (e.g. 0/165권)
      enough breathing room on both sides. */
-  padding: 9px 20px 10px;
+  padding: 9px 6px 10px;
   border-right: 1px solid var(--line);
   text-align: center;
 }
@@ -497,11 +497,11 @@ p {
   display: block;
   width: 100%;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   margin-top: 5px;
   font-size: var(--font-lg);
   line-height: 20px;
-  text-overflow: ellipsis;
+
   text-align: center;
   white-space: nowrap;
 }
@@ -1858,7 +1858,7 @@ kbd {
 
 /* 통합 메모 UI: 활성 목록은 내용을 줄이지 않고 내부에서 읽을 수 있어야 한다. */
 .notes-panel {
-  grid-template-rows: 32px 94px minmax(0, 1fr);
+  grid-template-rows: 32px 94px auto minmax(0, 1fr);
 }
 
 .memo-list {
@@ -2117,4 +2117,103 @@ kbd {
     flex-basis: 410px;
     margin-left: 6px;
   }
+}
+
+.memo-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--muted);
+}
+.memo-search input {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--input);
+  color: var(--text);
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: var(--font-sm);
+}
+.management-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.management-result-count {
+  color: var(--muted);
+  padding: 4px 12px 8px;
+  font-size: var(--font-sm);
+}
+.management-grid.management-payment-mode {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.management-payment-mode .management-list-panel {
+  grid-template-columns: minmax(200px, 1fr) minmax(0, 2fr);
+  grid-template-rows: auto;
+  align-items: center;
+  gap: 12px;
+  border-right: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 12px;
+}
+.management-payment-mode .management-counts {
+  margin: 0;
+  justify-content: flex-start;
+}
+.memo-search input::-webkit-search-decoration {
+  appearance: none;
+}
+.payment-queue {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.payment-queue header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.payment-queue h3 {
+  margin: 0;
+  font-size: var(--font-md);
+}
+.payment-table-scroll {
+  min-height: 0;
+  overflow: auto;
+}
+.payment-queue table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-sm);
+}
+.payment-queue th,
+.payment-queue td {
+  padding: 9px 6px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.payment-queue th {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.payment-queue th,
+.payment-queue td:nth-child(3),
+.payment-queue td:nth-child(5),
+.payment-queue td:last-child button {
+  white-space: nowrap;
+  overflow-wrap: normal;
 }

@@ -13,6 +13,7 @@ export function filterPurchasePeople(
 
   return people
     .filter((person) => {
+      if (person.isGroup) return false;
       const name = person.name.replace(/\s/g, "").toLowerCase();
       const cohort = person.cohort ?? "";
       return (

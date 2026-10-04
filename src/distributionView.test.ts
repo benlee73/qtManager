@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { DeskPerson } from "./phase2";
 import {
+  searchMemos,
   ALL_PERSON_FILTERS,
   DEFAULT_PERSON_FILTERS,
   distributionAllocations,
@@ -164,4 +165,30 @@ describe("reversible distribution allocation", () => {
       { subscriptionId: "second", quantity: 1 },
     ]);
   });
+});
+
+it("searches memo content and linked names without changing priority or confirmation data", () => {
+  const memo = {
+    id: "first",
+    content: "수 량 확인",
+    personId: "person",
+    personName: "가상 신청자",
+    status: "활성" as const,
+    operatorName: "담당자",
+    updatedAt: "2026-10-04",
+  };
+  const items = [
+    memo,
+    {
+      ...memo,
+      id: "second",
+      personId: null,
+      personName: null,
+      content: "다른 메모",
+    },
+  ];
+  expect(searchMemos(items, "수량")).toEqual([memo]);
+  expect(searchMemos(items, "가상신청")).toEqual([memo]);
+  expect(searchMemos(items, " ")).toEqual(items);
+  expect(items).toHaveLength(2);
 });

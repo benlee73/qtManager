@@ -239,7 +239,7 @@ function PersonDetailContent({
           >
             정보 수정
           </button>
-          {detail.status !== "보관됨" && (
+          {detail.status !== "보관됨" && !detail.isGroup && (
             <button
               className="primary-button"
               data-testid="open-renew"
@@ -318,6 +318,13 @@ function PersonDetailContent({
               </div>
               <div className="subscription-quantity numeric">
                 {subscription.quantity}권
+                {subscription.paymentStatus && (
+                  <small>
+                    {subscription.paymentStatus === "pending"
+                      ? "입금 확인 전"
+                      : "입금 확인"}
+                  </small>
+                )}
               </div>
               <span className="subscription-state">
                 {subscriptionStateLabels[subscription.periodState]}
@@ -371,7 +378,7 @@ function PersonDetailContent({
       </DetailSection>
 
       <DetailSection
-        title={`개별 구매 이력 ${(detail.purchases ?? []).length}건`}
+        title={`${detail.isGroup ? "배부 권수 기록" : "개별 구매 이력"} ${(detail.purchases ?? []).length}건`}
       >
         <div className="purchase-history" data-testid="purchase-history">
           {(detail.purchases ?? []).map((purchase, index) => (
@@ -381,7 +388,19 @@ function PersonDetailContent({
             >
               <strong title={purchase.issue}>{purchase.issue}</strong>
               <span>
-                {purchase.reversed ? "취소" : "구매·전달"} {purchase.quantity}권
+                {purchase.reversed
+                  ? "취소"
+                  : purchase.isGroupDistribution
+                    ? "배부"
+                    : "구매·전달"}{" "}
+                {purchase.quantity}권
+                {purchase.paymentStatus && !purchase.reversed && (
+                  <small>
+                    {purchase.paymentStatus === "pending"
+                      ? "입금 확인 전"
+                      : "입금 확인"}
+                  </small>
+                )}
               </span>
               <time
                 dateTime={purchase.purchasedAt}

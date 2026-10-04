@@ -1,9 +1,6 @@
 import type { PersonSummary } from "./phase3";
 
-/**
- * 간이 등록으로 생성되어 정보 보완이 필요한 신청자만 추린다.
- * 또래가 비어 있는 정식 등록 신청자는 기존 업무 규칙상 이 목록에 넣지 않는다.
- */
+/** 도메인이 또래 누락과 군지체 예외를 판정한 표시 상태를 사용한다. */
 export function profileCompletionPeople(
   people: PersonSummary[],
 ): PersonSummary[] {

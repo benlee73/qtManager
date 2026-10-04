@@ -331,9 +331,8 @@ describe("ManagementScreen heading actions", () => {
     expect(markup).toContain("스프레드시트 붙여넣기");
     expect(markup).toContain("+ 신청자 등록");
     expect(markup).toContain("정보 보완 필요 0명");
-    expect(markup).toContain(
-      "현장 간이 등록 상태가 아직 보완되지 않은 신청자 수",
-    );
+    expect(markup).toContain("보관된 신청자만 보기");
+    expect(markup).toContain("입금 확인 필요 0명");
     expect(markup).not.toContain("+ QT 신청자 정식 등록");
     expect(markup).toContain('data-testid="management-heading-help"');
     expect(markup).toMatch(

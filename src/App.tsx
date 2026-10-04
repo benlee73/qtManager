@@ -1,3 +1,4 @@
+import { searchMemos } from "./distributionView";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ActionMenu } from "./ActionMenu";
@@ -72,6 +73,8 @@ export default function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [issue, setIssue] = useState<Issue>(() => recommendedIssue());
   const [query, setQuery] = useState("");
+  const [memoQuery, setMemoQuery] = useState("");
+  const [dataVersion, setDataVersion] = useState(0);
   const [desk, setDesk] = useState<DistributionDesk | null>(null);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [listFilters, setListFilters] = useState<PersonFilter[]>(() => [
@@ -165,6 +168,7 @@ export default function App() {
       setBusy(true);
       try {
         await work();
+        setDataVersion((current) => current + 1);
         setDialog(null);
         notify(success);
         await refresh();
@@ -312,10 +316,17 @@ export default function App() {
   const defaultDistribution = useCallback(
     async (person: DeskPerson) => {
       if (busy || !person.canDistribute) return;
+      if (person.isGroup) {
+        setDialog({ type: "group-distribution", person });
+        return;
+      }
       if (
         activeDistributionMemos(desk?.memos ?? [], person.personId).length > 0
       ) {
-        setDialog({ type: "confirm-distribution", person });
+        setDialog({
+          type: person.isGroup ? "group-distribution" : "confirm-distribution",
+          person,
+        });
         return;
       }
       const allocations = distributionAllocations(person);
@@ -418,7 +429,12 @@ export default function App() {
         );
         if (person?.canDistribute) {
           event.preventDefault();
-          setDialog({ type: "confirm-distribution", person });
+          setDialog({
+            type: person.isGroup
+              ? "group-distribution"
+              : "confirm-distribution",
+            person,
+          });
         }
       } else if (modified && !textEntry && event.key.toLowerCase() === "n") {
         event.preventDefault();
@@ -567,14 +583,24 @@ export default function App() {
       >
         <ManagementScreen
           issue={issue}
+          dataVersion={dataVersion}
+          active={screen === "management"}
           notify={notify}
           recordAction={recordAction}
           focusPersonId={managementFocusId}
           onFocusConsumed={() => setManagementFocusId(null)}
           renewPersonId={managementRenewPersonId}
           onRenewConsumed={() => setManagementRenewPersonId(null)}
-          onExternalChange={() => setRedoStack([])}
-          onStateImported={clearHistory}
+          onExternalChange={() => {
+            setRedoStack([]);
+            setDataVersion((current) => current + 1);
+            void refresh();
+          }}
+          onStateImported={() => {
+            clearHistory();
+            setDataVersion((current) => current + 1);
+            void refresh();
+          }}
         />
       </div>
 
@@ -927,16 +953,31 @@ export default function App() {
                 </button>
               </div>
             </form>
+            <label className="memo-search">
+              <span aria-hidden="true">⌕</span>
+              <input
+                type="search"
+                value={memoQuery}
+                onChange={(event) => setMemoQuery(event.target.value)}
+                placeholder="메모 검색"
+                aria-label="메모 내용·신청자 검색"
+                data-testid="memo-search"
+              />
+            </label>
             <div className="memo-list">
-              {(desk?.memos ?? []).map((memo) => (
+              {searchMemos(desk?.memos ?? [], memoQuery).map((memo) => (
                 <MemoCard
                   key={memo.id}
                   memo={memo}
                   onOpenDetail={setMemoDetail}
                 />
               ))}
-              {(desk?.memos?.length ?? 0) === 0 && (
-                <p className="memo-empty">활성 메모가 없습니다.</p>
+              {searchMemos(desk?.memos ?? [], memoQuery).length === 0 && (
+                <p className="memo-empty">
+                  {memoQuery.trim()
+                    ? "검색 결과가 없습니다."
+                    : "활성 메모가 없습니다."}
+                </p>
               )}
             </div>
           </aside>
@@ -1221,7 +1262,7 @@ export function PersonRow({
       onClick={onSelect}
       onDoubleClick={(event) => {
         event.preventDefault();
-        onEdit();
+        onViewDetails();
       }}
       onContextMenu={(event) => {
         event.preventDefault();
@@ -1263,7 +1304,9 @@ export function PersonRow({
         <small>
           {person.targetQuantity
             ? `${person.distributedQuantity} / ${person.targetQuantity}권`
-            : "—"}
+            : person.isGroup
+              ? `${person.distributedQuantity}권 배부`
+              : "—"}
         </small>
       </div>
       <div className="row-actions">
@@ -1293,7 +1336,9 @@ export function PersonRow({
           {person.distributionStatus === "배부 완료"
             ? "배부 취소"
             : person.canDistribute
-              ? `${person.remainingQuantity}권 배부`
+              ? person.isGroup
+                ? "권수 입력"
+                : `${person.remainingQuantity}권 배부`
               : person.subscriptionStatus === "구독 만료"
                 ? "구독 갱신"
                 : person.distributionStatus}
@@ -1314,6 +1359,11 @@ export function PersonRow({
           <button type="button" onClick={onEdit}>
             신청자 정보 수정
           </button>
+          {person.isGroup && person.latestGroupDistributionId && (
+            <button type="button" onClick={onCancelDistribution}>
+              최근 배부 취소
+            </button>
+          )}
           {person.canDistribute && person.remainingQuantity > 1 && (
             <button type="button" onClick={onPartial}>
               일부만 배부

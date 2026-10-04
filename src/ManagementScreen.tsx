@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { EditDialog, RegisterDialog, RenewDialog } from "./Phase3Dialogs";
 import { ApplicationImportDialog } from "./ApplicationImportDialog";
@@ -31,6 +31,13 @@ import {
   updatePerson,
 } from "./phase3";
 
+import { PaymentQueue } from "./PaymentQueue";
+import {
+  loadPayments,
+  setPaymentConfirmed,
+  type PaymentView,
+} from "./payments";
+
 type ManagementDialog =
   | { type: "register" }
   | { type: "applications" }
@@ -49,8 +56,12 @@ export function ManagementScreen({
   onRenewConsumed,
   onExternalChange,
   onStateImported,
+  dataVersion = 0,
+  active = true,
 }: {
   issue: Issue;
+  dataVersion?: number;
+  active?: boolean;
   notify: (message: string, kind?: "success" | "error") => void;
   recordAction: (action: ReversibleAction) => void;
   focusPersonId?: string | null;
@@ -61,8 +72,10 @@ export function ManagementScreen({
   onStateImported?: () => void;
 }) {
   const [query, setQuery] = useState("");
-  const [includeArchived, setIncludeArchived] = useState(false);
-  const [draftOnly, setDraftOnly] = useState(false);
+  const [filter, setFilter] = useState<
+    "all" | "completion" | "archived" | "payments"
+  >("all");
+  const [payments, setPayments] = useState<PaymentView[]>([]);
   const [management, setManagement] = useState<PeopleManagement | null>(null);
   const [selection, setSelection] = useState<ManagementSelection>({
     selectedId: null,
@@ -86,15 +99,26 @@ export function ManagementScreen({
     });
   }
   const loader = loaderRef.current;
+  const paymentRequestId = useRef(0);
 
   const refresh = useCallback(async () => {
-    await loader.refresh(query, includeArchived);
-  }, [includeArchived, loader, query]);
+    const requestId = ++paymentRequestId.current;
+    await Promise.all([
+      loader.refresh(query, true),
+      loadPayments().then((rows) => {
+        if (paymentRequestId.current === requestId) setPayments(rows);
+      }),
+    ]);
+  }, [loader, query]);
 
   useEffect(() => {
-    const timeout = window.setTimeout(refresh, 70);
+    const timeout = window.setTimeout(() => {
+      void refresh().catch((reason) =>
+        notifyRef.current(errorMessage(reason), "error"),
+      );
+    }, 70);
     return () => window.clearTimeout(timeout);
-  }, [refresh]);
+  }, [refresh, dataVersion, active]);
 
   useEffect(() => () => loader.cancelPending(), [loader]);
 
@@ -103,22 +127,15 @@ export function ManagementScreen({
     const isVisible = management.people.some(
       (person) => person.id === focusPersonId,
     );
-    if (!isVisible && (query !== "" || !includeArchived)) {
+    if (!isVisible && query !== "") {
       loader.invalidate();
       if (query !== "") setQuery("");
-      if (!includeArchived) setIncludeArchived(true);
       return;
     }
+    setFilter("all");
     void loader.select(focusPersonId);
     onFocusConsumed?.();
-  }, [
-    focusPersonId,
-    includeArchived,
-    loader,
-    management,
-    onFocusConsumed,
-    query,
-  ]);
+  }, [focusPersonId, loader, management, onFocusConsumed, query]);
 
   useEffect(() => {
     if (!renewPersonId || selection.detail?.id !== renewPersonId) return;
@@ -131,10 +148,10 @@ export function ManagementScreen({
     success: string,
     options: { closeDialog?: boolean } = {},
   ) {
-    onExternalChange?.();
     setBusy(true);
     try {
       await work();
+      onExternalChange?.();
       if (options.closeDialog !== false) setDialog(null);
       notify(success);
       await refresh();
@@ -147,9 +164,33 @@ export function ManagementScreen({
     }
   }
 
-  const visibleManagementPeople = draftOnly
-    ? profileCompletionPeople(management?.people ?? [])
-    : (management?.people ?? []);
+  const visibleManagementPeople = useMemo(() => {
+    const people = management?.people ?? [];
+    if (filter === "archived")
+      return people.filter((person) => person.status === "보관됨");
+    const activePeople = people.filter((person) => person.status !== "보관됨");
+    return filter === "completion"
+      ? profileCompletionPeople(activePeople)
+      : activePeople;
+  }, [filter, management]);
+
+  useEffect(() => {
+    if (!management || filter === "payments" || focusPersonId) return;
+    if (
+      !visibleManagementPeople.some(
+        (person) => person.id === selection.selectedId,
+      )
+    ) {
+      void loader.select(visibleManagementPeople[0]?.id ?? null);
+    }
+  }, [
+    filter,
+    focusPersonId,
+    loader,
+    management,
+    selection.selectedId,
+    visibleManagementPeople,
+  ]);
 
   return (
     <main className="app-shell management-shell">
@@ -198,7 +239,9 @@ export function ManagementScreen({
         </div>
       </section>
 
-      <section className="management-grid">
+      <section
+        className={`management-grid ${filter === "payments" ? "management-payment-mode" : ""}`}
+      >
         <div className="management-list-panel">
           <label className="search-box management-search">
             <span aria-hidden="true">⌕</span>
@@ -208,7 +251,6 @@ export function ManagementScreen({
               value={query}
               onChange={(event) => {
                 loader.invalidate();
-                setDraftOnly(false);
                 setQuery(event.target.value);
               }}
               onKeyDown={(event) => {
@@ -229,137 +271,185 @@ export function ManagementScreen({
               aria-label="관리할 QT 신청자 검색"
             />
           </label>
-          <label className="check-field archived-toggle">
-            <input
-              type="checkbox"
-              checked={includeArchived}
-              onChange={(event) => {
-                loader.invalidate();
-                setDraftOnly(false);
-                setIncludeArchived(event.target.checked);
+          <div className="management-counts management-filters">
+            <button
+              className={`count-filter ${filter === "all" ? "active" : ""}`}
+              type="button"
+              aria-pressed={filter === "all"}
+              onClick={() => setFilter("all")}
+            >
+              전체
+            </button>
+            <button
+              className={`count-filter ${filter === "completion" ? "active" : ""}`}
+              data-testid="draft-count-filter"
+              aria-label={`정보 보완 필요 ${management?.draftCount ?? 0}명: ${profileCompletionNames(profileCompletionPeople(management?.people ?? []))}`}
+              type="button"
+              aria-pressed={filter === "completion"}
+              title={profileCompletionNames(
+                profileCompletionPeople(management?.people ?? []),
+              )}
+              onClick={() => setFilter("completion")}
+            >
+              정보 보완 필요 {management?.draftCount ?? 0}명
+            </button>
+            <button
+              className={`count-filter ${filter === "payments" ? "active" : ""}`}
+              data-testid="payment-count-filter"
+              type="button"
+              aria-pressed={filter === "payments"}
+              onClick={() => setFilter("payments")}
+            >
+              입금 확인 필요{" "}
+              {
+                new Set(
+                  payments
+                    .filter((row) => row.status === "pending")
+                    .map((row) => row.personId ?? `purchase:${row.id}`),
+                ).size
+              }
+              명
+            </button>
+            <button
+              className={`count-filter ${filter === "archived" ? "active" : ""}`}
+              data-testid="archived-count-filter"
+              type="button"
+              aria-pressed={filter === "archived"}
+              onClick={() => setFilter("archived")}
+            >
+              보관된 신청자만 보기 {management?.archivedCount ?? 0}명
+            </button>
+          </div>
+          {filter !== "payments" && (
+            <div className="management-result-count">
+              검색 결과 {visibleManagementPeople.length}명
+            </div>
+          )}
+          {filter !== "payments" && (
+            <ManagementPersonList
+              people={visibleManagementPeople}
+              selectedId={selection.selectedId}
+              onSelect={(id) => void loader.select(id)}
+              onReturnToSearch={() => {
+                loader.select(null);
+                managementSearchRef.current?.focus();
               }}
             />
-            보관된 신청자도 보기
-          </label>
-          <div className="management-counts">
-            <span>검색 결과 {management?.people.length ?? 0}명</span>
-            {(() => {
-              const draftPeople = profileCompletionPeople(
-                management?.people ?? [],
-              );
-              const draftNames = profileCompletionNames(draftPeople);
-              const draftCount = management?.draftCount ?? 0;
-              if (draftCount === 0) {
-                return (
-                  <span title="현장 간이 등록 상태가 아직 보완되지 않은 신청자 수">
-                    정보 보완 필요 0명
-                  </span>
-                );
-              }
-              return (
-                <button
-                  className={draftOnly ? "count-filter active" : "count-filter"}
-                  data-testid="draft-count-filter"
-                  type="button"
-                  aria-pressed={draftOnly}
-                  aria-label={`정보 보완 필요 ${draftCount}명${draftNames ? `: ${draftNames}` : ""}`}
-                  title={`보완 대상: ${draftNames || "신청자 목록"} · 눌러 목록 필터`}
-                  onClick={() => setDraftOnly((current) => !current)}
-                >
-                  정보 보완 필요 {draftCount}명
-                </button>
-              );
-            })()}
-          </div>
-          <ManagementPersonList
-            people={visibleManagementPeople}
-            selectedId={selection.selectedId}
-            onSelect={(id) => void loader.select(id)}
-            onReturnToSearch={() => {
-              loader.select(null);
-              managementSearchRef.current?.focus();
-            }}
-          />
+          )}
         </div>
 
-        <PersonDetailPanel
-          detail={selection.detail}
-          busy={busy}
-          onEdit={(person) => setDialog({ type: "edit", person })}
-          onRenew={(person) => setDialog({ type: "renew", person })}
-          onCreateMemo={(personId, content) => {
-            let createdId = "";
-            return mutate(async () => {
-              createdId = await createMemo(personId, content);
-            }, "메모를 저장했습니다.").then((saved) => {
-              if (saved) {
+        {filter === "payments" ? (
+          <PaymentQueue
+            rows={payments}
+            query={query}
+            busy={busy}
+            onViewPerson={(id) => {
+              setQuery("");
+              setFilter(
+                management?.people.find((person) => person.id === id)
+                  ?.status === "보관됨"
+                  ? "archived"
+                  : "all",
+              );
+              void loader.select(id);
+            }}
+            onConfirm={async (rows, confirmed) => {
+              const selections = rows.map(({ id, kind }) => ({ id, kind }));
+              const saved = await mutate(
+                () => setPaymentConfirmed(selections, confirmed),
+                confirmed
+                  ? "입금을 확인했습니다."
+                  : "입금 확인을 취소했습니다.",
+              );
+              if (saved)
                 recordAction({
-                  description: "연결 메모 추가",
-                  undo: () => updateMemoStatus(createdId, true),
-                  redo: () => updateMemoStatus(createdId, false),
+                  description: confirmed ? "입금 확인" : "입금 확인 취소",
+                  undo: () => setPaymentConfirmed(selections, !confirmed),
+                  redo: () => setPaymentConfirmed(selections, confirmed),
                 });
-              }
               return saved;
-            });
-          }}
-          onUpdateMemo={(memo, content) =>
-            mutate(
-              () => updateMemo(memo.id, content),
-              "메모를 수정했습니다.",
-            ).then((saved) => {
-              if (saved) {
-                recordAction({
-                  description: "메모 수정",
-                  undo: () => updateMemo(memo.id, memo.content),
-                  redo: () => updateMemo(memo.id, content),
-                });
-              }
-              return saved;
-            })
-          }
-          onArchiveMemo={(memo, archived) =>
-            mutate(
-              () => updateMemoStatus(memo.id, archived),
-              archived ? "메모를 보관했습니다." : "메모를 복원했습니다.",
-            ).then((saved) => {
-              if (saved) {
-                recordAction({
-                  description: archived ? "메모 보관" : "메모 복원",
-                  undo: () => updateMemoStatus(memo.id, !archived),
-                  redo: () => updateMemoStatus(memo.id, archived),
-                });
-              }
-              return saved;
-            })
-          }
-          onDeleteMemo={(memo) => {
-            if (!window.confirm("이 메모를 삭제할까요?")) {
-              return Promise.resolve(false);
+            }}
+          />
+        ) : (
+          <PersonDetailPanel
+            detail={selection.detail}
+            busy={busy}
+            onEdit={(person) => setDialog({ type: "edit", person })}
+            onRenew={(person) => setDialog({ type: "renew", person })}
+            onCreateMemo={(personId, content) => {
+              let createdId = "";
+              return mutate(async () => {
+                createdId = await createMemo(personId, content);
+              }, "메모를 저장했습니다.").then((saved) => {
+                if (saved) {
+                  recordAction({
+                    description: "연결 메모 추가",
+                    undo: () => updateMemoStatus(createdId, true),
+                    redo: () => updateMemoStatus(createdId, false),
+                  });
+                }
+                return saved;
+              });
+            }}
+            onUpdateMemo={(memo, content) =>
+              mutate(
+                () => updateMemo(memo.id, content),
+                "메모를 수정했습니다.",
+              ).then((saved) => {
+                if (saved) {
+                  recordAction({
+                    description: "메모 수정",
+                    undo: () => updateMemo(memo.id, memo.content),
+                    redo: () => updateMemo(memo.id, content),
+                  });
+                }
+                return saved;
+              })
             }
-            return mutate(() => deleteMemo(memo.id), "메모를 삭제했습니다.");
-          }}
-          onToggleArchived={(person) =>
-            void mutate(
-              () => setPersonArchived(person.id, person.status !== "보관됨"),
-              person.status === "보관됨"
-                ? "QT 신청자를 일반 목록으로 복원했습니다."
-                : "QT 신청자를 보관했습니다.",
-            )
-          }
-          onDelete={(person) => {
-            if (
-              !window.confirm(
-                "이 신청자를 영구 삭제할까요? 구독·배부·개별 구매·메모 이력이 있는 신청자는 삭제할 수 없고 보관만 가능합니다.",
+            onArchiveMemo={(memo, archived) =>
+              mutate(
+                () => updateMemoStatus(memo.id, archived),
+                archived ? "메모를 보관했습니다." : "메모를 복원했습니다.",
+              ).then((saved) => {
+                if (saved) {
+                  recordAction({
+                    description: archived ? "메모 보관" : "메모 복원",
+                    undo: () => updateMemoStatus(memo.id, !archived),
+                    redo: () => updateMemoStatus(memo.id, archived),
+                  });
+                }
+                return saved;
+              })
+            }
+            onDeleteMemo={(memo) => {
+              if (!window.confirm("이 메모를 삭제할까요?")) {
+                return Promise.resolve(false);
+              }
+              return mutate(() => deleteMemo(memo.id), "메모를 삭제했습니다.");
+            }}
+            onToggleArchived={(person) =>
+              void mutate(
+                () => setPersonArchived(person.id, person.status !== "보관됨"),
+                person.status === "보관됨"
+                  ? "QT 신청자를 일반 목록으로 복원했습니다."
+                  : "QT 신청자를 보관했습니다.",
               )
-            ) {
-              return Promise.resolve(false);
             }
-            return mutate(
-              () => deletePerson(person.id),
-              "QT 신청자를 삭제했습니다.",
-            );
-          }}
-        />
+            onDelete={(person) => {
+              if (
+                !window.confirm(
+                  "이 신청자를 영구 삭제할까요? 구독·배부·개별 구매·메모 이력이 있는 신청자는 삭제할 수 없고 보관만 가능합니다.",
+                )
+              ) {
+                return Promise.resolve(false);
+              }
+              return mutate(
+                () => deletePerson(person.id),
+                "QT 신청자를 삭제했습니다.",
+              );
+            }}
+          />
+        )}
       </section>
 
       {dialog?.type === "register" && (

@@ -136,7 +136,8 @@ export function EditDialog({
       >
         {person.status === "정보 보완 필요" && (
           <p className="dialog-description">
-            저장하면 간이 등록 상태가 해제되고 입력한 정보가 반영됩니다.
+            저장하면 입력한 정보가 반영됩니다. 또래가 없으면 정보 보완 목록에
+            계속 표시됩니다.
           </p>
         )}
         <PersonFields person={person} />

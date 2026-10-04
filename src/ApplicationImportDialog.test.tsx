@@ -18,7 +18,7 @@ describe("ApplicationImportDialog", () => {
       "스프레드시트나 Excel에서 행을 복사해 붙여넣으세요.",
     );
     expect(markup).toContain(
-      "제출 시각이 없는 행은 현재 선택한 2026년 호로 해석하며, 입금 여부는 저장하지 않습니다.",
+      "제출 시각이 없는 행은 현재 선택한 2026년 호로 해석합니다. 마지막 안내 확인 응답은 무시하고 새 구독은 입금 확인 전으로 등록합니다.",
     );
     expect(markup).toContain('class="dialog-description import-description"');
     expect(markup).toContain('data-testid="application-paste-input"');

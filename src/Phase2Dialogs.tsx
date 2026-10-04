@@ -20,6 +20,8 @@ import {
   createDraft,
   distributeAllocations,
   recordPurchase,
+  recordGroupDistribution,
+  cancelGroupDistribution,
   recordPurchaseForNewPerson,
   setOperator,
   undoDistributionAllocations,
@@ -32,6 +34,7 @@ export type Phase2Dialog =
   | { type: "draft" }
   | { type: "memo"; personId: string | null }
   | { type: "purchase" }
+  | { type: "group-distribution"; person: DeskPerson }
   | { type: "partial"; person: DeskPerson }
   | { type: "cancel-distribution"; person: DeskPerson }
   | { type: "confirm-distribution"; person: DeskPerson }
@@ -60,12 +63,15 @@ export function Phase2DialogContent({
 }) {
   const distributionSubmitting = useRef(false);
   const distributionMemos =
-    dialog.type === "confirm-distribution" || dialog.type === "partial"
+    dialog.type === "confirm-distribution" ||
+    dialog.type === "partial" ||
+    dialog.type === "group-distribution"
       ? activeDistributionMemos(memos, dialog.person.personId)
       : [];
   const [draftError, setDraftError] = useState<string | null>(null);
   const [purchasePeople, setPurchasePeople] = useState<PersonSummary[]>([]);
   const [purchasePeopleLoading, setPurchasePeopleLoading] = useState(true);
+  const [purchasePeopleError, setPurchasePeopleError] = useState(false);
   const [purchaseQuery, setPurchaseQuery] = useState("");
   const [selectedPurchasePerson, setSelectedPurchasePerson] =
     useState<PersonSummary | null>(null);
@@ -79,7 +85,7 @@ export function Phase2DialogContent({
         if (active) setPurchasePeople(management.people);
       })
       .catch(() => {
-        if (active) setPurchasePeople([]);
+        if (active) setPurchasePeopleError(true);
       })
       .finally(() => {
         if (active) setPurchasePeopleLoading(false);
@@ -95,6 +101,68 @@ export function Phase2DialogContent({
     return () => window.clearTimeout(timeout);
   }, [draftError]);
 
+  if (dialog.type === "group-distribution") {
+    return (
+      <FormDialog title="군지체 배부" onClose={onClose}>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (distributionSubmitting.current || busy) return;
+            distributionSubmitting.current = true;
+            const quantity = Number(
+              new FormData(event.currentTarget).get("quantity"),
+            );
+            let purchaseId = "";
+            const work = async () => {
+              purchaseId = await recordGroupDistribution(
+                issue,
+                dialog.person.personId,
+                quantity,
+              );
+            };
+            void mutate(work, `군지체 · ${quantity}권 배부를 기록했습니다.`)
+              .then((saved) => {
+                if (saved)
+                  recordAction({
+                    description: `군지체 ${quantity}권 배부`,
+                    undo: () =>
+                      cancelGroupDistribution(
+                        issue,
+                        dialog.person.personId,
+                        purchaseId,
+                      ),
+                    redo: work,
+                  });
+              })
+              .finally(() => {
+                distributionSubmitting.current = false;
+              });
+          }}
+        >
+          <p className="dialog-description">
+            {issue.year}년 {issue.startMonth}~{issue.startMonth + 1}월호 · 현재{" "}
+            {dialog.person.distributedQuantity}권 배부. 이번에 전달한 권수를
+            추가로 기록합니다.
+          </p>
+          <DistributionMemoNotice memos={distributionMemos} />
+          <Field label="이번에 배부한 권수">
+            <input
+              name="quantity"
+              type="number"
+              min="1"
+              max="10000"
+              required
+              autoFocus
+              defaultValue="1"
+            />
+          </Field>
+          <SubmitButton busy={busy}>
+            {distributionMemos.length ? "메모 확인 후 배부 기록" : "배부 기록"}
+          </SubmitButton>
+        </form>
+      </FormDialog>
+    );
+  }
   if (dialog.type === "operator") {
     return (
       <FormDialog title="현재 담당자 설정" onClose={onClose}>
@@ -256,6 +324,13 @@ export function Phase2DialogContent({
   }
   if (dialog.type === "purchase") {
     const purchaseMatches = filterPurchasePeople(purchasePeople, purchaseQuery);
+    const addNewPerson =
+      !selectedPurchasePerson &&
+      (purchaseNewPersonMode ||
+        (!purchasePeopleLoading &&
+          !purchasePeopleError &&
+          Boolean(purchaseQuery.trim()) &&
+          purchaseMatches.length === 0));
     return (
       <FormDialog
         title="1달 구독"
@@ -286,7 +361,7 @@ export function Phase2DialogContent({
             // redo must add another purchase to the same record, rather than
             // creating a second applicant with the same name.
             let createdPersonId: string | null = null;
-            const work: () => Promise<void> = purchaseNewPersonMode
+            const work: () => Promise<void> = addNewPerson
               ? async () => {
                   if (createdPersonId) {
                     await recordPurchase(issue, {
@@ -325,7 +400,7 @@ export function Phase2DialogContent({
                 name="buyerName"
                 value={purchaseQuery}
                 autoFocus
-                required={purchaseNewPersonMode}
+                required={addNewPerson}
                 placeholder="이름·또래 검색 (비워두면 익명)"
                 data-testid="purchase-person-search"
                 onChange={(event) => {
@@ -354,39 +429,47 @@ export function Phase2DialogContent({
               </div>
             ) : (
               <>
+                {purchasePeopleError && (
+                  <p className="form-error">
+                    신청자 목록을 불러오지 못했습니다. 창을 닫고 다시 시도해
+                    주세요.
+                  </p>
+                )}
                 {purchasePeopleLoading && (
                   <p className="purchase-person-hint">
                     신청자 목록을 불러오는 중…
                   </p>
                 )}
-                {!purchasePeopleLoading && purchaseQuery.trim() && (
-                  <div className="purchase-person-results" role="listbox">
-                    {purchaseMatches.map((person) => (
-                      <button
-                        key={person.id}
-                        type="button"
-                        className="purchase-person-result"
-                        data-testid="purchase-person-result"
-                        onClick={() => {
-                          setSelectedPurchasePerson(person);
-                          setPurchaseQuery(person.name);
-                          setPurchaseNewPersonMode(false);
-                        }}
-                      >
-                        <span className="purchase-person-cohort">
-                          {person.cohort ?? "--"}
-                        </span>
-                        <span>{person.name}</span>
-                      </button>
-                    ))}
-                    {purchaseMatches.length === 0 && (
-                      <p className="purchase-person-hint">
-                        일치하는 기존 신청자가 없습니다.
-                      </p>
-                    )}
-                  </div>
-                )}
-                {purchaseQuery.trim() && (
+                {!purchasePeopleLoading &&
+                  !purchasePeopleError &&
+                  purchaseQuery.trim() && (
+                    <div className="purchase-person-results" role="listbox">
+                      {purchaseMatches.map((person) => (
+                        <button
+                          key={person.id}
+                          type="button"
+                          className="purchase-person-result"
+                          data-testid="purchase-person-result"
+                          onClick={() => {
+                            setSelectedPurchasePerson(person);
+                            setPurchaseQuery(person.name);
+                            setPurchaseNewPersonMode(false);
+                          }}
+                        >
+                          <span className="purchase-person-cohort">
+                            {person.cohort ?? "--"}
+                          </span>
+                          <span>{person.name}</span>
+                        </button>
+                      ))}
+                      {purchaseMatches.length === 0 && (
+                        <p className="purchase-person-hint">
+                          일치하는 기존 신청자가 없어 신규 인원으로 추가합니다.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                {purchaseQuery.trim() && purchaseMatches.length > 0 && (
                   <button
                     type="button"
                     className="purchase-new-person-toggle"
@@ -402,7 +485,7 @@ export function Phase2DialogContent({
                 )}
               </>
             )}
-            {purchaseNewPersonMode && !selectedPurchasePerson && (
+            {addNewPerson && !selectedPurchasePerson && (
               <div className="purchase-new-person-fields">
                 <p className="purchase-person-hint">
                   구독 없이 이번 구매 이력만 연결된 신청자로 저장합니다.
@@ -450,7 +533,11 @@ export function Phase2DialogContent({
           <Field label="선택 메모">
             <input name="note" />
           </Field>
-          <SubmitButton busy={busy}>구매·전달 기록</SubmitButton>
+          <SubmitButton
+            busy={busy || purchasePeopleLoading || purchasePeopleError}
+          >
+            구매·전달 기록
+          </SubmitButton>
         </form>
       </FormDialog>
     );
@@ -471,6 +558,40 @@ export function Phase2DialogContent({
             type="button"
             disabled={busy}
             onClick={() => {
+              if (
+                dialog.person.isGroup &&
+                dialog.person.latestGroupDistributionId
+              ) {
+                let purchaseId = dialog.person.latestGroupDistributionId;
+                void mutate(
+                  () =>
+                    cancelGroupDistribution(
+                      issue,
+                      dialog.person.personId,
+                      purchaseId,
+                    ),
+                  "군지체의 최근 배부를 취소했습니다.",
+                ).then((saved) => {
+                  if (saved)
+                    recordAction({
+                      description: "군지체 배부 취소",
+                      undo: async () => {
+                        purchaseId = await recordGroupDistribution(
+                          issue,
+                          dialog.person.personId,
+                          dialog.person.latestGroupDistributionQuantity ?? 1,
+                        );
+                      },
+                      redo: () =>
+                        cancelGroupDistribution(
+                          issue,
+                          dialog.person.personId,
+                          purchaseId,
+                        ),
+                    });
+                });
+                return;
+              }
               let cancelled: DistributionAllocation[] = [];
               void mutate(async () => {
                 cancelled = await cancelPersonDistribution(

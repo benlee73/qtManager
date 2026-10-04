@@ -218,11 +218,7 @@ describe("QT Manager desktop flow", () => {
     await clickButtonByText("현장 배부");
     await clickButtonByText("+ 1달 구독");
     await setInput("input[name='buyerName']", newPerson);
-    await waitForText(
-      '[data-testid="purchase-new-person-toggle"]',
-      "신규 인원으로 추가",
-    );
-    await clickButtonByText("신규 인원으로 추가");
+    await waitForText(".purchase-new-person-fields", "구독 없이");
     await setInput("input[name='purchaseCohort']", "01");
     await setInput("input[name='quantity']", "1");
     await clickButtonByText("구매·전달 기록");
@@ -325,6 +321,14 @@ describe("QT Manager desktop flow", () => {
           new MouseEvent("dblclick", { bubbles: true, cancelable: true }),
         );
     });
+    await waitForText('[data-testid="person-detail"]', expiredPhone);
+    expect(
+      await browser.execute(
+        () =>
+          document.querySelector('[data-testid="edit-person-form"]') === null,
+      ),
+    ).toBe(true);
+    await clickButtonByText("정보 수정");
     await browser.waitUntil(
       async () =>
         (await browser.$("input[name='phone']").getValue()) === expiredPhone,
@@ -341,6 +345,7 @@ describe("QT Manager desktop flow", () => {
         ),
       { timeoutMsg: "Escape로 신청자 수정 창이 닫히지 않았습니다." },
     );
+    await clickButtonByText("현장 배부");
     await clickButtonByText("구독 갱신");
     await waitForText(
       "#management-dialog-title",
@@ -2084,8 +2089,11 @@ describe("QT Manager desktop flow", () => {
         .querySelector<HTMLElement>('[data-testid="person-row"]')
         ?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
     });
+    await waitForText('[data-testid="person-detail"]', menuFixture);
+    await clickButtonByText("정보 수정");
     await waitForText("#management-dialog-title", "QT 신청자 정보 수정");
     await clickButtonByText("", "닫기");
+    await clickButtonByText("현장 배부");
     await browser.execute(() => {
       document
         .querySelector<HTMLElement>('[data-testid="person-row"]')
@@ -2585,7 +2593,7 @@ describe("QT Manager desktop flow", () => {
     expect(layout.fontMeta).toBe("13px");
     expect(layout.tableHeadFontSize).toBe("14px");
     expect(layout.summaryLabelFontSize).toBe("14px");
-    expect(layout.summaryCellPadding).toBe("9px 20px 10px");
+    expect(layout.summaryCellPadding).toBe("9px 6px 10px");
     expect(layout.toolbarBorderBottom).toBe("none");
     expect(layout.tableHeadBorderTop).toBe("none");
     expect(layout.tableHeadBorderBottom).toBe("solid");
@@ -3871,6 +3879,168 @@ describe("QT Manager desktop flow", () => {
     ).toContain("현장 배부");
   });
 
+  it("refreshes incomplete on-site intakes immediately and confirms annual and one-issue payments", async () => {
+    await clickButtonByText("신청자 관리");
+    await waitForText('[data-testid="draft-count-filter"]', "0명");
+    await clickButtonByText("현장 배부");
+    const annual = `가상입금연간${Date.now()}`;
+    const monthly = `가상입금한호${Date.now()}`;
+    await clickButtonByText("+ 1년 구독");
+    await setInput("input[name='name']", annual);
+    await clickButtonByText("1년 구독 신청");
+    await waitForText(".toast", "현장 신청자를 추가했습니다");
+    await clickButtonByText("신청자 관리");
+    await waitForText('[data-testid="draft-count-filter"]', "1명");
+    await browser.execute(() =>
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="draft-count-filter"]')
+        ?.click(),
+    );
+    await waitForText('[data-testid="management-person"]', annual);
+    await clickButtonByText("현장 배부");
+    await clickButtonByText("+ 1달 구독");
+    await setInput("input[name='buyerName']", monthly);
+    await waitForText(".purchase-new-person-fields", "구독 없이");
+    await clickButtonByText("구매·전달 기록");
+    await waitForText(".toast", "개별 구매와 전달을 기록했습니다");
+    await clickButtonByText("신청자 관리");
+    await waitForText('[data-testid="draft-count-filter"]', "2명");
+    await waitForText('[data-testid="payment-count-filter"]', "2명");
+    await browser.execute(() =>
+      document
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="payment-count-filter"]',
+        )
+        ?.click(),
+    );
+    await waitForText('[data-testid="payment-queue"]', annual);
+    await waitForText('[data-testid="payment-queue"]', monthly);
+    await browser.setWindowSize(1800, 1280);
+    const paymentControlsFit = await browser.execute(() => {
+      const buttons = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '[data-testid="confirm-payment"]',
+        ),
+      );
+      return buttons.every(
+        (button) =>
+          getComputedStyle(button).whiteSpace === "nowrap" &&
+          button.scrollWidth <= button.clientWidth,
+      );
+    });
+    expect(paymentControlsFit).toBe(true);
+    await browser.saveScreenshot("test-results/payment-queue.png");
+    await browser.setWindowSize(2000, 1440);
+    await browser.execute((name) => {
+      const row = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-testid="payment-row"]'),
+      ).find((row) => row.textContent?.includes(name));
+      row
+        ?.querySelector<HTMLButtonElement>('[data-testid="confirm-payment"]')
+        ?.click();
+    }, annual);
+    await waitForText('[data-testid="payment-count-filter"]', "1명");
+    expect(await textOf('[data-testid="payment-queue"]')).not.toContain(annual);
+    await clickButtonByText("확인한 내역 보기");
+    await waitForText('[data-testid="payment-queue"]', annual);
+    await clickButtonByText("확인 취소");
+    await waitForText('[data-testid="payment-count-filter"]', "2명");
+    await clickButtonByText("확인 대기 보기");
+    await browser.execute(() =>
+      document
+        .querySelector<HTMLInputElement>(
+          '[aria-label="보이는 입금 건 모두 선택"]',
+        )
+        ?.click(),
+    );
+    await clickButtonByText("선택 입금 확인");
+    await waitForText(
+      '[data-testid="payment-queue"]',
+      "입금 확인이 필요한 신청이 없습니다.",
+    );
+    await waitForText('[data-testid="payment-count-filter"]', "0명");
+    const people = await invokeTauri<{
+      people: { id: string; name: string }[];
+    }>("load_people_management_command", {
+      query: monthly,
+      includeArchived: true,
+    });
+    await invokeTauri("set_person_archived_command", {
+      personId: people.people[0].id,
+      archived: true,
+    });
+    await clickButtonByText("현장 배부");
+    await clickButtonByText("신청자 관리");
+    await browser.execute(() =>
+      document
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="archived-count-filter"]',
+        )
+        ?.click(),
+    );
+    await waitForText('[data-testid="management-person"]', monthly);
+    expect(await textOf(".management-person-list")).not.toContain(annual);
+  });
+
+  it("records group quantities, searches memos, and shows the complete statistic at minimum width", async () => {
+    await invokeTauri("seed_e2e_group_command");
+    await refreshApp("군지체 fixture를 표시하지 못했습니다.");
+    await configureOperatorIfNeeded();
+    await waitForText('[data-testid="person-row"]', "군지체");
+    await clickButtonByText("권수 입력");
+    await setInput("input[name='quantity']", "7");
+    await clickButtonByText("배부 기록");
+    await waitForText('[data-testid="person-row"]', "7권 배부");
+    await clickButtonByText("권수 입력");
+    await setInput("input[name='quantity']", "13");
+    await clickButtonByText("배부 기록");
+    await waitForText('[data-testid="person-row"]', "20권 배부");
+    await clickButtonByText("", "마지막 동작 되돌리기");
+    await waitForText('[data-testid="person-row"]', "7권 배부");
+    await clickButtonByText("", "되돌린 동작 다시 실행");
+    await waitForText('[data-testid="person-row"]', "20권 배부");
+    await setInput("#quick-item", "가상 검색 메모 하나");
+    await clickButtonByText("추가");
+    await waitForText(".memo-list", "가상 검색 메모 하나");
+    await setInput("#quick-item", "다른 참고 기록");
+    await clickButtonByText("추가");
+    await waitForText(".memo-list", "다른 참고 기록");
+    await setInput('[data-testid="memo-search"]', "검색메모");
+    await waitForText(".memo-list", "가상 검색 메모 하나");
+    expect(await textOf(".memo-list")).not.toContain("다른 참고 기록");
+    await browser.setWindowSize(1800, 1280);
+    const statistics = await browser.execute(() => {
+      const value = document.querySelector<HTMLElement>(
+        ".summary-grid > div:last-child b",
+      )!;
+      value.textContent = "30/119권";
+      const style = getComputedStyle(value);
+      return {
+        text: value.textContent,
+        fits: value.scrollWidth <= value.clientWidth,
+        ellipsis: style.textOverflow === "ellipsis",
+      };
+    });
+    expect(statistics).toEqual({
+      text: "30/119권",
+      fits: true,
+      ellipsis: false,
+    });
+    const memoSearchFits = await browser.execute(() => {
+      const search = document.querySelector<HTMLElement>(".memo-search")!;
+      const list = document.querySelector<HTMLElement>(".memo-list")!;
+      return (
+        search.clientHeight <= 40 && list.clientHeight > search.clientHeight
+      );
+    });
+    expect(memoSearchFits).toBe(true);
+    await browser.saveScreenshot("test-results/group-minimum.png");
+    await clickButtonByText("신청자 관리");
+    await waitForText('[data-testid="draft-count-filter"]', "0명");
+    await waitForText('[data-testid="payment-count-filter"]', "0명");
+    await browser.setWindowSize(2000, 1440);
+  });
+
   it("filters and names applicants that need profile completion", async () => {
     const draftName = `가상보완대상${Date.now()}`;
     await browser.execute(() => {
@@ -3879,7 +4049,6 @@ describe("QT Manager desktop flow", () => {
         ?.click();
     });
     await setInput("input[name='name']", draftName);
-    await setInput("input[name='cohort']", "00");
     await setInput("input[name='quantity']", "1");
     await browser.execute(() => {
       document
@@ -4006,7 +4175,8 @@ describe("QT Manager desktop flow", () => {
       summaryColumns: 3,
       summaryCardCount: 3,
       descriptionLines: 2,
-      paymentNotice: "입금 여부 열은 확인하지 않고 가져오기에서 제외합니다.",
+      paymentNotice:
+        "마지막 안내 확인 응답은 가져오기에서 제외하며 입금 완료로 해석하지 않습니다.",
       paymentNoticeStyle: {
         marginTop: "8px",
         padding: "8px 10px",
@@ -4139,7 +4309,7 @@ describe("QT Manager desktop flow", () => {
       formatVersion: number;
       counts: { people: number };
     }>("preview_state_import_command", { path: paths.exportPath });
-    expect(preview.formatVersion).toBe(2);
+    expect(preview.formatVersion).toBe(3);
     expect(preview.counts.people).toBe(exported.people);
 
     const unique = `가상인수인계${Date.now()}`;

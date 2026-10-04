@@ -15,6 +15,9 @@ export type IssueView = Issue & {
 };
 
 export type DeskPerson = {
+  isGroup?: boolean;
+  latestGroupDistributionId?: string | null;
+  latestGroupDistributionQuantity?: number;
   personId: string;
   subscriptionId: string | null;
   distributionTargets: {
@@ -341,5 +344,30 @@ export function cancelLatestPurchase(issue: Issue) {
   return invoke<void>("cancel_latest_purchase_command", {
     issueYear: issue.year,
     issueMonth: issue.startMonth,
+  });
+}
+
+export function recordGroupDistribution(
+  issue: Issue,
+  personId: string,
+  quantity: number,
+) {
+  return invoke<string>("record_group_distribution_command", {
+    issueYear: issue.year,
+    issueMonth: issue.startMonth,
+    personId,
+    quantity,
+  });
+}
+export function cancelGroupDistribution(
+  issue: Issue,
+  personId: string,
+  purchaseId: string,
+) {
+  return invoke<void>("cancel_group_distribution_command", {
+    issueYear: issue.year,
+    issueMonth: issue.startMonth,
+    personId,
+    purchaseId,
   });
 }
