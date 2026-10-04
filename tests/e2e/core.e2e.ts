@@ -966,6 +966,50 @@ describe("QT Manager desktop flow", () => {
     await waitForText(".toast", "최근 개별 구매를 취소했습니다");
   });
 
+  it("promotes searched applicants' memos and restores the default order when cleared", async () => {
+    const name = `가상검색메모${Date.now()}`;
+    const personId = await registerE2ePerson(name);
+    const linkedId = await invokeTauri<string>("create_memo_command", {
+      request: { personId, content: "검색 대상의 오래된 연결 메모" },
+    });
+    await setInput("#quick-item", "최근에 추가한 미연결 메모");
+    await browser.execute(() => {
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="add-memo"]')
+        ?.click();
+    });
+    await waitForText(".memo-list", "최근에 추가한 미연결 메모");
+    const memoIds = () =>
+      browser.execute(() =>
+        Array.from(
+          document.querySelectorAll<HTMLElement>(".memo-list .memo-card"),
+          (card) => card.dataset.memoId,
+        ),
+      );
+    const originalOrder = await memoIds();
+    expect(originalOrder).toHaveLength(2);
+    expect(originalOrder[1]).toBe(linkedId);
+
+    await setInput('[data-testid="people-search"]', `00 ${name}`);
+    await browser.waitUntil(async () => (await memoIds())[0] === linkedId, {
+      timeoutMsg: "검색한 신청자의 메모가 상단으로 이동하지 않았습니다.",
+    });
+    expect(await memoIds()).toEqual([linkedId, originalOrder[0]]);
+
+    await setInput('[data-testid="people-search"]', "일치하지않는이름");
+    await browser.waitUntil(
+      async () => (await memoIds())[0] === originalOrder[0],
+    );
+    expect(await memoIds()).toEqual(originalOrder);
+    await setInput('[data-testid="people-search"]', name);
+    await browser.waitUntil(async () => (await memoIds())[0] === linkedId);
+    await setInput('[data-testid="people-search"]', "");
+    await browser.waitUntil(
+      async () => (await memoIds())[0] === originalOrder[0],
+    );
+    expect(await memoIds()).toEqual(originalOrder);
+  });
+
   it("creates, edits, archives, restores and removes both linked and unlinked memos", async () => {
     const person = `가상메모${Date.now()}`;
     await registerE2ePerson(person);

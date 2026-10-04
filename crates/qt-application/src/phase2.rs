@@ -384,12 +384,16 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
             }
         }
     }
+    let mut matching_person_ids = std::collections::HashSet::new();
     let mut people = if query.trim().is_empty() {
         eligible_people
     } else {
         repository
             .list_desk_records(query, selected_issue)?
             .into_iter()
+            .inspect(|record| {
+                matching_person_ids.insert(record.person.id.clone());
+            })
             .map(|record| desk_person(record, selected_issue))
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
@@ -462,11 +466,18 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
         }
         .into(),
     };
-    let memos = repository
+    let mut memos = repository
         .list_memos()?
         .into_iter()
         .map(&to_memo_view)
-        .collect();
+        .collect::<Vec<_>>();
+    // Stable sorting preserves the repository's newest-first order in each group.
+    memos.sort_by_key(|memo| {
+        !memo
+            .person_id
+            .as_ref()
+            .is_some_and(|id| matching_person_ids.contains(id))
+    });
     let archived_memos = repository
         .list_archived_memos()?
         .into_iter()

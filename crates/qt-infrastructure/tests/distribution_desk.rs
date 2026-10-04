@@ -1,12 +1,12 @@
 use std::cell::Cell;
 
 use qt_application::{
-    Clock, CreateCheckItemRequest, CreateDraftRequest, CreatePinnedNoteRequest,
-    DistributionDeskRepository, IdGenerator, RecordDistributionRequest, RecordPurchaseRequest,
-    RuntimeServices, UndoDistributionRequest, UpdateCheckItemStatusRequest, create_check_item,
-    create_draft, create_pinned_note, delete_check_item, delete_pinned_note,
-    load_distribution_desk, record_distribution, record_purchase, save_operator,
-    undo_last_distribution, update_check_item_status,
+    Clock, CoreRepository, CreateCheckItemRequest, CreateDraftRequest, CreateMemoRequest,
+    CreatePinnedNoteRequest, DistributionDeskRepository, IdGenerator, RecordDistributionRequest,
+    RecordPurchaseRequest, RuntimeServices, UndoDistributionRequest, UpdateCheckItemStatusRequest,
+    create_check_item, create_draft, create_memo, create_pinned_note, delete_check_item,
+    delete_pinned_note, load_distribution_desk, record_distribution, record_purchase,
+    save_operator, undo_last_distribution, update_check_item_status,
 };
 use qt_domain::{CheckItemStatus, Issue};
 use qt_infrastructure::SqliteCoreRepository;
@@ -22,6 +22,113 @@ impl Clock for FixedClock {
     fn today(&self) -> String {
         "2026-07-24".into()
     }
+}
+
+#[test]
+fn search_prioritizes_linked_memos_without_hiding_or_modifying_other_memos() {
+    struct AdvancingClock(Cell<u32>);
+    impl Clock for AdvancingClock {
+        fn now(&self) -> String {
+            let second = self.0.get() + 1;
+            self.0.set(second);
+            format!("2026-07-24T10:00:{second:02}+09:00")
+        }
+        fn today(&self) -> String {
+            "2026-07-24".into()
+        }
+    }
+
+    let directory = tempdir().unwrap();
+    let mut repository =
+        SqliteCoreRepository::open(&directory.path().join("memos.sqlite")).unwrap();
+    repository.migrate().unwrap();
+    save_operator(&mut repository, &FixedClock, "가상담당자").unwrap();
+    let clock = AdvancingClock(Cell::new(0));
+    let ids = SequenceIds(Cell::new(0));
+    let services = RuntimeServices {
+        clock: &clock,
+        ids: &ids,
+    };
+    let issue = Issue::new(2026, 7).unwrap();
+    let mut person_ids = Vec::new();
+    for (name, cohort) in [("가상하나", "94"), ("가상하나", "95"), ("가상둘", "94")] {
+        create_draft(
+            &mut repository,
+            &services,
+            CreateDraftRequest {
+                name: name.into(),
+                cohort: Some(cohort.into()),
+                phone: None,
+                issue_year: 2026,
+                issue_month: 7,
+                quantity: 1,
+            },
+        )
+        .unwrap();
+        let found = load_distribution_desk(
+            &mut repository,
+            &clock,
+            issue,
+            &format!("{cohort}{name}"),
+            true,
+        )
+        .unwrap();
+        person_ids.push(found.people[0].person_id.clone());
+    }
+    let mut memo_ids = Vec::new();
+    for person_id in [
+        Some(&person_ids[0]),
+        Some(&person_ids[1]),
+        Some(&person_ids[0]),
+        Some(&person_ids[2]),
+        None,
+    ] {
+        memo_ids.push(
+            create_memo(
+                &mut repository,
+                &services,
+                CreateMemoRequest {
+                    person_id: person_id.cloned(),
+                    content: "가상하나가 본문에 있어도 연결 ID로 구분".into(),
+                },
+            )
+            .unwrap(),
+        );
+    }
+    let original = repository.list_memos().unwrap();
+    let original_changes = repository.list_changes().unwrap();
+    for (query, order) in [
+        ("94 가상 하나", vec![2, 0, 4, 3, 1]),
+        ("하나", vec![2, 1, 0, 4, 3]),
+        ("95", vec![1, 4, 3, 2, 0]),
+        ("없는이름", vec![4, 3, 2, 1, 0]),
+        ("", vec![4, 3, 2, 1, 0]),
+        ("   ", vec![4, 3, 2, 1, 0]),
+    ] {
+        let desk = load_distribution_desk(&mut repository, &clock, issue, query, true).unwrap();
+        assert_eq!(
+            desk.memos.iter().map(|memo| &memo.id).collect::<Vec<_>>(),
+            order
+                .iter()
+                .map(|index| &memo_ids[*index])
+                .collect::<Vec<_>>(),
+            "query: {query}"
+        );
+    }
+    assert_eq!(repository.list_memos().unwrap(), original);
+    assert_eq!(repository.list_changes().unwrap(), original_changes);
+
+    // A different issue can hide a person from distribution without hiding their memos.
+    let desk = load_distribution_desk(
+        &mut repository,
+        &clock,
+        Issue::new(2026, 5).unwrap(),
+        "95가상하나",
+        true,
+    )
+    .unwrap();
+    assert!(desk.people.is_empty());
+    assert_eq!(desk.memos[0].id, memo_ids[1]);
 }
 
 struct SequenceIds(Cell<u32>);
