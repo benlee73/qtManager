@@ -18,6 +18,7 @@ import { persistTheme, readStoredTheme, type Theme } from "./appearance";
 import { syncNativeTheme } from "./nativeTheme";
 import {
   DEFAULT_PERSON_FILTERS,
+  activeDistributionMemos,
   distributionAllocations,
   filterLabel,
   filterPeople,
@@ -311,7 +312,13 @@ export default function App() {
 
   const defaultDistribution = useCallback(
     async (person: DeskPerson) => {
-      if (!person.canDistribute) return;
+      if (busy || !person.canDistribute) return;
+      if (
+        activeDistributionMemos(desk?.memos ?? [], person.personId).length > 0
+      ) {
+        setDialog({ type: "confirm-distribution", person });
+        return;
+      }
       const allocations = distributionAllocations(person);
       const saved = await mutate(
         () => distributeAllocations(issue, allocations),
@@ -325,7 +332,7 @@ export default function App() {
         });
       }
     },
-    [issue, mutate, recordAction],
+    [busy, desk?.memos, issue, mutate, recordAction],
   );
 
   useEffect(() => {
@@ -358,6 +365,15 @@ export default function App() {
         !textEntry &&
         !event.isComposing
       ) {
+        if (event.repeat) {
+          event.preventDefault();
+          return;
+        }
+        if (
+          event.target instanceof HTMLElement &&
+          event.target.closest<HTMLButtonElement>("button")?.type === "button"
+        )
+          return;
         event.preventDefault();
         document
           .querySelector<HTMLFormElement>(
@@ -693,7 +709,15 @@ export default function App() {
                 type="button"
                 onClick={() => setDialog({ type: "draft" })}
               >
-                + 현장 간이 등록
+                + 1년 구독
+              </button>
+              <button
+                className="secondary-button draft-action-button"
+                data-testid="open-purchase"
+                type="button"
+                onClick={() => setDialog({ type: "purchase" })}
+              >
+                + 1달 구독
               </button>
               <ActionMenu
                 id="desk-more"
@@ -701,12 +725,6 @@ export default function App() {
                 openMenu={openMenu}
                 onOpenMenu={setOpenMenu}
               >
-                <button
-                  type="button"
-                  onClick={() => setDialog({ type: "purchase" })}
-                >
-                  현장 개별 구매
-                </button>
                 {(desk?.purchaseCount ?? 0) > 0 && (
                   <button
                     type="button"
@@ -827,7 +845,7 @@ export default function App() {
                   </strong>
                   <span>
                     {query
-                      ? "검색어를 확인하거나 현장 간이 등록을 이용하세요."
+                      ? "검색어를 확인하거나 1년 구독을 이용하세요."
                       : "검색하면 완료자와 만료자도 확인할 수 있습니다."}
                   </span>
                 </div>
@@ -981,6 +999,7 @@ export default function App() {
       )}
       {dialog && (
         <Phase2DialogContent
+          memos={desk?.memos ?? []}
           key={dialog.type}
           dialog={dialog}
           issue={issue}

@@ -927,7 +927,9 @@ kbd {
 }
 
 .draft-action-button {
-  min-width: 138px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  min-width: 90px;
   padding-inline: 14px;
   font-size: var(--font-meta);
   font-weight: 650;
@@ -1404,6 +1406,28 @@ kbd {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 18px;
+}
+
+.distribution-memos {
+  margin: 16px 0;
+}
+
+.distribution-memo-list {
+  display: grid;
+  gap: 8px;
+  max-height: 35vh;
+  overflow-y: auto;
+}
+
+.distribution-memo-list p {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--note);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
 }
 
 .danger-button {

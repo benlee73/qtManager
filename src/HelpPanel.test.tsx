@@ -34,9 +34,7 @@ describe("HelpPanel", () => {
     expect(markup).toContain('data-testid="help-notes"');
     expect(markup).toContain("현장 배부 오른쪽 입력란");
     expect(markup).toContain("신청자 행의 점 세 개 또는 우클릭");
-    expect(markup).toContain(
-      "현장 배부 상단 검색창 오른쪽의 점 세 개(기타 기능)",
-    );
+    expect(markup).toContain("현장 배부 검색창 옆의 ‘1달 구독’ 버튼");
     expect(markup).toContain(
       "구매자 이름이나 또래를 입력해 기존 신청자를 검색",
     );

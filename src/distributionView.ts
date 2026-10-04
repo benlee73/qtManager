@@ -1,4 +1,15 @@
-import type { DeskPerson, DistributionAllocation, Issue } from "./phase2";
+import type {
+  DeskPerson,
+  DistributionAllocation,
+  Issue,
+  MemoView,
+} from "./phase2";
+
+export function activeDistributionMemos(memos: MemoView[], personId: string) {
+  return memos.filter(
+    (memo) => memo.personId === personId && memo.status === "활성",
+  );
+}
 
 export const PERSON_FILTERS = [
   "undistributed",

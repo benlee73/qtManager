@@ -178,8 +178,7 @@ describe("QT Manager desktop flow", () => {
     const existing = `가상구매연결${Date.now()}`;
     await registerE2ePerson(existing);
 
-    await clickButtonByText("", "기타 기능");
-    await clickButtonByText("현장 개별 구매");
+    await clickButtonByText("+ 1달 구독");
     await setInput("input[name='buyerName']", existing);
     await waitForText('[data-testid="purchase-person-result"]', existing);
     await browser.execute(() => {
@@ -210,8 +209,7 @@ describe("QT Manager desktop flow", () => {
 
     const newPerson = `가상구매신규${Date.now()}`;
     await clickButtonByText("현장 배부");
-    await clickButtonByText("", "기타 기능");
-    await clickButtonByText("현장 개별 구매");
+    await clickButtonByText("+ 1달 구독");
     await setInput("input[name='buyerName']", newPerson);
     await waitForText(
       '[data-testid="purchase-new-person-toggle"]',
@@ -223,9 +221,9 @@ describe("QT Manager desktop flow", () => {
     await clickButtonByText("구매·전달 기록");
     await waitForText(".toast", "개별 구매와 전달을 기록했습니다");
     await clickButtonByText("", "마지막 동작 되돌리기");
-    await waitForText(".toast", "현장 개별 구매: 되돌렸습니다.");
+    await waitForText(".toast", "1달 구독: 되돌렸습니다.");
     await clickButtonByText("", "되돌린 동작 다시 실행");
-    await waitForText(".toast", "현장 개별 구매: 다시 실행했습니다.");
+    await waitForText(".toast", "1달 구독: 다시 실행했습니다.");
 
     await clickButtonByText("신청자 관리");
     await browser.waitUntil(
@@ -955,8 +953,7 @@ describe("QT Manager desktop flow", () => {
       { timeoutMsg: "고정 메모 삭제가 반영되지 않았습니다." },
     );
 
-    await clickButtonByText("", "기타 기능");
-    await clickButtonByText("현장 개별 구매");
+    await clickButtonByText("+ 1달 구독");
     await setInput("input[name='buyerName']", "가상 구매자");
     await setInput("input[name='quantity']", "1");
     await clickButtonByText("구매·전달 기록");
@@ -964,6 +961,172 @@ describe("QT Manager desktop flow", () => {
     await clickButtonByText("", "기타 기능");
     await clickButtonByText("최근 구매 취소");
     await waitForText(".toast", "최근 개별 구매를 취소했습니다");
+  });
+
+  it("requires active linked memo confirmation before distribution and cancels without recording", async () => {
+    const name = `가상배부확인${Date.now()}`;
+    const personId = await registerE2ePerson(name);
+    const contents = ["먼저 안내할 사항\n둘째 줄도 확인", "추가로 전달할 안내"];
+    for (const content of contents) {
+      await invokeTauri("create_memo_command", {
+        request: { personId, content },
+      });
+    }
+    const archived = await invokeTauri<string>("create_memo_command", {
+      request: { personId, content: "보관한 메모는 확인에서 제외" },
+    });
+    await invokeTauri("update_memo_status_command", {
+      request: { id: archived, archived: true },
+    });
+    await invokeTauri("create_memo_command", {
+      request: { personId: null, content: "미연결 메모도 확인에서 제외" },
+    });
+    await setPersonFilterPreset("전체");
+    await setInput('[data-testid="people-search"]', name);
+    await waitForText(".memo-list", contents[0]);
+    const distributionCount = async () =>
+      (
+        await invokeTauri<{ distributions: unknown[] }>(
+          "load_person_detail_command",
+          { personId },
+        )
+      ).distributions.length;
+    const openConfirmation = async () => {
+      await browser.execute(() =>
+        document
+          .querySelector<HTMLButtonElement>('[data-testid="distribute"]')
+          ?.click(),
+      );
+      await waitForText("#dialog-title", "배부 전 메모 확인");
+    };
+
+    await openConfirmation();
+    for (const content of contents)
+      expect(await textOf('[data-testid="distribution-memos"]')).toContain(
+        content,
+      );
+    expect(await textOf('[data-testid="distribution-memos"]')).not.toContain(
+      "보관한 메모",
+    );
+    expect(await textOf('[data-testid="distribution-memos"]')).not.toContain(
+      "미연결 메모",
+    );
+    expect(await distributionCount()).toBe(0);
+    await browser.saveScreenshot(
+      "test-results/distribution-memo-confirmation.png",
+    );
+    await clickButtonByText("취소");
+    expect(await distributionCount()).toBe(0);
+    await openConfirmation();
+    await browser.keys("Escape");
+    expect(await distributionCount()).toBe(0);
+
+    await browser.execute(() => {
+      const row = document.querySelector<HTMLElement>(
+        '[data-testid="person-row"]',
+      );
+      row?.focus();
+      row?.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          ctrlKey: true,
+          bubbles: true,
+        }),
+      );
+    });
+    await waitForText("#dialog-title", "배부 전 메모 확인");
+    await browser.execute(() =>
+      document
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="confirm-distribution-form"] button[type="submit"]',
+        )
+        ?.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "Enter",
+            repeat: true,
+            bubbles: true,
+          }),
+        ),
+    );
+    expect(await distributionCount()).toBe(0);
+    await browser.execute(() => {
+      const button = document.querySelector<HTMLButtonElement>(
+        '[data-testid="confirm-distribution-form"] button[type="submit"]',
+      );
+      button?.click();
+      button?.click();
+    });
+    await waitForText('[data-testid="person-row"]', "배부 완료");
+    expect(await distributionCount()).toBe(1);
+
+    const noMemoName = `가상메모없음${Date.now()}`;
+    const noMemoPersonId = await registerE2ePerson(noMemoName);
+    const onlyArchived = await invokeTauri<string>("create_memo_command", {
+      request: { personId: noMemoPersonId, content: "보관만 있는 사람" },
+    });
+    await invokeTauri("update_memo_status_command", {
+      request: { id: onlyArchived, archived: true },
+    });
+    await setInput('[data-testid="people-search"]', noMemoName);
+    await waitForText('[data-testid="person-row"]', noMemoName);
+    await browser.execute(() =>
+      document
+        .querySelector<HTMLButtonElement>('[data-testid="distribute"]')
+        ?.click(),
+    );
+    await waitForText('[data-testid="person-row"]', "배부 완료");
+    expect(
+      await browser.execute(
+        () =>
+          document.querySelector(
+            '[data-testid="confirm-distribution-form"]',
+          ) === null,
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps subscription shortcuts beside search and opens each form directly", async () => {
+    await browser.setWindowSize(1800, 1280);
+    const toolbar = await browser.execute(() => {
+      const search = document
+        .querySelector<HTMLElement>('[data-testid="people-search"]')!
+        .getBoundingClientRect();
+      const annual = document.querySelector<HTMLElement>(
+        '[data-testid="open-draft"]',
+      )!;
+      const monthly = document.querySelector<HTMLElement>(
+        '[data-testid="open-purchase"]',
+      )!;
+      const annualRect = annual.getBoundingClientRect();
+      const monthlyRect = monthly.getBoundingClientRect();
+      const panel = document.querySelector<HTMLElement>(".table-toolbar")!;
+      return {
+        annual: annual.textContent,
+        monthly: monthly.textContent,
+        sameRow: Math.abs(annualRect.top - monthlyRect.top) < 1,
+        afterSearch: annualRect.left >= search.right,
+        fits: monthlyRect.right <= panel.getBoundingClientRect().right,
+        searchWidth: search.width,
+        overflow: document.documentElement.scrollWidth > window.innerWidth,
+      };
+    });
+    expect(toolbar.annual).toContain("1년 구독");
+    expect(toolbar.monthly).toContain("1달 구독");
+    expect(toolbar.sameRow && toolbar.afterSearch && toolbar.fits).toBe(true);
+    expect(toolbar.searchWidth).toBeGreaterThan(80);
+    expect(toolbar.overflow).toBe(false);
+    await browser.saveScreenshot("test-results/subscription-shortcuts.png");
+    await clickButtonByText("+ 1년 구독");
+    await waitForText("#dialog-title", "1년 구독");
+    await browser.keys("Escape");
+    await clickButtonByText("+ 1달 구독");
+    await waitForText("#dialog-title", "1달 구독");
+    const issue = await selectedIssue();
+    await waitForText(
+      ".purchase-dialog",
+      `${issue.year}년 ${issue.startMonth}~${issue.startMonth + 1}월호`,
+    );
+    await browser.keys("Escape");
   });
 
   it("promotes searched applicants' memos and restores the default order when cleared", async () => {
@@ -1240,7 +1403,7 @@ describe("QT Manager desktop flow", () => {
       (document.activeElement as HTMLElement | null)?.blur();
     });
     await dispatchShortcut("n");
-    await waitForText("#dialog-title", "현장 간이 등록");
+    await waitForText("#dialog-title", "1년 구독");
     await clickButtonByText("", "닫기");
 
     await dispatchShortcut("m", true);

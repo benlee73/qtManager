@@ -1,14 +1,19 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { ReversibleAction } from "./actionHistory";
 import { validateDraftInput } from "./draftValidation";
 import { handlePhoneInput } from "./phone";
 import { filterPurchasePeople, purchasePersonLabel } from "./purchasePeople";
-import { distributionAllocations } from "./distributionView";
+import {
+  activeDistributionMemos,
+  distributionAllocations,
+} from "./distributionView";
+import { DistributionMemoNotice } from "./DistributionMemoNotice";
 import {
   type DeskPerson,
   type DistributionAllocation,
   type Issue,
+  type MemoView,
   cancelLatestPurchase,
   cancelPersonDistribution,
   createMemo,
@@ -39,6 +44,7 @@ export function Phase2DialogContent({
   onClose,
   mutate,
   recordAction,
+  memos = [],
 }: {
   dialog: Exclude<Phase2Dialog, null>;
   issue: Issue;
@@ -50,7 +56,13 @@ export function Phase2DialogContent({
     options?: { preserveHistory?: boolean },
   ) => Promise<boolean>;
   recordAction: (action: ReversibleAction) => void;
+  memos?: MemoView[];
 }) {
+  const distributionSubmitting = useRef(false);
+  const distributionMemos =
+    dialog.type === "confirm-distribution" || dialog.type === "partial"
+      ? activeDistributionMemos(memos, dialog.person.personId)
+      : [];
   const [draftError, setDraftError] = useState<string | null>(null);
   const [purchasePeople, setPurchasePeople] = useState<PersonSummary[]>([]);
   const [purchasePeopleLoading, setPurchasePeopleLoading] = useState(true);
@@ -110,7 +122,7 @@ export function Phase2DialogContent({
   }
   if (dialog.type === "draft") {
     return (
-      <FormDialog title="현장 간이 등록" onClose={onClose}>
+      <FormDialog title="1년 구독" onClose={onClose}>
         <form
           data-testid="draft-form"
           noValidate
@@ -202,7 +214,7 @@ export function Phase2DialogContent({
               {draftError}
             </p>
           )}
-          <SubmitButton busy={busy}>간이 등록</SubmitButton>
+          <SubmitButton busy={busy}>1년 구독 신청</SubmitButton>
         </form>
       </FormDialog>
     );
@@ -246,7 +258,7 @@ export function Phase2DialogContent({
     const purchaseMatches = filterPurchasePeople(purchasePeople, purchaseQuery);
     return (
       <FormDialog
-        title="현장 개별 구매"
+        title="1달 구독"
         className="purchase-dialog"
         onClose={onClose}
       >
@@ -293,7 +305,7 @@ export function Phase2DialogContent({
               (saved) => {
                 if (saved) {
                   recordAction({
-                    description: "현장 개별 구매",
+                    description: "1달 구독",
                     undo: () => cancelLatestPurchase(issue),
                     redo: work,
                   });
@@ -303,8 +315,9 @@ export function Phase2DialogContent({
           }}
         >
           <p className="dialog-description">
-            이번 호만 구매해 바로 전달합니다. 기존 신청자를 선택하면 구매 이력이
-            연결되고, 찾지 못한 경우에만 새 인원을 추가합니다.
+            {issue.year}년 {issue.startMonth}~{issue.startMonth + 1}월호만
+            구매해 바로 전달합니다. 기존 신청자를 선택하면 구매 이력이 연결되고,
+            찾지 못한 경우에만 새 인원을 추가합니다.
           </p>
           <div className="purchase-person-picker">
             <Field label="구매자 이름 또는 또래">
@@ -485,37 +498,49 @@ export function Phase2DialogContent({
   }
   if (dialog.type === "confirm-distribution") {
     return (
-      <FormDialog title="배부하시겠습니까?" onClose={onClose}>
+      <FormDialog
+        title={
+          distributionMemos.length ? "배부 전 메모 확인" : "배부하시겠습니까?"
+        }
+        onClose={onClose}
+      >
         <form
           data-testid="confirm-distribution-form"
           onSubmit={(event) => {
             event.preventDefault();
+            if (busy || distributionSubmitting.current) return;
+            distributionSubmitting.current = true;
             const allocations = distributionAllocations(dialog.person);
             void mutate(
               () => distributeAllocations(issue, allocations),
               `${dialog.person.name} · ${dialog.person.remainingQuantity}권 배부했습니다.`,
-            ).then((saved) => {
-              if (saved) {
-                recordAction({
-                  description: `${dialog.person.name} 배부`,
-                  undo: () => undoDistributionAllocations(issue, allocations),
-                  redo: () => distributeAllocations(issue, allocations),
-                });
-              }
-            });
+            )
+              .then((saved) => {
+                if (saved) {
+                  recordAction({
+                    description: `${dialog.person.name} 배부`,
+                    undo: () => undoDistributionAllocations(issue, allocations),
+                    redo: () => distributeAllocations(issue, allocations),
+                  });
+                }
+              })
+              .finally(() => {
+                distributionSubmitting.current = false;
+              });
           }}
         >
           <p className="dialog-description">
             {dialog.person.name}님에게 이번 호 {dialog.person.remainingQuantity}
             권을 배부합니다.
           </p>
+          <DistributionMemoNotice memos={distributionMemos} />
           <div className="confirm-actions">
             <button
               className="secondary-button"
               type="button"
               onClick={onClose}
             >
-              돌아가기
+              {distributionMemos.length ? "취소" : "돌아가기"}
             </button>
             <button
               className="primary-button"
@@ -523,7 +548,11 @@ export function Phase2DialogContent({
               autoFocus
               disabled={busy}
             >
-              {busy ? "배부 중…" : "배부하기"}
+              {busy
+                ? "배부 중…"
+                : distributionMemos.length
+                  ? `확인 후 ${dialog.person.remainingQuantity}권 배부`
+                  : "배부하기"}
             </button>
           </div>
         </form>
@@ -539,27 +568,34 @@ export function Phase2DialogContent({
       <form
         onSubmit={(event) => {
           event.preventDefault();
+          if (busy || distributionSubmitting.current) return;
+          distributionSubmitting.current = true;
           const data = new FormData(event.currentTarget);
           const quantity = Number(data.get("quantity"));
           const allocations = distributionAllocations(dialog.person, quantity);
           void mutate(
             () => distributeAllocations(issue, allocations),
             `${dialog.person.name} · 일부 배부를 기록했습니다.`,
-          ).then((saved) => {
-            if (saved) {
-              recordAction({
-                description: `${dialog.person.name} 일부 배부`,
-                undo: () => undoDistributionAllocations(issue, allocations),
-                redo: () => distributeAllocations(issue, allocations),
-              });
-            }
-          });
+          )
+            .then((saved) => {
+              if (saved) {
+                recordAction({
+                  description: `${dialog.person.name} 일부 배부`,
+                  undo: () => undoDistributionAllocations(issue, allocations),
+                  redo: () => distributeAllocations(issue, allocations),
+                });
+              }
+            })
+            .finally(() => {
+              distributionSubmitting.current = false;
+            });
         }}
       >
         <p className="dialog-description">
           {dialog.person.name}님에게 남은 {dialog.person.remainingQuantity}권 중
           실제 전달한 수량을 선택하세요.
         </p>
+        <DistributionMemoNotice memos={distributionMemos} />
         <Field label="이번에 배부한 수량">
           <input
             name="quantity"
@@ -571,7 +607,9 @@ export function Phase2DialogContent({
             autoFocus
           />
         </Field>
-        <SubmitButton busy={busy}>일부 배부 기록</SubmitButton>
+        <SubmitButton busy={busy}>
+          {distributionMemos.length ? "확인 후 일부 배부" : "일부 배부 기록"}
+        </SubmitButton>
       </form>
     </FormDialog>
   );

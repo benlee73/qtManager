@@ -28,7 +28,7 @@ const topics: { id: HelpTopic; label: string }[] = [
   { id: "distribution", label: "검색과 배부" },
   { id: "notes", label: "메모" },
   { id: "people", label: "신규 신청과 갱신" },
-  { id: "purchase", label: "개별 구매" },
+  { id: "purchase", label: "1달 구독" },
   { id: "handover", label: "데이터 백업·복원" },
   { id: "shortcuts", label: "단축키" },
   { id: "install", label: "설치 문제" },
@@ -309,11 +309,14 @@ export function HelpPanel({
                 <HelpCard title="배부">
                   <HelpList>
                     <li>
-                      2권 신청자는 기본 버튼 한 번으로 남은 2권을 처리합니다.
+                      ‘N권 배부’는 남은 수량을 처리합니다. 활성 연결 메모가
+                      있으면 메모를 읽고 ‘확인 후 N권 배부’를 눌러야 완료됩니다.
+                      취소하거나 Escape로 닫으면 배부하지 않습니다.
                     </li>
                     <li>
                       1권만 전달했다면 점 세 개를 누르거나 행을 마우스 오른쪽
-                      버튼으로 눌러 ‘일부만 배부’를 선택합니다.
+                      버튼으로 눌러 ‘일부만 배부’를 선택합니다. 연결 메모가
+                      있으면 수량 선택창에서 함께 확인합니다.
                     </li>
                     <li>만료·대상 아님 신청자는 일반 배부가 막힙니다.</li>
                   </HelpList>
@@ -409,7 +412,8 @@ export function HelpPanel({
                       정리되며, 010이 아닌 번호는 저장할 수 없습니다.
                     </li>
                     <li>
-                      현장 간이 등록자는 나중에 ‘정보 수정’으로 보완합니다.
+                      ‘1년 구독’으로 현장 신청한 사람은 나중에 ‘정보 수정’으로
+                      보완합니다.
                     </li>
                     <li>
                       갱신은 과거 구독을 수정하지 않고 새 6개 호를 추가합니다.
@@ -477,7 +481,7 @@ export function HelpPanel({
 
             <HelpSection
               id="purchase"
-              title="현장 개별 구매"
+              title="1달 구독"
               hidden={Boolean(
                 helpQuery.trim() && !matchingTopics?.has("purchase"),
               )}
@@ -486,8 +490,8 @@ export function HelpPanel({
               <HelpCard title="한 호만 구매한 경우">
                 <HelpList>
                   <li>
-                    현장 배부 상단 검색창 오른쪽의 점 세 개(기타 기능) 메뉴에서
-                    ‘현장 개별 구매’를 선택합니다.
+                    현장 배부 검색창 옆의 ‘1달 구독’ 버튼을 누릅니다. 선택한 한
+                    호만 구매하는 기능이며, 각 호는 2개월분입니다.
                   </li>
                   <li>
                     구매자 이름이나 또래를 입력해 기존 신청자를 검색한 뒤,
@@ -571,7 +575,7 @@ export function HelpPanel({
                     </div>
                     <div>
                       <dt>⌘/Ctrl + N</dt>
-                      <dd>현장 간이 등록</dd>
+                      <dd>1년 구독</dd>
                     </div>
                     <div>
                       <dt>⌘/Ctrl + Shift + M</dt>

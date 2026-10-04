@@ -125,3 +125,26 @@ describe("배부 확인", () => {
     expect(markup).toContain('class="dialog partial-distribution-dialog"');
   });
 });
+
+describe("현장 구독 메뉴 이름", () => {
+  it.each([
+    ["draft", "1년 구독"],
+    ["purchase", "1달 구독"],
+  ] as const)(
+    "identifies the %s form using its toolbar label",
+    (type, label) => {
+      const markup = renderToStaticMarkup(
+        <Phase2DialogContent
+          dialog={{ type }}
+          issue={{ year: 2026, startMonth: 9 }}
+          busy={false}
+          onClose={vi.fn()}
+          mutate={vi.fn().mockResolvedValue(true)}
+          recordAction={vi.fn()}
+        />,
+      );
+      expect(markup).toContain(`<h2 id="dialog-title">${label}</h2>`);
+      if (type === "purchase") expect(markup).toContain("2026년 9~10월호");
+    },
+  );
+});
