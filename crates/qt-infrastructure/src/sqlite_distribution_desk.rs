@@ -49,7 +49,7 @@ impl DistributionDeskRepository for SqliteCoreRepository {
             .prepare(&format!(
                 "
                 SELECT id, name, cohort, phone, normalized_phone, status, person_note,
-                       created_at, updated_at
+                       created_at, updated_at, is_group
                 FROM people p
                 WHERE p.status != 'archived' AND ({})
                 ORDER BY p.name, p.id
@@ -67,6 +67,13 @@ impl DistributionDeskRepository for SqliteCoreRepository {
         let mut subscriptions = subscriptions_by_person(&self.connection, query)?;
         let mut distributions = distributions_by_subscription(&self.connection, query, issue)?;
         let item_people = active_memo_people(&self.connection)?;
+        let mut statement = self.connection.prepare("SELECT id, person_id, buyer_name, issue_year, issue_month, quantity, purchased_at, note, reversal_of, created_at, updated_at, payment_status, is_group_distribution FROM one_time_purchases WHERE is_group_distribution = 1 AND issue_year = ?1 AND issue_month = ?2").map_err(port_error)?;
+        let group_purchases = statement
+            .query_map(params![issue.year, issue.start_month], purchase_from_row)
+            .map_err(port_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(port_error)?;
+
         Ok(people
             .into_iter()
             .map(|person| {
@@ -79,6 +86,11 @@ impl DistributionDeskRepository for SqliteCoreRepository {
                     .collect();
                 let has_memo = item_people.contains_key(&person.id);
                 DeskRecord {
+                    group_purchases: group_purchases
+                        .iter()
+                        .filter(|purchase| purchase.person_id.as_deref() == Some(&person.id))
+                        .cloned()
+                        .collect(),
                     person,
                     subscriptions: person_subscriptions,
                     distributions: person_distributions,
@@ -472,9 +484,10 @@ impl DistributionDeskRepository for SqliteCoreRepository {
             .query_row(
                 "
                 SELECT p.id, p.person_id, p.buyer_name, p.issue_year, p.issue_month, p.quantity,
-                       p.purchased_at, p.note, p.reversal_of, p.created_at, p.updated_at
+                       p.purchased_at, p.note, p.reversal_of, p.created_at, p.updated_at, p.payment_status, p.is_group_distribution
                 FROM one_time_purchases p
                 WHERE p.issue_year = ?1 AND p.issue_month = ?2
+                  AND p.is_group_distribution = 0
                   AND p.reversal_of IS NULL
                   AND NOT EXISTS (
                       SELECT 1 FROM one_time_purchases reversal WHERE reversal.reversal_of = p.id
@@ -496,6 +509,7 @@ impl DistributionDeskRepository for SqliteCoreRepository {
                 SELECT COUNT(*), COALESCE(SUM(p.quantity), 0)
                 FROM one_time_purchases p
                 WHERE p.issue_year = ?1 AND p.issue_month = ?2
+                  AND p.is_group_distribution = 0
                   AND p.reversal_of IS NULL
                   AND NOT EXISTS (
                       SELECT 1 FROM one_time_purchases reversal WHERE reversal.reversal_of = p.id
@@ -518,7 +532,7 @@ fn subscriptions_by_person(
             "
             SELECT s.id, s.person_id, s.start_issue_year, s.start_issue_month, s.issue_count,
                    s.quantity, s.applied_at, s.source, s.source_reference, s.memo,
-                   s.created_at, s.updated_at, s.archived_at
+                   s.created_at, s.updated_at, s.archived_at, s.payment_status
             FROM subscriptions s
             JOIN people p ON p.id = s.person_id
             WHERE p.status != 'archived' AND s.archived_at IS NULL AND ({})
@@ -671,6 +685,8 @@ pub(crate) fn purchase_from_row(row: &Row<'_>) -> rusqlite::Result<OneTimePurcha
     let year = row.get(3)?;
     let month = row.get(4)?;
     Ok(OneTimePurchase {
+        payment_status: crate::sqlite_core_repository::payment_from_row(row, 11)?,
+        is_group_distribution: row.get(12)?,
         id: row.get(0)?,
         person_id: row.get(1)?,
         buyer_name: row.get(2)?,
@@ -690,7 +706,7 @@ pub(crate) fn purchase_from_row(row: &Row<'_>) -> rusqlite::Result<OneTimePurcha
     })
 }
 
-fn upsert_purchase(
+pub(crate) fn upsert_purchase(
     transaction: &Transaction<'_>,
     purchase: &OneTimePurchase,
 ) -> Result<(), PortError> {
@@ -699,8 +715,8 @@ fn upsert_purchase(
             "
             INSERT INTO one_time_purchases(
                 id, person_id, buyer_name, issue_year, issue_month, quantity, purchased_at,
-                note, reversal_of, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                note, reversal_of, created_at, updated_at, payment_status, is_group_distribution
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
             ON CONFLICT(id) DO UPDATE SET
                 person_id = excluded.person_id,
                 buyer_name = excluded.buyer_name,
@@ -710,7 +726,9 @@ fn upsert_purchase(
                 purchased_at = excluded.purchased_at,
                 note = excluded.note,
                 reversal_of = excluded.reversal_of,
-                updated_at = excluded.updated_at
+                updated_at = excluded.updated_at,
+                payment_status = excluded.payment_status,
+                is_group_distribution = excluded.is_group_distribution
             ",
             params![
                 purchase.id,
@@ -723,7 +741,11 @@ fn upsert_purchase(
                 purchase.note,
                 purchase.reversal_of,
                 purchase.created_at,
-                purchase.updated_at
+                purchase.updated_at,
+                purchase
+                    .payment_status
+                    .map(qt_domain::PaymentStatus::as_str),
+                purchase.is_group_distribution
             ],
         )
         .map_err(port_error)?;

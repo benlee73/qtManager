@@ -23,6 +23,7 @@ pub struct RuntimeServices<'a, C, I> {
 
 #[derive(Clone, Debug)]
 pub struct DeskRecord {
+    pub group_purchases: Vec<OneTimePurchase>,
     pub person: Person,
     pub subscriptions: Vec<Subscription>,
     pub distributions: Vec<Distribution>,
@@ -159,6 +160,9 @@ pub struct DeskTotals {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeskPerson {
+    pub is_group: bool,
+    pub latest_group_distribution_id: Option<String>,
+    pub latest_group_distribution_quantity: u32,
     pub person_id: String,
     pub subscription_id: Option<String>,
     pub distribution_targets: Vec<DistributionTargetView>,
@@ -372,6 +376,10 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
         .collect::<Vec<_>>();
     let mut totals = DeskTotals::default();
     for person in &eligible_people {
+        if person.is_group {
+            totals.distributed_quantity += person.distributed_quantity;
+            continue;
+        }
         if person.subscription_status == "유효" {
             totals.target_people += 1;
             totals.target_quantity += person.target_quantity;
@@ -407,7 +415,9 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
             .then(left.name.cmp(&right.name))
     });
     if query.trim().is_empty() && !show_all {
-        people.retain(|person| person.can_distribute && person.remaining_quantity > 0);
+        people.retain(|person| {
+            person.is_group || (person.can_distribute && person.remaining_quantity > 0)
+        });
     }
     let to_check_item_view = |item: CheckItem| CheckItemView {
         id: item.id,
@@ -526,6 +536,9 @@ fn desk_person(record: DeskRecord, issue: Issue) -> Result<DeskPerson, Applicati
             })
     });
     let mut view = DeskPerson {
+        is_group: record.person.is_group,
+        latest_group_distribution_id: None,
+        latest_group_distribution_quantity: 0,
         person_id: record.person.id,
         subscription_id: None,
         distribution_targets: Vec::new(),
@@ -549,6 +562,49 @@ fn desk_person(record: DeskRecord, issue: Issue) -> Result<DeskPerson, Applicati
         has_memo: record.has_memo,
         can_distribute: false,
     };
+    if view.is_group {
+        let cancelled = record
+            .group_purchases
+            .iter()
+            .filter_map(|purchase| purchase.reversal_of.as_ref())
+            .collect::<std::collections::HashSet<_>>();
+        let mut originals = record
+            .group_purchases
+            .iter()
+            .filter(|purchase| purchase.reversal_of.is_none() && !cancelled.contains(&purchase.id))
+            .collect::<Vec<_>>();
+        originals.sort_by(|left, right| {
+            right
+                .purchased_at
+                .cmp(&left.purchased_at)
+                .then(right.id.cmp(&left.id))
+        });
+        view.latest_group_distribution_id = originals.first().map(|purchase| purchase.id.clone());
+        view.latest_group_distribution_quantity = originals
+            .first()
+            .map(|purchase| purchase.quantity)
+            .unwrap_or(0);
+        let legacy_quantity: i64 = record
+            .distributions
+            .iter()
+            .map(|distribution| {
+                if distribution.reversal_of.is_some() {
+                    -(distribution.quantity as i64)
+                } else {
+                    distribution.quantity as i64
+                }
+            })
+            .sum();
+        view.distributed_quantity = originals
+            .iter()
+            .map(|purchase| purchase.quantity)
+            .sum::<u32>()
+            + legacy_quantity.max(0) as u32;
+        view.subscription_status = "군지체".into();
+        view.distribution_status = "권수 기록".into();
+        view.can_distribute = true;
+        return Ok(view);
+    }
     let Some(subscription) = selected else {
         return Ok(view);
     };
@@ -744,6 +800,7 @@ where
     let now = services.clock.now();
     let person_phone = format_phone(request.phone.as_deref().unwrap_or_default())?;
     let person = Person {
+        is_group: false,
         id: services.ids.next_id(),
         name: name.into(),
         cohort,
@@ -756,6 +813,7 @@ where
     };
     person.validate_draft()?;
     let subscription = Subscription {
+        payment_status: Some(qt_domain::PaymentStatus::Pending),
         id: services.ids.next_id(),
         person_id: person.id.clone(),
         start_issue: Issue::new(request.issue_year, request.issue_month)?,
@@ -1210,6 +1268,8 @@ where
 {
     let now = services.clock.now();
     let purchase = OneTimePurchase {
+        payment_status: Some(qt_domain::PaymentStatus::Pending),
+        is_group_distribution: false,
         id: services.ids.next_id(),
         person_id: request.person_id,
         buyer_name: clean_optional(request.buyer_name),
@@ -1253,6 +1313,7 @@ where
     let cohort = clean_optional(request.cohort);
     let phone = format_phone(request.phone.as_deref().unwrap_or_default())?;
     let person = Person {
+        is_group: false,
         id: services.ids.next_id(),
         name,
         cohort,
@@ -1266,6 +1327,8 @@ where
     person.validate()?;
 
     let purchase = OneTimePurchase {
+        payment_status: Some(qt_domain::PaymentStatus::Pending),
+        is_group_distribution: false,
         id: services.ids.next_id(),
         person_id: Some(person.id.clone()),
         buyer_name: Some(person.name.clone()),
@@ -1316,6 +1379,8 @@ where
         .ok_or(ApplicationError::NoPurchaseToCancel)?;
     let now = services.clock.now();
     let reversal = OneTimePurchase {
+        payment_status: None,
+        is_group_distribution: original.is_group_distribution,
         id: services.ids.next_id(),
         person_id: original.person_id,
         buyer_name: original.buyer_name,
@@ -1558,6 +1623,7 @@ mod tests {
             _change: &ChangeLog,
         ) -> Result<(), PortError> {
             self.records.push(DeskRecord {
+                group_purchases: Vec::new(),
                 person: person.clone(),
                 subscriptions: vec![subscription.clone()],
                 distributions: vec![],
@@ -1663,6 +1729,7 @@ mod tests {
             _changes: &[ChangeLog],
         ) -> Result<(), PortError> {
             self.records.push(DeskRecord {
+                group_purchases: Vec::new(),
                 person: person.clone(),
                 subscriptions: vec![],
                 distributions: vec![],
@@ -1711,6 +1778,7 @@ mod tests {
     fn record(quantity: u32) -> DeskRecord {
         let now = "2026-01-01T00:00:00+09:00";
         let person = Person {
+            is_group: false,
             id: "person-1".into(),
             name: "가상 신청자".into(),
             cohort: Some("94".into()),
@@ -1722,7 +1790,9 @@ mod tests {
             updated_at: now.into(),
         };
         DeskRecord {
+            group_purchases: Vec::new(),
             subscriptions: vec![Subscription {
+                payment_status: None,
                 id: "subscription-1".into(),
                 person_id: person.id.clone(),
                 start_issue: Issue::new(2026, 1).unwrap(),

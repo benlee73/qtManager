@@ -23,6 +23,7 @@ impl IdGenerator for SequentialIds {
 
 fn person(id: &str, name: &str, cohort: Option<&str>, phone: Option<&str>) -> Person {
     Person {
+        is_group: false,
         id: id.into(),
         name: name.into(),
         cohort: cohort.map(str::to_owned),
@@ -37,6 +38,7 @@ fn person(id: &str, name: &str, cohort: Option<&str>, phone: Option<&str>) -> Pe
 
 fn subscription(id: &str, person_id: &str, year: i32, month: u8, quantity: u32) -> Subscription {
     Subscription {
+        payment_status: None,
         id: id.into(),
         person_id: person_id.into(),
         start_issue: Issue::new(year, month).unwrap(),

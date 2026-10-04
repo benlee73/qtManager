@@ -1,6 +1,8 @@
 mod distribution;
 mod issue;
+mod payment;
 mod records;
+pub use payment::PaymentStatus;
 mod subscription;
 
 pub use distribution::{
@@ -20,8 +22,8 @@ pub use subscription::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const STATE_XLSX_FORMAT_VERSION: u16 = 2;
-pub const DATABASE_SCHEMA_VERSION: u16 = 5;
+pub const STATE_XLSX_FORMAT_VERSION: u16 = 3;
+pub const DATABASE_SCHEMA_VERSION: u16 = 6;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

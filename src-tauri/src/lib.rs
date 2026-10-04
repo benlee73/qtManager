@@ -210,6 +210,53 @@ fn open_operational_repository(app: &tauri::AppHandle) -> Result<SqliteCoreRepos
 }
 
 #[tauri::command]
+fn seed_e2e_group_command(app: tauri::AppHandle) -> Result<String, String> {
+    #[cfg(not(feature = "e2e"))]
+    {
+        let _ = app;
+        Err("E2E 전용 명령입니다.".into())
+    }
+    #[cfg(feature = "e2e")]
+    {
+        let mut repository = open_operational_repository(&app)?;
+        qt_application::CoreRepository::migrate_core(&mut repository)
+            .map_err(|error| error.to_string())?;
+        let runtime = SystemRuntime;
+        let now = runtime.now();
+        let person = qt_domain::Person {
+            id: runtime.next_id(),
+            name: "군지체".into(),
+            is_group: true,
+            cohort: None,
+            phone: None,
+            normalized_phone: None,
+            status: qt_domain::PersonStatus::Active,
+            person_note: None,
+            created_at: now.clone(),
+            updated_at: now.clone(),
+        };
+        let change = qt_domain::ChangeLog {
+            id: runtime.next_id(),
+            occurred_at: now,
+            operator_name: "E2E 담당자".into(),
+            action_type: "e2e_group_seeded".into(),
+            entity_type: "person".into(),
+            entity_id: person.id.clone(),
+            summary: "E2E 군지체".into(),
+            before_json: None,
+            after_json: None,
+        };
+        qt_application::PeopleManagementRepository::update_person(
+            &mut repository,
+            &person,
+            &change,
+        )
+        .map_err(|error| error.to_string())?;
+        Ok(person.id)
+    }
+}
+
+#[tauri::command]
 fn reset_e2e_state_command(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(not(feature = "e2e"))]
     {
@@ -684,6 +731,119 @@ fn cancel_latest_purchase_command(
 }
 
 #[tauri::command]
+fn record_group_distribution_command(
+    app: tauri::AppHandle,
+    person_id: String,
+    issue_year: i32,
+    issue_month: u8,
+    quantity: u32,
+) -> Result<String, String> {
+    let mut repository = open_operational_repository(&app)?;
+    qt_application::CoreRepository::migrate_core(&mut repository)
+        .map_err(|error| error.to_string())?;
+    let runtime = SystemRuntime;
+    let logger = event_logger(&app);
+    logger.info("group_distribution_started");
+    let result = Issue::new(issue_year, issue_month)
+        .map_err(|error| error.to_string())
+        .and_then(|issue| {
+            qt_application::record_group_distribution(
+                &mut repository,
+                &RuntimeServices {
+                    clock: &runtime,
+                    ids: &runtime,
+                },
+                &person_id,
+                issue,
+                quantity,
+            )
+            .map_err(|error| error.to_string())
+        });
+    if result.is_ok() {
+        logger.info("group_distribution_completed");
+    } else {
+        logger.error("group_distribution_failed");
+    }
+    result
+}
+#[tauri::command]
+fn cancel_group_distribution_command(
+    app: tauri::AppHandle,
+    person_id: String,
+    issue_year: i32,
+    issue_month: u8,
+    purchase_id: String,
+) -> Result<(), String> {
+    let mut repository = open_operational_repository(&app)?;
+    qt_application::CoreRepository::migrate_core(&mut repository)
+        .map_err(|error| error.to_string())?;
+    let runtime = SystemRuntime;
+    let logger = event_logger(&app);
+    logger.info("group_distribution_reversal_started");
+    let result = Issue::new(issue_year, issue_month)
+        .map_err(|error| error.to_string())
+        .and_then(|issue| {
+            qt_application::cancel_group_distribution(
+                &mut repository,
+                &RuntimeServices {
+                    clock: &runtime,
+                    ids: &runtime,
+                },
+                &person_id,
+                issue,
+                &purchase_id,
+            )
+            .map_err(|error| error.to_string())
+        });
+    if result.is_ok() {
+        logger.info("group_distribution_reversal_completed");
+    } else {
+        logger.error("group_distribution_reversal_failed");
+    }
+    result
+}
+
+#[tauri::command]
+fn load_payments_command(
+    app: tauri::AppHandle,
+) -> Result<Vec<qt_application::PaymentView>, String> {
+    let mut repository = open_operational_repository(&app)?;
+    qt_application::CoreRepository::migrate_core(&mut repository)
+        .map_err(|error| error.to_string())?;
+    qt_application::load_payments(&repository).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn set_payment_confirmed_command(
+    app: tauri::AppHandle,
+    selections: Vec<qt_application::PaymentSelection>,
+    confirmed: bool,
+) -> Result<(), String> {
+    let mut repository = open_operational_repository(&app)?;
+    qt_application::CoreRepository::migrate_core(&mut repository)
+        .map_err(|error| error.to_string())?;
+    let runtime = SystemRuntime;
+    let logger = event_logger(&app);
+    logger.info("payment_confirmation_started");
+    let result = qt_application::set_payment_confirmed(
+        &mut repository,
+        &RuntimeServices {
+            clock: &runtime,
+            ids: &runtime,
+        },
+        selections,
+        confirmed,
+    )
+    .map_err(|error| error.to_string());
+    if result.is_ok() {
+        logger.info("payment_confirmation_completed");
+    } else {
+        logger.error("payment_confirmation_failed");
+    }
+    result
+}
+
+#[tauri::command]
 fn load_people_management_command(
     app: tauri::AppHandle,
     query: String,
@@ -1011,9 +1171,13 @@ pub fn run() {
             logger.info("app_started");
             logger.info(concat!("app_version_", env!("CARGO_PKG_VERSION")));
             logger.info("database_migration_started");
-            match open_operational_repository(app.handle()) {
-                Ok(_) => {
-                    logger.info("database_schema_version_4");
+            match open_operational_repository(app.handle()).and_then(|mut repository| {
+                qt_application::CoreRepository::migrate_core(&mut repository)
+                    .map(|_| ())
+                    .map_err(|error| error.to_string())
+            }) {
+                Ok(()) => {
+                    logger.info("database_schema_version_6");
                     logger.info("database_migration_completed");
                 }
                 Err(error) => {
@@ -1050,6 +1214,10 @@ pub fn run() {
             record_purchase_for_new_person_command,
             cancel_latest_purchase_command,
             load_people_management_command,
+            load_payments_command,
+            record_group_distribution_command,
+            cancel_group_distribution_command,
+            set_payment_confirmed_command,
             load_person_detail_command,
             preview_duplicates_command,
             register_person_command,
@@ -1064,6 +1232,7 @@ pub fn run() {
             apply_state_import_command,
             latest_restore_point_command,
             undo_state_import_command,
+            seed_e2e_group_command,
             reset_e2e_state_command
         ])
         .build(tauri::generate_context!())

@@ -65,10 +65,19 @@ impl StateWorkbookV1 for XlsxStateWorkbook {
             .get("format_version")
             .and_then(|value| value.parse::<u16>().ok())
             .ok_or_else(|| PortError::new("XLSX 안내 시트의 format_version이 없습니다."))?;
-        if version != 1 && version != STATE_XLSX_FORMAT_VERSION {
+        if !(1..=STATE_XLSX_FORMAT_VERSION).contains(&version) {
             return Err(PortError::new(format!(
                 "지원하지 않는 XLSX 형식 버전입니다: {version}"
             )));
+        }
+        if version == 3 {
+            for (sheet, required) in [(PEOPLE, vec!["is_group"]), (SUBSCRIPTIONS, vec!["payment_status"]), (PURCHASES, vec!["payment_status", "is_group_distribution"])] {
+                let range = workbook.worksheet_range(sheet).map_err(calamine_error)?;
+                let columns = range.rows().next().ok_or_else(|| PortError::new("필수 시트가 비어 있습니다."))?;
+                for name in required {
+                    if !columns.iter().any(|cell| cell.as_string().as_deref() == Some(name)) { return Err(PortError::new(format!("{sheet} 시트의 {name} 열이 없습니다."))); }
+                }
+            }
         }
         let metadata = StateWorkbookMetadata {
             format_version: version,
@@ -105,6 +114,7 @@ impl StateWorkbook for XlsxStateWorkbook {
         let timestamp = "2026-01-01T00:00:00+09:00";
         let snapshot = StateSnapshot {
             people: vec![Person {
+                is_group: false,
                 id: person.id.clone(),
                 name: person.name.clone(),
                 cohort: Some(person.cohort.clone()),
@@ -245,6 +255,7 @@ fn write_people(
             "상태",
             "created_at",
             "updated_at",
+            "is_group",
         ],
         header,
     )?;
@@ -258,6 +269,7 @@ fn write_people(
             .write_string(row, 5, person_status(value.status))
             .map_err(xlsx_error)?;
         strings_at(sheet, row, 6, &[&value.created_at, &value.updated_at])?;
+        sheet.write_boolean(row, 8, value.is_group).map_err(xlsx_error)?;
     }
     Ok(())
 }
@@ -284,6 +296,7 @@ fn write_subscriptions(
             "created_at",
             "updated_at",
             "archived_at",
+            "payment_status",
         ],
         header,
     )?;
@@ -309,6 +322,7 @@ fn write_subscriptions(
         optional(sheet, row, 9, value.memo.as_deref())?;
         strings_at(sheet, row, 10, &[&value.created_at, &value.updated_at])?;
         optional(sheet, row, 12, value.archived_at.as_deref())?;
+        optional(sheet, row, 13, value.payment_status.map(qt_domain::PaymentStatus::as_str))?;
     }
     Ok(())
 }
@@ -378,6 +392,8 @@ fn write_purchases(
             "reversal_of",
             "created_at",
             "updated_at",
+            "payment_status",
+            "is_group_distribution",
         ],
         header,
     )?;
@@ -402,6 +418,8 @@ fn write_purchases(
         optional(sheet, row, 7, value.note.as_deref())?;
         optional(sheet, row, 8, value.reversal_of.as_deref())?;
         strings_at(sheet, row, 9, &[&value.created_at, &value.updated_at])?;
+        optional(sheet, row, 11, value.payment_status.map(qt_domain::PaymentStatus::as_str))?;
+        sheet.write_boolean(row, 12, value.is_group_distribution).map_err(xlsx_error)?;
     }
     Ok(())
 }

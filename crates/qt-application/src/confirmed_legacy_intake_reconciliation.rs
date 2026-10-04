@@ -195,6 +195,8 @@ fn apply_one_time<I: IdGenerator>(
 
     let purchase_id = ids.next_id();
     snapshot.purchases.push(OneTimePurchase {
+        payment_status: None,
+        is_group_distribution: false,
         id: purchase_id.clone(),
         person_id: Some(purchase_owner),
         buyer_name: None,

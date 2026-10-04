@@ -13,6 +13,8 @@ pub enum PersonStatus {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Person {
+    #[serde(default)]
+    pub is_group: bool,
     pub id: String,
     pub name: String,
     pub cohort: Option<String>,
@@ -25,6 +27,15 @@ pub struct Person {
 }
 
 impl Person {
+    pub fn needs_profile_completion(&self) -> bool {
+        self.status != PersonStatus::Archived
+            && !self.is_group
+            && self
+                .cohort
+                .as_deref()
+                .is_none_or(|value| value.trim().is_empty())
+    }
+
     pub fn validate(&self) -> Result<(), DomainError> {
         required_id(&self.id, "person_id")?;
         if self.name.trim().is_empty() {
@@ -222,6 +233,10 @@ impl PinnedNote {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OneTimePurchase {
+    #[serde(default)]
+    pub payment_status: Option<crate::PaymentStatus>,
+    #[serde(default)]
+    pub is_group_distribution: bool,
     pub id: String,
     pub person_id: Option<String>,
     pub buyer_name: Option<String>,
@@ -293,6 +308,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn profile_completion_depends_only_on_cohort_with_group_and_archive_exceptions() {
+        let mut person = Person {
+            is_group: false,
+            id: "person".into(),
+            name: "가상 신청자".into(),
+            cohort: None,
+            phone: None,
+            normalized_phone: None,
+            status: PersonStatus::Active,
+            person_note: None,
+            created_at: "2026-10-04".into(),
+            updated_at: "2026-10-04".into(),
+        };
+        assert!(person.needs_profile_completion());
+        person.cohort = Some("00".into());
+        person.status = PersonStatus::Draft;
+        assert!(!person.needs_profile_completion());
+        person.cohort = None;
+        person.is_group = true;
+        assert!(!person.needs_profile_completion());
+        person.is_group = false;
+        person.status = PersonStatus::Archived;
+        assert!(!person.needs_profile_completion());
+    }
+
+    #[test]
     fn formats_optional_010_phone_numbers_for_display() {
         assert_eq!(
             format_phone("01012345678"),
@@ -312,6 +353,7 @@ mod tests {
     #[test]
     fn person_preserves_optional_leading_zero_cohort() {
         let person = Person {
+            is_group: false,
             id: "person-1".into(),
             name: "가상 신청자".into(),
             cohort: Some("00".into()),
@@ -329,6 +371,7 @@ mod tests {
     #[test]
     fn search_matches_name_cohort_combination_and_normalized_phone() {
         let person = Person {
+            is_group: false,
             id: "person-1".into(),
             name: "홍 길동".into(),
             cohort: Some("94".into()),
@@ -350,6 +393,7 @@ mod tests {
     #[test]
     fn draft_requires_name_and_preserves_optional_leading_zero_cohort() {
         let mut person = Person {
+            is_group: false,
             id: "person-1".into(),
             name: "현장 신청자".into(),
             cohort: Some("00".into()),

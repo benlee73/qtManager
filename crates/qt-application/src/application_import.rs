@@ -288,6 +288,7 @@ where
             None if row.create_as_new => {
                 new_people_count += 1;
                 Person {
+                    is_group: false,
                     id: runtime.ids.next_id(),
                     name: row.name.trim().into(),
                     cohort: Some(row.cohort.clone()),
@@ -313,6 +314,7 @@ where
         }
         existing.validate()?;
         let subscription = Subscription {
+            payment_status: Some(qt_domain::PaymentStatus::Pending),
             id: runtime.ids.next_id(),
             person_id: existing.id.clone(),
             start_issue: Issue::new(row.issue_year, row.issue_month)?,

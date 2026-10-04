@@ -104,7 +104,8 @@ fn parse_row(
         .map(|value| parse_korean_timestamp(value));
     let name = cell(cells, mapping.name);
     let cohort = cell(cells, mapping.cohort);
-    let phone = cell(cells, mapping.phone);
+    let phone = cell(cells, mapping.phone)
+        .map(|value| format_phone(&value).ok().flatten().unwrap_or(value));
     let issue_text = cell(cells, mapping.start_issue);
     let quantity_text = cell(cells, mapping.quantity);
 
@@ -368,6 +369,25 @@ mod tests {
 
     const TIMED_WITH_PAYMENT: &str =
         "2026. 2. 1 오후 7:48:08\t가상응답자\t00\t010-0000-0000\t1-2월호\t1\t네";
+
+    #[test]
+    fn canonicalizes_phone_preview_and_ignores_the_confirmation_response_in_identity() {
+        let parser = TsvApplicationClipboardParser;
+        let rows = parser.parse(
+            "2026. 8. 23 오후 3:39:01\t가상신청자\t00\t01000000000\t9-10월호\t1\t네 확인했습니다.",
+            2026,
+            None,
+        );
+        let same = parser.parse(
+            "2026. 8. 23 오후 3:39:01\t가상신청자\t00\t010-0000-0000\t9-10월호\t1\t다른 응답",
+            2026,
+            None,
+        );
+        assert_eq!(rows.rows[0].phone.as_deref(), Some("010-0000-0000"));
+        assert_eq!(rows.rows[0].fingerprint, same.rows[0].fingerprint);
+        assert!(rows.ignored_payment_column);
+        assert!(rows.rows[0].error.is_none());
+    }
 
     #[test]
     fn parses_all_provided_shape_variants_and_ignores_trailing_empty_cells() {

@@ -110,9 +110,18 @@ fn parse_person(row: &RowValues<'_>) -> Result<Person, PortError> {
         .transpose()?
         .flatten();
     let normalized_phone = phone.as_deref().map(qt_domain::normalize_phone);
+    let name = row.text("이름")?;
+    let legacy_group = !row.has("is_group")
+        && (name == "군지체" || (name.starts_with("군지체(") && name.ends_with(')')));
+    let is_group = if row.has("is_group") {
+        row.boolean("is_group")?
+    } else {
+        legacy_group
+    };
     let value = Person {
+        is_group,
         id: row.text("person_id")?,
-        name: row.text("이름")?,
+        name: if legacy_group { "군지체".into() } else { name },
         cohort: row.optional("또래")?,
         phone,
         normalized_phone,
@@ -131,6 +140,7 @@ fn parse_person(row: &RowValues<'_>) -> Result<Person, PortError> {
 }
 fn parse_subscription(row: &RowValues<'_>) -> Result<Subscription, PortError> {
     let value = Subscription {
+        payment_status: parse_payment_status(row)?,
         id: row.text("subscription_id")?,
         person_id: row.text("person_id")?,
         start_issue: Issue::new(
@@ -172,6 +182,12 @@ fn parse_distribution(row: &RowValues<'_>) -> Result<Distribution, PortError> {
 }
 fn parse_purchase(row: &RowValues<'_>) -> Result<OneTimePurchase, PortError> {
     let value = OneTimePurchase {
+        payment_status: parse_payment_status(row)?,
+        is_group_distribution: if row.has("is_group_distribution") {
+            row.boolean("is_group_distribution")?
+        } else {
+            false
+        },
         id: row.text("purchase_id")?,
         person_id: row.optional("person_id")?,
         buyer_name: row.optional("buyer_name")?,
@@ -503,6 +519,16 @@ fn xlsx_error(error: rust_xlsxwriter::XlsxError) -> PortError {
 }
 fn calamine_error(error: calamine::XlsxError) -> PortError {
     PortError::new(format!("XLSX 가져오기에 실패했습니다: {error}"))
+}
+
+
+fn parse_payment_status(row: &RowValues<'_>) -> Result<Option<qt_domain::PaymentStatus>, PortError> {
+    row.optional_if_present("payment_status")?
+        .map(|value| {
+            qt_domain::PaymentStatus::from_value(&value)
+                .ok_or_else(|| PortError::new("입금 상태 값이 올바르지 않습니다."))
+        })
+        .transpose()
 }
 
 #[cfg(test)]

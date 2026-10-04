@@ -12,8 +12,8 @@ fn migrates_idempotently_and_runs_atomic_core_round_trip() {
 
     let first = repository.migrate_core().unwrap();
     let second = repository.migrate_core().unwrap();
-    assert_eq!(first.schema_version, 5);
-    assert_eq!(first.newly_applied, 5);
+    assert_eq!(first.schema_version, 6);
+    assert_eq!(first.newly_applied, 6);
     assert_eq!(second.newly_applied, 0);
 
     let logger = StderrEventLogger;
@@ -55,7 +55,7 @@ fn upgrades_phase0_database_without_losing_probe_row() {
     let report = repository.migrate_core().unwrap();
     drop(repository);
 
-    assert_eq!(report.newly_applied, 4);
+    assert_eq!(report.newly_applied, 5);
     let connection = Connection::open(&path).unwrap();
     let count: i64 = connection
         .query_row("SELECT COUNT(*) FROM phase0_people", [], |row| row.get(0))
@@ -71,6 +71,7 @@ fn rolls_back_person_when_subscription_write_fails() {
     repository.migrate_core().unwrap();
     let now = "2026-07-24T10:00:00+09:00";
     let person = Person {
+        is_group: false,
         id: "person-rollback".into(),
         name: "가상 신청자".into(),
         cohort: Some("00".into()),
@@ -82,6 +83,7 @@ fn rolls_back_person_when_subscription_write_fails() {
         updated_at: now.into(),
     };
     let subscription = Subscription {
+        payment_status: None,
         id: "subscription-rollback".into(),
         // 존재하지 않는 사람을 참조시켜 person INSERT 이후 FK 오류를 유도한다.
         person_id: "missing-person".into(),

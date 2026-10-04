@@ -10,6 +10,7 @@ const IMPORTED_AT: &str = "2026-07-27T09:23:07Z";
 
 fn person(id: &str) -> Person {
     Person {
+        is_group: false,
         id: id.into(),
         name: "가상 신청자".into(),
         cohort: Some("00".into()),
@@ -24,6 +25,7 @@ fn person(id: &str) -> Person {
 
 fn subscription(id: &str, person_id: &str, start_month: u8) -> Subscription {
     Subscription {
+        payment_status: None,
         id: id.into(),
         person_id: person_id.into(),
         start_issue: Issue::new(2026, start_month).unwrap(),

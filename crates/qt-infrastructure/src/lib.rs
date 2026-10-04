@@ -5,6 +5,7 @@ mod sqlite_application_import;
 mod sqlite_core_repository;
 mod sqlite_distribution_desk;
 mod sqlite_migrations;
+mod sqlite_payments;
 mod sqlite_people_management;
 mod sqlite_probe_repository;
 mod sqlite_state_transfer;

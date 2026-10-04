@@ -169,6 +169,7 @@ impl Phase1Fixture {
     fn new() -> Self {
         let now = "2026-07-24T10:00:00+09:00";
         let person = Person {
+            is_group: false,
             id: "00000000-0000-4000-8000-000000000101".into(),
             name: "가상신청자".into(),
             cohort: Some("00".into()),
@@ -180,6 +181,7 @@ impl Phase1Fixture {
             updated_at: now.into(),
         };
         let subscription = Subscription {
+            payment_status: None,
             id: "00000000-0000-4000-8000-000000000102".into(),
             person_id: person.id.clone(),
             start_issue: Issue::new(2026, 1).expect("고정 fixture QT 호는 유효함"),

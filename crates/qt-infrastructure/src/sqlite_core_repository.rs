@@ -96,7 +96,7 @@ impl CoreRepository for SqliteCoreRepository {
             .query_row(
                 "
                 SELECT id, name, cohort, phone, normalized_phone, status, person_note,
-                       created_at, updated_at
+                       created_at, updated_at, is_group
                 FROM people
                 WHERE id = ?1
                 ",
@@ -112,7 +112,7 @@ impl CoreRepository for SqliteCoreRepository {
             .query_row(
                 "
                 SELECT id, person_id, start_issue_year, start_issue_month, issue_count, quantity,
-                       applied_at, source, source_reference, memo, created_at, updated_at, archived_at
+                       applied_at, source, source_reference, memo, created_at, updated_at, archived_at, payment_status
                 FROM subscriptions
                 WHERE id = ?1
                 ",
@@ -179,9 +179,9 @@ pub(crate) fn upsert_person(
             "
             INSERT INTO people(
                 id, name, cohort, phone, normalized_phone, status, person_note,
-                created_at, updated_at
+                created_at, updated_at, is_group
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
             ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name,
                 cohort = excluded.cohort,
@@ -189,7 +189,8 @@ pub(crate) fn upsert_person(
                 normalized_phone = excluded.normalized_phone,
                 status = excluded.status,
                 person_note = excluded.person_note,
-                updated_at = excluded.updated_at
+                updated_at = excluded.updated_at,
+                is_group = excluded.is_group
             ",
             params![
                 person.id,
@@ -200,7 +201,8 @@ pub(crate) fn upsert_person(
                 person_status(person.status),
                 person.person_note,
                 person.created_at,
-                person.updated_at
+                person.updated_at,
+                person.is_group
             ],
         )
         .map_err(port_error)?;
@@ -216,9 +218,9 @@ pub(crate) fn upsert_subscription(
             "
             INSERT INTO subscriptions(
                 id, person_id, start_issue_year, start_issue_month, issue_count, quantity,
-                applied_at, source, source_reference, memo, created_at, updated_at, archived_at
+                applied_at, source, source_reference, memo, created_at, updated_at, archived_at, payment_status
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
             ON CONFLICT(id) DO UPDATE SET
                 person_id = excluded.person_id,
                 start_issue_year = excluded.start_issue_year,
@@ -230,7 +232,8 @@ pub(crate) fn upsert_subscription(
                 source_reference = excluded.source_reference,
                 memo = excluded.memo,
                 updated_at = excluded.updated_at,
-                archived_at = excluded.archived_at
+                archived_at = excluded.archived_at,
+                payment_status = excluded.payment_status
             ",
             params![
                 subscription.id,
@@ -245,7 +248,8 @@ pub(crate) fn upsert_subscription(
                 subscription.memo,
                 subscription.created_at,
                 subscription.updated_at,
-                subscription.archived_at
+                subscription.archived_at,
+                subscription.payment_status.map(qt_domain::PaymentStatus::as_str)
             ],
         )
         .map_err(port_error)?;
@@ -331,6 +335,7 @@ pub(crate) fn upsert_change(
 
 pub(crate) fn person_from_row(row: &Row<'_>) -> rusqlite::Result<Person> {
     Ok(Person {
+        is_group: row.get(9)?,
         id: row.get(0)?,
         name: row.get(1)?,
         cohort: row.get(2)?,
@@ -347,6 +352,7 @@ pub(crate) fn subscription_from_row(row: &Row<'_>) -> rusqlite::Result<Subscript
     let year = row.get(2)?;
     let month = row.get(3)?;
     Ok(Subscription {
+        payment_status: payment_from_row(row, 13)?,
         id: row.get(0)?,
         person_id: row.get(1)?,
         start_issue: Issue::new(year, month).map_err(domain_sql_error)?,
@@ -446,4 +452,16 @@ fn domain_sql_error(error: qt_domain::DomainError) -> rusqlite::Error {
 
 fn port_error(error: rusqlite::Error) -> PortError {
     PortError::new(format!("SQLite 핵심 데이터 처리에 실패했습니다: {error}"))
+}
+
+pub(crate) fn payment_from_row(
+    row: &Row<'_>,
+    index: usize,
+) -> rusqlite::Result<Option<qt_domain::PaymentStatus>> {
+    row.get::<_, Option<String>>(index)?
+        .map(|value| {
+            qt_domain::PaymentStatus::from_value(&value)
+                .ok_or_else(|| invalid_enum("payment status", &value))
+        })
+        .transpose()
 }

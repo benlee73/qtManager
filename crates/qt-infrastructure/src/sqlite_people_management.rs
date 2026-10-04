@@ -41,7 +41,7 @@ impl PeopleManagementRepository for SqliteCoreRepository {
             .prepare(
                 "
                 SELECT id, name, cohort, phone, normalized_phone, status, person_note,
-                       created_at, updated_at
+                       created_at, updated_at, is_group
                 FROM people
                 WHERE (?1 OR status != 'archived')
                   AND (
@@ -71,7 +71,7 @@ impl PeopleManagementRepository for SqliteCoreRepository {
             .prepare(
                 "
                 SELECT id, person_id, start_issue_year, start_issue_month, issue_count, quantity,
-                       applied_at, source, source_reference, memo, created_at, updated_at, archived_at
+                       applied_at, source, source_reference, memo, created_at, updated_at, archived_at, payment_status
                 FROM subscriptions
                 ORDER BY start_issue_year, start_issue_month, created_at
                 ",
@@ -105,7 +105,7 @@ impl PeopleManagementRepository for SqliteCoreRepository {
             .query_row(
                 "
                 SELECT id, name, cohort, phone, normalized_phone, status, person_note,
-                       created_at, updated_at
+                       created_at, updated_at, is_group
                 FROM people WHERE id = ?1
                 ",
                 [id],
@@ -122,7 +122,7 @@ impl PeopleManagementRepository for SqliteCoreRepository {
             .prepare(
                 "
                 SELECT id, person_id, start_issue_year, start_issue_month, issue_count, quantity,
-                       applied_at, source, source_reference, memo, created_at, updated_at, archived_at
+                       applied_at, source, source_reference, memo, created_at, updated_at, archived_at, payment_status
                 FROM subscriptions
                 WHERE person_id = ?1
                 ORDER BY start_issue_year, start_issue_month, created_at
@@ -244,7 +244,7 @@ impl PeopleManagementRepository for SqliteCoreRepository {
             .prepare(
                 "
                 SELECT id, person_id, buyer_name, issue_year, issue_month, quantity,
-                       purchased_at, note, reversal_of, created_at, updated_at
+                       purchased_at, note, reversal_of, created_at, updated_at, payment_status, is_group_distribution
                 FROM one_time_purchases
                 WHERE person_id = ?1
                 ORDER BY issue_year DESC, issue_month DESC,
@@ -272,7 +272,7 @@ impl PeopleManagementRepository for SqliteCoreRepository {
             .prepare(
                 "
                 SELECT id, name, cohort, phone, normalized_phone, status, person_note,
-                       created_at, updated_at
+                       created_at, updated_at, is_group
                 FROM people
                 WHERE status != 'archived'
                   AND (?1 IS NULL OR id != ?1)

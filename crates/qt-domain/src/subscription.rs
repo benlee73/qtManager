@@ -31,6 +31,8 @@ pub struct SubscriptionAssessment {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Subscription {
+    #[serde(default)]
+    pub payment_status: Option<crate::PaymentStatus>,
     pub id: String,
     pub person_id: String,
     pub start_issue: Issue,
@@ -104,6 +106,7 @@ mod tests {
 
     fn annual_subscription(start_issue: Issue) -> Subscription {
         Subscription {
+            payment_status: None,
             id: "subscription-1".into(),
             person_id: "person-1".into(),
             start_issue,

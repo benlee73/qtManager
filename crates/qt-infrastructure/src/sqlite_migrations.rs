@@ -300,6 +300,22 @@ WHERE length(replace(replace(replace(replace(replace(COALESCE(phone, ''), '-', '
   AND substr(replace(replace(replace(replace(replace(COALESCE(phone, ''), '-', ''), ' ', ''), '.', ''), '(', ''), ')', ''), 1, 3) = '010';
 ";
 
+// Existing records remain outside the new payment queue. Group identity is
+// stored independently of its display name so later edits cannot change rules.
+const VERSION_6: &str = "
+ALTER TABLE people ADD COLUMN is_group INTEGER NOT NULL DEFAULT 0 CHECK(is_group IN (0, 1));
+ALTER TABLE subscriptions ADD COLUMN payment_status TEXT CHECK(payment_status IN ('pending', 'confirmed'));
+ALTER TABLE one_time_purchases ADD COLUMN payment_status TEXT CHECK(payment_status IN ('pending', 'confirmed'));
+ALTER TABLE one_time_purchases ADD COLUMN is_group_distribution INTEGER NOT NULL DEFAULT 0 CHECK(is_group_distribution IN (0, 1));
+INSERT INTO change_logs (id, occurred_at, operator_name, action_type, entity_type, entity_id, summary)
+SELECT 'schema6-group:' || id, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), '데이터 이전', 'group_recipient_migrated', 'person', id, '군지체 권수 기록 대상으로 전환'
+FROM people WHERE name = '군지체' OR (name LIKE '군지체(%' AND substr(name, -1) = ')');
+UPDATE people SET is_group = 1, name = '군지체', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE name = '군지체' OR (name LIKE '군지체(%' AND substr(name, -1) = ')');
+CREATE INDEX idx_subscriptions_payment ON subscriptions(payment_status, person_id);
+CREATE INDEX idx_purchases_payment ON one_time_purchases(payment_status, person_id);
+";
+
 pub(crate) fn configure(connection: &Connection) -> Result<(), PortError> {
     connection
         .pragma_update(None, "foreign_keys", "ON")
@@ -312,7 +328,34 @@ pub(crate) fn configure(connection: &Connection) -> Result<(), PortError> {
         .map_err(port_error)
 }
 
+fn backup_before_version_six(connection: &Connection) -> Result<(), PortError> {
+    let exists: bool = connection.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations')", [], |row| row.get(0)).map_err(port_error)?;
+    if !exists {
+        return Ok(());
+    }
+    let version: Option<u16> = connection
+        .query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
+            row.get(0)
+        })
+        .map_err(port_error)?;
+    if version.is_none_or(|version| version == 0 || version >= 6) {
+        return Ok(());
+    }
+    let Some(path) = connection.path().filter(|path| !path.is_empty()) else {
+        return Ok(());
+    };
+    let backup = std::path::Path::new(path)
+        .with_extension(format!("pre-schema6-{}.sqlite", uuid::Uuid::new_v4()));
+    // VACUUM INTO captures a consistent SQLite snapshot including WAL contents.
+    // Refuse the migration if this local safety copy cannot be written.
+    connection
+        .execute("VACUUM INTO ?1", [backup.to_string_lossy().as_ref()])
+        .map_err(port_error)?;
+    Ok(())
+}
+
 pub(crate) fn migrate(connection: &mut Connection) -> Result<MigrationReport, PortError> {
+    backup_before_version_six(connection)?;
     let transaction = connection.transaction().map_err(port_error)?;
     transaction
         .execute_batch(
@@ -346,6 +389,7 @@ pub(crate) fn migrate(connection: &mut Connection) -> Result<MigrationReport, Po
         (3_u16, VERSION_3),
         (4_u16, VERSION_4),
         (5_u16, VERSION_5),
+        (6_u16, VERSION_6),
     ] {
         let exists: bool = transaction
             .query_row(
@@ -425,7 +469,7 @@ mod tests {
 
         let report = migrate(&mut connection).unwrap();
 
-        assert_eq!(report.newly_applied, 3);
+        assert_eq!(report.newly_applied, 4);
         let person_note: String = connection
             .query_row(
                 "SELECT person_note FROM people WHERE id = 'person-1'",
@@ -470,6 +514,67 @@ mod tests {
             )
             .unwrap();
         assert_eq!(memo_status, "archived");
+    }
+
+    #[test]
+    fn version_six_preserves_legacy_records_and_creates_a_consistent_backup() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("legacy.sqlite");
+        let mut connection = Connection::open(&path).unwrap();
+        configure(&connection).unwrap();
+        for sql in [VERSION_1, VERSION_2, VERSION_3, VERSION_4, VERSION_5] {
+            connection.execute_batch(sql).unwrap();
+        }
+        connection.execute_batch("CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL); INSERT INTO schema_migrations VALUES (1,'2026-01-01'),(2,'2026-01-01'),(3,'2026-01-01'),(4,'2026-01-01'),(5,'2026-01-01');
+        INSERT INTO people VALUES ('group', '군지체(가상담당)', '00', NULL, NULL, 'active', NULL, '2026-01-01', '2026-01-01');
+        INSERT INTO subscriptions VALUES ('subscription', 'group', 2026, 1, 6, 1, NULL, 'legacy_xlsx', NULL, NULL, '2026-01-01', '2026-01-01', NULL);
+        INSERT INTO one_time_purchases VALUES ('purchase', NULL, NULL, 2026, 1, 1, '2026-01-01', NULL, NULL, '2026-01-01', '2026-01-01');").unwrap();
+        let report = migrate(&mut connection).unwrap();
+        assert_eq!(report.newly_applied, 1);
+        let person: (String, bool, String) = connection
+            .query_row(
+                "SELECT name, is_group, cohort FROM people WHERE id = 'group'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(person, ("군지체".into(), true, "00".into()));
+        let pending: u32 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM subscriptions WHERE payment_status IS NOT NULL",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(pending, 0);
+        let pending: u32 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM one_time_purchases WHERE payment_status IS NOT NULL",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(pending, 0);
+        let backup_path = std::fs::read_dir(directory.path())
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .find(|path| path.to_string_lossy().contains("pre-schema6-"))
+            .unwrap();
+        let backup = Connection::open(backup_path).unwrap();
+        let old_name: String = backup
+            .query_row("SELECT name FROM people WHERE id = 'group'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(old_name, "군지체(가상담당)");
+        let old_version: u16 = backup
+            .query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(old_version, 5);
+        assert_eq!(migrate(&mut connection).unwrap().newly_applied, 0);
     }
 
     #[test]

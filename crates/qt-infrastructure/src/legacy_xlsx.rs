@@ -154,6 +154,7 @@ pub fn read_legacy_2026(
                     index
                 } else {
                     let person = Person {
+                        is_group: false,
                         id: new_id("legacy-person"),
                         name: name.clone(),
                         cohort: cohort.clone(),
@@ -233,6 +234,7 @@ pub fn read_legacy_2026(
                         *index
                     } else {
                         let subscription = Subscription {
+                            payment_status: None,
                             id: new_id("legacy-subscription"),
                             person_id: person_id.clone(),
                             start_issue,
@@ -302,6 +304,8 @@ pub fn read_legacy_2026(
                 if let Some(buyer_name) = buyer_name {
                     let quantity = positive_integer(row.get(column + 2)).unwrap_or(1);
                     report.snapshot.purchases.push(OneTimePurchase {
+                        payment_status: None,
+                        is_group_distribution: false,
                         id: new_id("legacy-purchase"),
                         person_id: None,
                         buyer_name: Some(buyer_name),

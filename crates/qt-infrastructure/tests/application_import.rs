@@ -134,6 +134,13 @@ fn previews_imports_links_candidates_and_rejects_a_repeated_response_after_resta
     let detail =
         load_person_detail(&mut reopened, &person_id, Issue::new(2028, 1).unwrap()).unwrap();
     assert_eq!(detail.subscriptions.len(), 2);
+    assert!(
+        detail
+            .subscriptions
+            .iter()
+            .all(|subscription| subscription.payment_status
+                == Some(qt_domain::PaymentStatus::Pending))
+    );
     assert_eq!(detail.subscriptions[0].quantity, 1);
     assert_eq!(detail.subscriptions[1].quantity, 2);
 }

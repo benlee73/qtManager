@@ -175,12 +175,12 @@ fn load_snapshot(connection: &Connection) -> Result<StateSnapshot, PortError> {
         )?,
         people: query_all(
             connection,
-            "SELECT id, name, cohort, phone, normalized_phone, status, person_note, created_at, updated_at FROM people ORDER BY id",
+            "SELECT id, name, cohort, phone, normalized_phone, status, person_note, created_at, updated_at, is_group FROM people ORDER BY id",
             person_from_row,
         )?,
         subscriptions: query_all(
             connection,
-            "SELECT id, person_id, start_issue_year, start_issue_month, issue_count, quantity, applied_at, source, source_reference, memo, created_at, updated_at, archived_at FROM subscriptions ORDER BY id",
+            "SELECT id, person_id, start_issue_year, start_issue_month, issue_count, quantity, applied_at, source, source_reference, memo, created_at, updated_at, archived_at, payment_status FROM subscriptions ORDER BY id",
             subscription_from_row,
         )?,
         distributions: query_all(
@@ -190,7 +190,7 @@ fn load_snapshot(connection: &Connection) -> Result<StateSnapshot, PortError> {
         )?,
         purchases: query_all(
             connection,
-            "SELECT id, person_id, buyer_name, issue_year, issue_month, quantity, purchased_at, note, reversal_of, created_at, updated_at FROM one_time_purchases ORDER BY id",
+            "SELECT id, person_id, buyer_name, issue_year, issue_month, quantity, purchased_at, note, reversal_of, created_at, updated_at, payment_status, is_group_distribution FROM one_time_purchases ORDER BY id",
             purchase_from_row,
         )?,
         check_items: query_all(
@@ -387,8 +387,8 @@ fn insert_purchase(
 ) -> Result<(), PortError> {
     transaction
         .execute(
-            "INSERT INTO one_time_purchases(id, person_id, buyer_name, issue_year, issue_month, quantity, purchased_at, note, reversal_of, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-            params![value.id, value.person_id, value.buyer_name, value.issue.year, value.issue.start_month, value.quantity, value.purchased_at, value.note, value.reversal_of, value.created_at, value.updated_at],
+            "INSERT INTO one_time_purchases(id, person_id, buyer_name, issue_year, issue_month, quantity, purchased_at, note, reversal_of, created_at, updated_at, payment_status, is_group_distribution) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            params![value.id, value.person_id, value.buyer_name, value.issue.year, value.issue.start_month, value.quantity, value.purchased_at, value.note, value.reversal_of, value.created_at, value.updated_at, value.payment_status.map(qt_domain::PaymentStatus::as_str), value.is_group_distribution],
         )
         .map_err(sql_error)?;
     Ok(())
@@ -448,6 +448,8 @@ fn setting_from_row(row: &Row<'_>) -> rusqlite::Result<StateSetting> {
 }
 fn purchase_from_row(row: &Row<'_>) -> rusqlite::Result<OneTimePurchase> {
     Ok(OneTimePurchase {
+        payment_status: crate::sqlite_core_repository::payment_from_row(row, 11)?,
+        is_group_distribution: row.get(12)?,
         id: row.get(0)?,
         person_id: row.get(1)?,
         buyer_name: row.get(2)?,

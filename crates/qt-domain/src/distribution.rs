@@ -157,6 +157,7 @@ mod tests {
 
     fn subscription() -> Subscription {
         Subscription {
+            payment_status: None,
             id: "subscription-1".into(),
             person_id: "person-1".into(),
             start_issue: Issue::new(2026, 1).unwrap(),

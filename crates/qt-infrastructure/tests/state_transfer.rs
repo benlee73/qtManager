@@ -161,6 +161,7 @@ fn full_state_round_trip_replace_merge_and_restart_safe_undo() {
 
 fn fixture_state(now: &str) -> StateSnapshot {
     let person = Person {
+        is_group: false,
         id: "person-anonymous".into(),
         name: "가상 신청자".into(),
         cohort: Some("00".into()),
@@ -172,6 +173,7 @@ fn fixture_state(now: &str) -> StateSnapshot {
         updated_at: now.into(),
     };
     let subscription = Subscription {
+        payment_status: None,
         id: "subscription-anonymous".into(),
         person_id: person.id.clone(),
         start_issue: Issue::new(2026, 1).unwrap(),
@@ -221,6 +223,8 @@ fn fixture_state(now: &str) -> StateSnapshot {
         ],
         purchases: vec![
             OneTimePurchase {
+                payment_status: None,
+                is_group_distribution: false,
                 id: "aaa-purchase-reversal".into(),
                 person_id: Some(person.id.clone()),
                 buyer_name: None,
@@ -233,6 +237,8 @@ fn fixture_state(now: &str) -> StateSnapshot {
                 updated_at: now.into(),
             },
             OneTimePurchase {
+                payment_status: None,
+                is_group_distribution: false,
                 id: "purchase-anonymous".into(),
                 person_id: Some(person.id.clone()),
                 buyer_name: None,

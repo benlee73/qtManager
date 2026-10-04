@@ -301,3 +301,12 @@ mod tests {
         );
     }
 }
+
+mod payments;
+pub use payments::{
+    PaymentIntake, PaymentKind, PaymentRepository, PaymentSelection, PaymentView, load_payments,
+    set_payment_confirmed,
+};
+
+mod group_distribution;
+pub use group_distribution::{cancel_group_distribution, record_group_distribution};

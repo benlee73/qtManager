@@ -132,6 +132,7 @@ mod tests {
 
     fn person(id: &str, updated_at: &str) -> Person {
         Person {
+            is_group: false,
             id: id.into(),
             name: "가상 신청자".into(),
             cohort: Some("00".into()),
@@ -191,6 +192,7 @@ mod tests {
         let incoming = StateSnapshot {
             people: vec![incoming_person],
             subscriptions: vec![qt_domain::Subscription {
+                payment_status: None,
                 id: "subscription-incoming".into(),
                 person_id: "incoming".into(),
                 start_issue: qt_domain::Issue::new(2026, 1).unwrap(),

@@ -66,6 +66,7 @@ pub struct PeopleManagement {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PersonSummary {
+    pub is_group: bool,
     pub id: String,
     pub name: String,
     pub cohort: Option<String>,
@@ -79,6 +80,7 @@ pub struct PersonSummary {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PersonDetail {
+    pub is_group: bool,
     pub id: String,
     pub name: String,
     pub cohort: Option<String>,
@@ -104,6 +106,7 @@ pub enum SubscriptionPeriodState {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubscriptionView {
+    pub payment_status: Option<qt_domain::PaymentStatus>,
     pub id: String,
     pub start_issue: String,
     pub last_issue: String,
@@ -145,6 +148,8 @@ pub struct DistributionView {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PurchaseView {
+    pub payment_status: Option<qt_domain::PaymentStatus>,
+    pub is_group_distribution: bool,
     pub issue: String,
     pub quantity: u32,
     pub purchased_at: String,
@@ -257,6 +262,7 @@ pub fn load_people_management<R: PeopleManagementRepository>(
             .max()
             .map(|issue| issue.display_name());
         summaries.push(PersonSummary {
+            is_group: person.is_group,
             id: person.id,
             name: person.name,
             cohort: person.cohort,
@@ -332,6 +338,8 @@ pub fn load_person_detail<R: PeopleManagementRepository>(
     let purchases = purchases
         .into_iter()
         .map(|item| PurchaseView {
+            payment_status: item.payment_status,
+            is_group_distribution: item.is_group_distribution,
             issue: item.issue.display_name(),
             quantity: item.quantity,
             purchased_at: item.purchased_at,
@@ -355,6 +363,7 @@ pub fn load_person_detail<R: PeopleManagementRepository>(
         })
         .collect();
     Ok(PersonDetail {
+        is_group: record.person.is_group,
         id: record.person.id,
         name: record.person.name,
         cohort: record.person.cohort,
@@ -377,6 +386,7 @@ fn subscription_view(
     Ok((
         subscription.start_issue,
         SubscriptionView {
+            payment_status: subscription.payment_status,
             id: subscription.id.clone(),
             start_issue: subscription.start_issue.display_name(),
             last_issue: subscription.last_issue()?.display_name(),
@@ -484,6 +494,7 @@ where
         return Err(ApplicationError::DuplicatePersonConfirmationRequired);
     }
     let person = Person {
+        is_group: false,
         id: runtime.ids.next_id(),
         name: request.name.trim().into(),
         cohort: clean_owned(request.cohort),
@@ -719,6 +730,7 @@ struct NewSubscription<'a> {
 
 fn annual_subscription(input: NewSubscription<'_>) -> Result<Subscription, ApplicationError> {
     let subscription = Subscription {
+        payment_status: Some(qt_domain::PaymentStatus::Pending),
         id: input.id,
         person_id: input.person_id,
         start_issue: input.start_issue,
@@ -788,11 +800,17 @@ fn person_status(status: PersonStatus) -> &'static str {
 }
 
 fn needs_profile_completion(person: &Person) -> bool {
-    person.status == PersonStatus::Draft
+    person.needs_profile_completion()
 }
 
 fn management_person_status(person: &Person) -> &'static str {
-    person_status(person.status)
+    if needs_profile_completion(person) {
+        "정보 보완 필요"
+    } else if person.status == PersonStatus::Archived {
+        "보관됨"
+    } else {
+        "정식 등록"
+    }
 }
 
 fn source_label(source: SubscriptionSource) -> &'static str {
@@ -997,8 +1015,9 @@ mod tests {
     }
 
     #[test]
-    fn does_not_require_profile_completion_for_an_active_person_without_a_cohort() {
+    fn requires_profile_completion_for_an_active_person_without_a_cohort() {
         let person = Person {
+            is_group: false,
             id: "person-without-cohort".into(),
             name: "가상 신청자".into(),
             cohort: None,
@@ -1010,14 +1029,15 @@ mod tests {
             updated_at: "2026-07-26T10:00:00+09:00".into(),
         };
 
-        assert!(!needs_profile_completion(&person));
-        assert_eq!(management_person_status(&person), "정식 등록");
+        assert!(needs_profile_completion(&person));
+        assert_eq!(management_person_status(&person), "정보 보완 필요");
     }
 
     #[test]
-    fn excludes_an_active_person_without_a_cohort_from_profile_completion_total() {
+    fn includes_an_active_person_without_a_cohort_in_profile_completion_total() {
         let now = "2026-07-26T10:00:00+09:00".to_owned();
         let person = Person {
+            is_group: false,
             id: "person-without-cohort".into(),
             name: "가상 신청자".into(),
             cohort: None,
@@ -1039,8 +1059,8 @@ mod tests {
 
         let management = load_people_management(&mut repository, "", false).unwrap();
 
-        assert_eq!(management.draft_count, 0);
-        assert_eq!(management.people[0].status, "정식 등록");
+        assert_eq!(management.draft_count, 1);
+        assert_eq!(management.people[0].status, "정보 보완 필요");
     }
 
     #[test]
@@ -1060,6 +1080,7 @@ mod tests {
         let runtime = FixedRuntime(Cell::new(0));
         let now = runtime.now();
         let person = Person {
+            is_group: false,
             id: "person-1".into(),
             name: "가상상세".into(),
             cohort: Some("00".into()),
@@ -1166,6 +1187,7 @@ mod tests {
         let runtime = FixedRuntime(Cell::new(0));
         let now = runtime.now();
         let person = Person {
+            is_group: false,
             id: "person-history".into(),
             name: "가상 이력".into(),
             cohort: Some("00".into()),
@@ -1268,6 +1290,7 @@ mod tests {
     fn includes_linked_one_time_purchases_in_person_detail() {
         let runtime = FixedRuntime(Cell::new(0));
         let person = Person {
+            is_group: false,
             id: "person-purchase-history".into(),
             name: "가상 구매 이력".into(),
             cohort: Some("00".into()),
@@ -1279,6 +1302,8 @@ mod tests {
             updated_at: runtime.now(),
         };
         let purchase = OneTimePurchase {
+            payment_status: None,
+            is_group_distribution: false,
             id: "purchase-history-1".into(),
             person_id: Some(person.id.clone()),
             buyer_name: Some(person.name.clone()),
@@ -1351,6 +1376,7 @@ mod tests {
         let runtime = FixedRuntime(Cell::new(0));
         let now = runtime.now();
         let person = Person {
+            is_group: false,
             id: "person-1".into(),
             name: "가상간이".into(),
             cohort: Some("00".into()),
@@ -1419,6 +1445,7 @@ mod tests {
         let runtime = FixedRuntime(Cell::new(0));
         let now = runtime.now();
         let person = Person {
+            is_group: false,
             id: "person-1".into(),
             name: "가상중복".into(),
             cohort: Some("00".into()),
@@ -1467,6 +1494,7 @@ mod tests {
         let runtime = FixedRuntime(Cell::new(0));
         let now = runtime.now();
         let person = Person {
+            is_group: false,
             id: "person-delete".into(),
             name: "가상삭제".into(),
             cohort: Some("00".into()),
@@ -1500,6 +1528,7 @@ mod tests {
         let runtime = FixedRuntime(Cell::new(0));
         let now = runtime.now();
         let person = Person {
+            is_group: false,
             id: "person-history-delete".into(),
             name: "가상이력삭제".into(),
             cohort: Some("00".into()),
