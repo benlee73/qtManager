@@ -31,7 +31,6 @@ import {
   type DeskPerson,
   type DistributionDesk,
   type Issue,
-  cancelLatestPurchase,
   createMemo,
   deleteMemo,
   distributeAllocations,
@@ -719,26 +718,6 @@ export default function App() {
               >
                 + 1달 구독
               </button>
-              <ActionMenu
-                id="desk-more"
-                label="기타 기능"
-                openMenu={openMenu}
-                onOpenMenu={setOpenMenu}
-              >
-                {(desk?.purchaseCount ?? 0) > 0 && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void mutate(
-                        () => cancelLatestPurchase(issue),
-                        "최근 개별 구매를 취소했습니다.",
-                      )
-                    }
-                  >
-                    최근 구매 취소
-                  </button>
-                )}
-              </ActionMenu>
             </div>
             <div className="table-title">
               <h2>

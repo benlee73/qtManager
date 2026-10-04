@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import App from "./App";
 import { persistTheme, readStoredTheme } from "./appearance";
 import type { Phase0Report } from "./phase0";
 import type { Phase1Report } from "./phase1";
@@ -76,5 +78,23 @@ describe("appearance preference", () => {
     expect(readStoredTheme(storage)).toBe("dark");
     persistTheme("light", storage);
     expect(readStoredTheme(storage)).toBe("light");
+  });
+});
+
+describe("현장 배부 상단 도구", () => {
+  it("offers search and both subscription buttons without an extra menu", () => {
+    vi.stubGlobal("localStorage", { getItem: () => null });
+    try {
+      const markup = renderToStaticMarkup(<App />);
+      const toolbar = markup
+        .split('class="table-toolbar"')[1]
+        .split('class="table-title"')[0];
+      expect(toolbar).toContain('data-testid="people-search"');
+      expect(toolbar).toContain('data-testid="open-draft"');
+      expect(toolbar).toContain('data-testid="open-purchase"');
+      expect(toolbar).not.toContain('aria-label="기타 기능"');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

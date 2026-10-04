@@ -192,6 +192,13 @@ describe("QT Manager desktop flow", () => {
     await setInput("input[name='quantity']", "1");
     await clickButtonByText("구매·전달 기록");
     await waitForText(".toast", "개별 구매와 전달을 기록했습니다");
+    expect(
+      await browser.execute(
+        () =>
+          document.querySelector('.table-toolbar [aria-label="기타 기능"]') ===
+          null,
+      ),
+    ).toBe(true);
 
     await clickButtonByText("신청자 관리");
     await browser.waitUntil(
@@ -958,9 +965,8 @@ describe("QT Manager desktop flow", () => {
     await setInput("input[name='quantity']", "1");
     await clickButtonByText("구매·전달 기록");
     await waitForText(".toast", "개별 구매와 전달을 기록했습니다");
-    await clickButtonByText("", "기타 기능");
-    await clickButtonByText("최근 구매 취소");
-    await waitForText(".toast", "최근 개별 구매를 취소했습니다");
+    await clickButtonByText("", "마지막 동작 되돌리기");
+    await waitForText(".toast", "1달 구독: 되돌렸습니다.");
   });
 
   it("requires active linked memo confirmation before distribution and cancels without recording", async () => {
@@ -1103,6 +1109,7 @@ describe("QT Manager desktop flow", () => {
       return {
         annual: annual.textContent,
         monthly: monthly.textContent,
+        extraMenu: panel.querySelector('[aria-label="기타 기능"]') !== null,
         sameRow: Math.abs(annualRect.top - monthlyRect.top) < 1,
         afterSearch: annualRect.left >= search.right,
         fits: monthlyRect.right <= panel.getBoundingClientRect().right,
@@ -1112,6 +1119,7 @@ describe("QT Manager desktop flow", () => {
     });
     expect(toolbar.annual).toContain("1년 구독");
     expect(toolbar.monthly).toContain("1달 구독");
+    expect(toolbar.extraMenu).toBe(false);
     expect(toolbar.sameRow && toolbar.afterSearch && toolbar.fits).toBe(true);
     expect(toolbar.searchWidth).toBeGreaterThan(80);
     expect(toolbar.overflow).toBe(false);
@@ -1994,7 +2002,20 @@ describe("QT Manager desktop flow", () => {
     await registerE2ePerson(`${menuFixture}보조`);
     await setPersonFilterPreset("전체");
     await setInput('[data-testid="people-search"]', "");
-    await clickButtonByText("", "기타 기능");
+    await browser.waitUntil(async () =>
+      browser.execute(
+        () =>
+          document.querySelectorAll('[data-testid="person-row"] .menu-trigger')
+            .length >= 2,
+      ),
+    );
+    await browser.execute(() => {
+      document
+        .querySelectorAll<HTMLButtonElement>(
+          '[data-testid="person-row"] .menu-trigger',
+        )[1]
+        ?.click();
+    });
     expect(
       await browser.execute(
         () => document.querySelectorAll(".menu-popover").length,
