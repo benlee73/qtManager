@@ -332,7 +332,8 @@ describe("ManagementScreen heading actions", () => {
     expect(markup).toContain("+ 신청자 등록");
     expect(markup).toContain("정보 보완 필요 0명");
     expect(markup).toContain("보관된 신청자만 보기");
-    expect(markup).toContain("입금 확인 필요 0명");
+    expect(markup).not.toContain("입금 확인 필요");
+    expect(markup).not.toContain("payment-queue");
     expect(markup).not.toContain("+ QT 신청자 정식 등록");
     expect(markup).toContain('data-testid="management-heading-help"');
     expect(markup).toMatch(

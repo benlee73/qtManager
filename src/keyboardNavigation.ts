@@ -1,5 +1,5 @@
 export type ListDirection = "down" | "up";
-export type AppScreen = "distribution" | "management";
+export type AppScreen = "distribution" | "management" | "payments";
 
 export function screenForShortcut(
   key: string,

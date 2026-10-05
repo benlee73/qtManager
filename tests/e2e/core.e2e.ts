@@ -3905,16 +3905,53 @@ describe("QT Manager desktop flow", () => {
     await waitForText(".toast", "개별 구매와 전달을 기록했습니다");
     await clickButtonByText("신청자 관리");
     await waitForText('[data-testid="draft-count-filter"]', "2명");
-    await waitForText('[data-testid="payment-count-filter"]', "2명");
-    await browser.execute(() =>
-      document
-        .querySelector<HTMLButtonElement>(
-          '[data-testid="payment-count-filter"]',
-        )
-        ?.click(),
-    );
+    expect(
+      await browser.execute(
+        () =>
+          document.querySelector('[data-testid="payment-count-filter"]') ===
+          null,
+      ),
+    ).toBe(true);
+    await clickButtonByText("입금 관리");
+    await waitForText(".payments-host.screen-visible h2", "입금 관리");
     await waitForText('[data-testid="payment-queue"]', annual);
     await waitForText('[data-testid="payment-queue"]', monthly);
+    await setInput('[data-testid="payment-search"]', monthly);
+    expect(await textOf('[data-testid="payment-queue"]')).not.toContain(annual);
+    await clickButtonByText("신청자 관리");
+    await clickButtonByText("입금 관리");
+    expect(
+      await browser.execute(
+        () =>
+          document.querySelector<HTMLInputElement>(
+            '[data-testid="payment-search"]',
+          )?.value,
+      ),
+    ).toBe(monthly);
+    await setInput('[data-testid="payment-search"]', "");
+    await browser.execute((name) => {
+      const row = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-testid="payment-row"]'),
+      ).find((row) => row.textContent?.includes(name));
+      row?.querySelector<HTMLButtonElement>(".text-button")?.click();
+    }, annual);
+    await waitForText(
+      ".management-host.screen-visible .person-detail-panel",
+      annual,
+    );
+    await clickButtonByText("입금 관리");
+    await waitForText('[data-testid="payment-queue"]', monthly);
+    await browser.execute(() => {
+      (document.activeElement as HTMLElement)?.blur();
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "/", bubbles: true }),
+      );
+    });
+    expect(
+      await browser.execute(() =>
+        document.activeElement?.getAttribute("data-testid"),
+      ),
+    ).toBe("payment-search");
     await browser.setWindowSize(1800, 1280);
     const paymentControlsFit = await browser.execute(() => {
       const buttons = Array.from(
@@ -3939,13 +3976,38 @@ describe("QT Manager desktop flow", () => {
         ?.querySelector<HTMLButtonElement>('[data-testid="confirm-payment"]')
         ?.click();
     }, annual);
-    await waitForText('[data-testid="payment-count-filter"]', "1명");
+    await waitForText('[data-testid="payment-queue"] h3', "1건");
+    await browser.execute(() => {
+      (document.activeElement as HTMLElement)?.blur();
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "z",
+          metaKey: true,
+          ctrlKey: true,
+          bubbles: true,
+        }),
+      );
+    });
+    await waitForText('[data-testid="payment-queue"] h3', "2건");
+    await browser.execute(() =>
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "z",
+          metaKey: true,
+          ctrlKey: true,
+          shiftKey: true,
+          bubbles: true,
+        }),
+      ),
+    );
+    await waitForText('[data-testid="payment-queue"] h3', "1건");
     expect(await textOf('[data-testid="payment-queue"]')).not.toContain(annual);
     await clickButtonByText("확인한 내역 보기");
     await waitForText('[data-testid="payment-queue"]', annual);
     await clickButtonByText("확인 취소");
-    await waitForText('[data-testid="payment-count-filter"]', "2명");
+    await waitForText('[data-testid="payment-queue"] h3', "0건");
     await clickButtonByText("확인 대기 보기");
+    await waitForText('[data-testid="payment-queue"] h3', "2건");
     await browser.execute(() =>
       document
         .querySelector<HTMLInputElement>(
@@ -3958,7 +4020,7 @@ describe("QT Manager desktop flow", () => {
       '[data-testid="payment-queue"]',
       "입금 확인이 필요한 신청이 없습니다.",
     );
-    await waitForText('[data-testid="payment-count-filter"]', "0명");
+    await waitForText('[data-testid="payment-queue"] h3', "0건");
     const people = await invokeTauri<{
       people: { id: string; name: string }[];
     }>("load_people_management_command", {
@@ -3980,6 +4042,26 @@ describe("QT Manager desktop flow", () => {
     );
     await waitForText('[data-testid="management-person"]', monthly);
     expect(await textOf(".management-person-list")).not.toContain(annual);
+    await clickButtonByText("입금 관리");
+    await clickButtonByText("확인한 내역 보기");
+    await waitForText('[data-testid="payment-queue"]', monthly);
+    await browser.execute((name) => {
+      const row = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-testid="payment-row"]'),
+      ).find((row) => row.textContent?.includes(name));
+      row?.querySelector<HTMLButtonElement>(".text-button")?.click();
+    }, monthly);
+    await waitForText(
+      ".management-host.screen-visible .person-detail-panel",
+      monthly,
+    );
+    expect(
+      await browser.execute(() =>
+        document
+          .querySelector('[data-testid="archived-count-filter"]')
+          ?.getAttribute("aria-pressed"),
+      ),
+    ).toBe("true");
   });
 
   it("records group quantities, searches memos, and shows the complete statistic at minimum width", async () => {
@@ -4037,7 +4119,11 @@ describe("QT Manager desktop flow", () => {
     await browser.saveScreenshot("test-results/group-minimum.png");
     await clickButtonByText("신청자 관리");
     await waitForText('[data-testid="draft-count-filter"]', "0명");
-    await waitForText('[data-testid="payment-count-filter"]', "0명");
+    await clickButtonByText("입금 관리");
+    await waitForText(
+      '[data-testid="payment-queue"]',
+      "입금 확인이 필요한 신청이 없습니다.",
+    );
     await browser.setWindowSize(2000, 1440);
   });
 

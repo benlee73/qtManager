@@ -31,13 +31,6 @@ import {
   updatePerson,
 } from "./phase3";
 
-import { PaymentQueue } from "./PaymentQueue";
-import {
-  loadPayments,
-  setPaymentConfirmed,
-  type PaymentView,
-} from "./payments";
-
 type ManagementDialog =
   | { type: "register" }
   | { type: "applications" }
@@ -72,10 +65,9 @@ export function ManagementScreen({
   onStateImported?: () => void;
 }) {
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<
-    "all" | "completion" | "archived" | "payments"
-  >("all");
-  const [payments, setPayments] = useState<PaymentView[]>([]);
+  const [filter, setFilter] = useState<"all" | "completion" | "archived">(
+    "all",
+  );
   const [management, setManagement] = useState<PeopleManagement | null>(null);
   const [selection, setSelection] = useState<ManagementSelection>({
     selectedId: null,
@@ -99,17 +91,10 @@ export function ManagementScreen({
     });
   }
   const loader = loaderRef.current;
-  const paymentRequestId = useRef(0);
-
-  const refresh = useCallback(async () => {
-    const requestId = ++paymentRequestId.current;
-    await Promise.all([
-      loader.refresh(query, true),
-      loadPayments().then((rows) => {
-        if (paymentRequestId.current === requestId) setPayments(rows);
-      }),
-    ]);
-  }, [loader, query]);
+  const refresh = useCallback(
+    () => loader.refresh(query, true),
+    [loader, query],
+  );
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -132,7 +117,12 @@ export function ManagementScreen({
       if (query !== "") setQuery("");
       return;
     }
-    setFilter("all");
+    setFilter(
+      management.people.find((person) => person.id === focusPersonId)
+        ?.status === "보관됨"
+        ? "archived"
+        : "all",
+    );
     void loader.select(focusPersonId);
     onFocusConsumed?.();
   }, [focusPersonId, loader, management, onFocusConsumed, query]);
@@ -175,7 +165,7 @@ export function ManagementScreen({
   }, [filter, management]);
 
   useEffect(() => {
-    if (!management || filter === "payments" || focusPersonId) return;
+    if (!management || focusPersonId) return;
     if (
       !visibleManagementPeople.some(
         (person) => person.id === selection.selectedId,
@@ -239,9 +229,7 @@ export function ManagementScreen({
         </div>
       </section>
 
-      <section
-        className={`management-grid ${filter === "payments" ? "management-payment-mode" : ""}`}
-      >
+      <section className="management-grid">
         <div className="management-list-panel">
           <label className="search-box management-search">
             <span aria-hidden="true">⌕</span>
@@ -294,23 +282,6 @@ export function ManagementScreen({
               정보 보완 필요 {management?.draftCount ?? 0}명
             </button>
             <button
-              className={`count-filter ${filter === "payments" ? "active" : ""}`}
-              data-testid="payment-count-filter"
-              type="button"
-              aria-pressed={filter === "payments"}
-              onClick={() => setFilter("payments")}
-            >
-              입금 확인 필요{" "}
-              {
-                new Set(
-                  payments
-                    .filter((row) => row.status === "pending")
-                    .map((row) => row.personId ?? `purchase:${row.id}`),
-                ).size
-              }
-              명
-            </button>
-            <button
               className={`count-filter ${filter === "archived" ? "active" : ""}`}
               data-testid="archived-count-filter"
               type="button"
@@ -320,136 +291,98 @@ export function ManagementScreen({
               보관된 신청자만 보기 {management?.archivedCount ?? 0}명
             </button>
           </div>
-          {filter !== "payments" && (
-            <div className="management-result-count">
-              검색 결과 {visibleManagementPeople.length}명
-            </div>
-          )}
-          {filter !== "payments" && (
-            <ManagementPersonList
-              people={visibleManagementPeople}
-              selectedId={selection.selectedId}
-              onSelect={(id) => void loader.select(id)}
-              onReturnToSearch={() => {
-                loader.select(null);
-                managementSearchRef.current?.focus();
-              }}
-            />
-          )}
+          <div className="management-result-count">
+            검색 결과 {visibleManagementPeople.length}명
+          </div>
+          <ManagementPersonList
+            people={visibleManagementPeople}
+            selectedId={selection.selectedId}
+            onSelect={(id) => void loader.select(id)}
+            onReturnToSearch={() => {
+              loader.select(null);
+              managementSearchRef.current?.focus();
+            }}
+          />
         </div>
 
-        {filter === "payments" ? (
-          <PaymentQueue
-            rows={payments}
-            query={query}
-            busy={busy}
-            onViewPerson={(id) => {
-              setQuery("");
-              setFilter(
-                management?.people.find((person) => person.id === id)
-                  ?.status === "보관됨"
-                  ? "archived"
-                  : "all",
-              );
-              void loader.select(id);
-            }}
-            onConfirm={async (rows, confirmed) => {
-              const selections = rows.map(({ id, kind }) => ({ id, kind }));
-              const saved = await mutate(
-                () => setPaymentConfirmed(selections, confirmed),
-                confirmed
-                  ? "입금을 확인했습니다."
-                  : "입금 확인을 취소했습니다.",
-              );
-              if (saved)
+        <PersonDetailPanel
+          detail={selection.detail}
+          busy={busy}
+          onEdit={(person) => setDialog({ type: "edit", person })}
+          onRenew={(person) => setDialog({ type: "renew", person })}
+          onCreateMemo={(personId, content) => {
+            let createdId = "";
+            return mutate(async () => {
+              createdId = await createMemo(personId, content);
+            }, "메모를 저장했습니다.").then((saved) => {
+              if (saved) {
                 recordAction({
-                  description: confirmed ? "입금 확인" : "입금 확인 취소",
-                  undo: () => setPaymentConfirmed(selections, !confirmed),
-                  redo: () => setPaymentConfirmed(selections, confirmed),
+                  description: "연결 메모 추가",
+                  undo: () => updateMemoStatus(createdId, true),
+                  redo: () => updateMemoStatus(createdId, false),
                 });
+              }
               return saved;
-            }}
-          />
-        ) : (
-          <PersonDetailPanel
-            detail={selection.detail}
-            busy={busy}
-            onEdit={(person) => setDialog({ type: "edit", person })}
-            onRenew={(person) => setDialog({ type: "renew", person })}
-            onCreateMemo={(personId, content) => {
-              let createdId = "";
-              return mutate(async () => {
-                createdId = await createMemo(personId, content);
-              }, "메모를 저장했습니다.").then((saved) => {
-                if (saved) {
-                  recordAction({
-                    description: "연결 메모 추가",
-                    undo: () => updateMemoStatus(createdId, true),
-                    redo: () => updateMemoStatus(createdId, false),
-                  });
-                }
-                return saved;
-              });
-            }}
-            onUpdateMemo={(memo, content) =>
-              mutate(
-                () => updateMemo(memo.id, content),
-                "메모를 수정했습니다.",
-              ).then((saved) => {
-                if (saved) {
-                  recordAction({
-                    description: "메모 수정",
-                    undo: () => updateMemo(memo.id, memo.content),
-                    redo: () => updateMemo(memo.id, content),
-                  });
-                }
-                return saved;
-              })
-            }
-            onArchiveMemo={(memo, archived) =>
-              mutate(
-                () => updateMemoStatus(memo.id, archived),
-                archived ? "메모를 보관했습니다." : "메모를 복원했습니다.",
-              ).then((saved) => {
-                if (saved) {
-                  recordAction({
-                    description: archived ? "메모 보관" : "메모 복원",
-                    undo: () => updateMemoStatus(memo.id, !archived),
-                    redo: () => updateMemoStatus(memo.id, archived),
-                  });
-                }
-                return saved;
-              })
-            }
-            onDeleteMemo={(memo) => {
-              if (!window.confirm("이 메모를 삭제할까요?")) {
-                return Promise.resolve(false);
+            });
+          }}
+          onUpdateMemo={(memo, content) =>
+            mutate(
+              () => updateMemo(memo.id, content),
+              "메모를 수정했습니다.",
+            ).then((saved) => {
+              if (saved) {
+                recordAction({
+                  description: "메모 수정",
+                  undo: () => updateMemo(memo.id, memo.content),
+                  redo: () => updateMemo(memo.id, content),
+                });
               }
-              return mutate(() => deleteMemo(memo.id), "메모를 삭제했습니다.");
-            }}
-            onToggleArchived={(person) =>
-              void mutate(
-                () => setPersonArchived(person.id, person.status !== "보관됨"),
-                person.status === "보관됨"
-                  ? "QT 신청자를 일반 목록으로 복원했습니다."
-                  : "QT 신청자를 보관했습니다.",
+              return saved;
+            })
+          }
+          onArchiveMemo={(memo, archived) =>
+            mutate(
+              () => updateMemoStatus(memo.id, archived),
+              archived ? "메모를 보관했습니다." : "메모를 복원했습니다.",
+            ).then((saved) => {
+              if (saved) {
+                recordAction({
+                  description: archived ? "메모 보관" : "메모 복원",
+                  undo: () => updateMemoStatus(memo.id, !archived),
+                  redo: () => updateMemoStatus(memo.id, archived),
+                });
+              }
+              return saved;
+            })
+          }
+          onDeleteMemo={(memo) => {
+            if (!window.confirm("이 메모를 삭제할까요?")) {
+              return Promise.resolve(false);
+            }
+            return mutate(() => deleteMemo(memo.id), "메모를 삭제했습니다.");
+          }}
+          onToggleArchived={(person) =>
+            void mutate(
+              () => setPersonArchived(person.id, person.status !== "보관됨"),
+              person.status === "보관됨"
+                ? "QT 신청자를 일반 목록으로 복원했습니다."
+                : "QT 신청자를 보관했습니다.",
+            )
+          }
+          onDelete={(person) => {
+            if (
+              !window.confirm(
+                "이 신청자를 영구 삭제할까요? 구독·배부·개별 구매·메모 이력이 있는 신청자는 삭제할 수 없고 보관만 가능합니다.",
               )
+            ) {
+              return Promise.resolve(false);
             }
-            onDelete={(person) => {
-              if (
-                !window.confirm(
-                  "이 신청자를 영구 삭제할까요? 구독·배부·개별 구매·메모 이력이 있는 신청자는 삭제할 수 없고 보관만 가능합니다.",
-                )
-              ) {
-                return Promise.resolve(false);
-              }
-              return mutate(
-                () => deletePerson(person.id),
-                "QT 신청자를 삭제했습니다.",
-              );
-            }}
-          />
-        )}
+            return mutate(
+              () => deletePerson(person.id),
+              "QT 신청자를 삭제했습니다.",
+            );
+          }}
+        />
       </section>
 
       {dialog?.type === "register" && (

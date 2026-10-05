@@ -9,6 +9,7 @@ import { MemoDetailDialog } from "./MemoDetailDialog";
 import { HelpPanel } from "./HelpPanel";
 import { ChevronLeftIcon, ChevronRightIcon, RedoIcon, UndoIcon } from "./Icons";
 import { ManagementScreen } from "./ManagementScreen";
+import { PaymentsScreen } from "./PaymentsScreen";
 import { NotificationStack } from "./Notifications";
 import { PersonFilterMenu } from "./PersonFilterMenu";
 import { PersonContextMenu } from "./PersonContextMenu";
@@ -60,9 +61,9 @@ import {
 } from "./keyboardNavigation";
 
 export default function App() {
-  const [screen, setScreen] = useState<"distribution" | "management">(
-    "distribution",
-  );
+  const [screen, setScreen] = useState<
+    "distribution" | "management" | "payments"
+  >("distribution");
   const [managementFocusId, setManagementFocusId] = useState<string | null>(
     null,
   );
@@ -405,12 +406,21 @@ export default function App() {
             ? document.querySelector<HTMLInputElement>(
                 '[data-testid="management-search"]',
               )
-            : searchRef.current;
+            : screen === "payments"
+              ? document.querySelector<HTMLInputElement>(
+                  '[data-testid="payment-search"]',
+                )
+              : searchRef.current;
         targetSearch?.focus();
       } else if (shortcutScreen) {
         event.preventDefault();
         setScreen(shortcutScreen);
-      } else if (modified && !textEntry && event.key === "Enter") {
+      } else if (
+        screen === "distribution" &&
+        modified &&
+        !textEntry &&
+        event.key === "Enter"
+      ) {
         event.preventDefault();
         const person = visiblePeople.find(
           (candidate) => candidate.personId === activePersonId,
@@ -572,6 +582,7 @@ export default function App() {
         theme={theme}
         onDistribution={() => setScreen("distribution")}
         onManagement={() => setScreen("management")}
+        onPayments={() => setScreen("payments")}
         onTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
         onHelp={() => setHelpOpen(true)}
         onOperator={() => setDialog({ type: "operator" })}
@@ -600,6 +611,27 @@ export default function App() {
             clearHistory();
             setDataVersion((current) => current + 1);
             void refresh();
+          }}
+        />
+      </div>
+
+      <div
+        className={`payments-host ${screen === "payments" ? "screen-visible" : "screen-hidden"}`}
+        aria-hidden={screen !== "payments"}
+      >
+        <PaymentsScreen
+          active={screen === "payments"}
+          dataVersion={dataVersion}
+          notify={notify}
+          recordAction={recordAction}
+          onExternalChange={() => {
+            setRedoStack([]);
+            setDataVersion((current) => current + 1);
+            void refresh();
+          }}
+          onViewPerson={(id) => {
+            setManagementFocusId(id);
+            setScreen("management");
           }}
         />
       </div>

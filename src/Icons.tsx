@@ -51,6 +51,15 @@ export function PeopleIcon() {
   );
 }
 
+export function PaymentIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M3 9h18M7 14h3m5 0 2 2 3-3" />
+    </svg>
+  );
+}
+
 export function HelpIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">

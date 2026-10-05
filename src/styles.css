@@ -2056,7 +2056,8 @@ kbd {
   font-weight: 800;
 }
 
-.management-host {
+.management-host,
+.payments-host {
   min-height: 0;
   grid-column: 2;
   grid-row: 1;
@@ -2147,22 +2148,16 @@ kbd {
   padding: 4px 12px 8px;
   font-size: var(--font-sm);
 }
-.management-grid.management-payment-mode {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
+.payments-screen > .payment-queue {
+  margin: 0 18px 18px;
 }
-.management-payment-mode .management-list-panel {
-  grid-template-columns: minmax(200px, 1fr) minmax(0, 2fr);
-  grid-template-rows: auto;
-  align-items: center;
-  gap: 12px;
-  border-right: 0;
-  border-bottom: 1px solid var(--line);
-  padding: 12px;
+.payment-search {
+  width: min(360px, 55%);
+  background: var(--input);
 }
-.management-payment-mode .management-counts {
-  margin: 0;
-  justify-content: flex-start;
+.payment-search input {
+  min-width: 0;
+  width: 100%;
 }
 .memo-search input::-webkit-search-decoration {
   appearance: none;

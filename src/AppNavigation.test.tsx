@@ -6,6 +6,7 @@ import { AppNavigation } from "./AppNavigation";
 const handlers = {
   onDistribution: vi.fn(),
   onManagement: vi.fn(),
+  onPayments: vi.fn(),
   onTheme: vi.fn(),
   onHelp: vi.fn(),
   onOperator: vi.fn(),
@@ -26,6 +27,10 @@ describe("AppNavigation", () => {
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain("현장 배부");
     expect(markup).toContain("신청자 관리");
+    expect(markup).toContain("입금 관리");
+    expect(markup.indexOf("신청자 관리")).toBeLessThan(
+      markup.indexOf("입금 관리"),
+    );
     expect(markup).toContain("도움말");
     expect(markup).toContain("다크 테마 사용 중");
     expect(markup).toContain("교육국 담당자");
@@ -51,6 +56,15 @@ describe("AppNavigation", () => {
 
     expect(markup).toContain('data-testid="open-management"');
     expect(markup).toContain("라이트 테마 사용 중");
+    expect(markup.match(/aria-current="page"/g)).toHaveLength(1);
+  });
+  it("marks only payment management as active when its independent screen is open", () => {
+    const markup = renderToStaticMarkup(
+      <AppNavigation active="payments" theme="dark" {...handlers} />,
+    );
+    expect(markup).toMatch(
+      /data-testid="open-payments"[^>]*aria-current="page"/,
+    );
     expect(markup.match(/aria-current="page"/g)).toHaveLength(1);
   });
 });

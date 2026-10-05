@@ -4,15 +4,17 @@ import {
   DistributionIcon,
   HelpIcon,
   PeopleIcon,
+  PaymentIcon,
   ThemeIcon,
 } from "./Icons";
 
 type AppNavigationProps = {
-  active: "distribution" | "management";
+  active: "distribution" | "management" | "payments";
   operator?: string | null;
   theme: Theme;
   onDistribution: () => void;
   onManagement: () => void;
+  onPayments: () => void;
   onTheme: () => void;
   onHelp: () => void;
   onOperator: () => void;
@@ -24,6 +26,7 @@ export function AppNavigation({
   theme,
   onDistribution,
   onManagement,
+  onPayments,
   onTheme,
   onHelp,
   onOperator,
@@ -54,6 +57,16 @@ export function AppNavigation({
         >
           <PeopleIcon />
           <span>신청자 관리</span>
+        </button>
+        <button
+          className={`rail-item ${active === "payments" ? "active" : ""}`}
+          type="button"
+          data-testid="open-payments"
+          aria-current={active === "payments" ? "page" : undefined}
+          onClick={onPayments}
+        >
+          <PaymentIcon />
+          <span>입금 관리</span>
         </button>
       </div>
 
