@@ -2139,8 +2139,7 @@ kbd {
   font-size: var(--font-sm);
 }
 .management-filters {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 6px;
 }
 .management-result-count {

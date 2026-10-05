@@ -4162,6 +4162,40 @@ describe("QT Manager desktop flow", () => {
     });
     expect(countLabel.ariaLabel).toContain(draftName);
     expect(countLabel.title).toContain(draftName);
+    await browser.setWindowSize(1800, 1280);
+    const filtersAlign = await browser.execute(() => {
+      const buttons = Array.from(
+        document.querySelectorAll<HTMLElement>(".management-filters > button"),
+      );
+      const rects = buttons.map((button) => button.getBoundingClientRect());
+      const labels = buttons.map((button) =>
+        button.querySelector("span")?.getBoundingClientRect(),
+      );
+      const counts = buttons.flatMap((button) => {
+        const count = button.querySelector(".filter-count");
+        return count ? [count.getBoundingClientRect()] : [];
+      });
+      return (
+        buttons.length === 3 &&
+        labels.every(
+          (label) => label && Math.abs(label.left - labels[0]!.left) < 1,
+        ) &&
+        rects.every(
+          (rect, index) =>
+            Math.abs(rect.width - rects[0].width) < 1 &&
+            (!index || rect.top >= rects[index - 1].bottom),
+        ) &&
+        counts.length === 2 &&
+        Math.abs(counts[0].right - counts[1].right) < 1 &&
+        buttons.every((button) => button.scrollWidth <= button.clientWidth)
+      );
+    });
+    expect(filtersAlign).toBe(true);
+    expect(await textOf('[data-testid="archived-count-filter"]')).not.toContain(
+      "만 보기",
+    );
+    await browser.saveScreenshot("test-results/management-filters-minimum.png");
+    await browser.setWindowSize(2000, 1440);
     await browser.execute(() => {
       document
         .querySelector<HTMLButtonElement>('[data-testid="draft-count-filter"]')

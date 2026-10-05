@@ -266,7 +266,7 @@ export function ManagementScreen({
               aria-pressed={filter === "all"}
               onClick={() => setFilter("all")}
             >
-              전체
+              <span>전체</span>
             </button>
             <button
               className={`count-filter ${filter === "completion" ? "active" : ""}`}
@@ -279,7 +279,10 @@ export function ManagementScreen({
               )}
               onClick={() => setFilter("completion")}
             >
-              정보 보완 필요 {management?.draftCount ?? 0}명
+              <span>정보 보완 필요</span>{" "}
+              <span className="filter-count">
+                {management?.draftCount ?? 0}명
+              </span>
             </button>
             <button
               className={`count-filter ${filter === "archived" ? "active" : ""}`}
@@ -288,7 +291,10 @@ export function ManagementScreen({
               aria-pressed={filter === "archived"}
               onClick={() => setFilter("archived")}
             >
-              보관된 신청자만 보기 {management?.archivedCount ?? 0}명
+              <span>보관된 신청자</span>{" "}
+              <span className="filter-count">
+                {management?.archivedCount ?? 0}명
+              </span>
             </button>
           </div>
           <div className="management-result-count">

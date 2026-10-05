@@ -117,9 +117,9 @@
 }
 
 .management-counts {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
   gap: 0.75rem;
   margin-top: 0.7rem;
   padding: 0.7rem 0.65rem 0.65rem;
@@ -137,14 +137,19 @@
 }
 
 .count-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
   overflow: hidden;
-  padding: 0;
+  padding: 4px 2px;
   border: 0;
   color: var(--muted);
   background: transparent;
   font-size: inherit;
   font-weight: inherit;
-  text-align: right;
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
