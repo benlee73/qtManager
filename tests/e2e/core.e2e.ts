@@ -1642,6 +1642,54 @@ describe("QT Manager desktop flow", () => {
     expect(shiftEnter).toEqual({ defaultPrevented: false, value: "첫 줄" });
   });
 
+  it("switches to payments with Ctrl or Command from search and respects modal boundaries", async () => {
+    for (const modifier of ["ctrlKey", "metaKey"] as const) {
+      await browser.execute((key) => {
+        const search = document.querySelector<HTMLInputElement>(
+          '[data-testid="people-search"]',
+        )!;
+        search.focus();
+        search.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "3",
+            [key]: true,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      }, modifier);
+      await waitForText(".payments-host.screen-visible h2", "입금 관리");
+      await dispatchShortcut("1");
+      await browser.waitUntil(async () =>
+        browser.execute(
+          () => document.querySelector(".desk.screen-visible") !== null,
+        ),
+      );
+    }
+    await clickButtonByText("+ 1년 구독");
+    await dispatchShortcut("3");
+    expect(
+      await browser.execute(
+        () => document.querySelector(".payments-host.screen-visible") === null,
+      ),
+    ).toBe(true);
+    await browser.keys("Escape");
+    await clickButtonByText("도움말");
+    await waitForText("#help-title", "QT Manager 도움말");
+    await dispatchShortcut("3");
+    expect(
+      await browser.execute(
+        () => document.querySelector(".payments-host.screen-visible") === null,
+      ),
+    ).toBe(true);
+    await browser.keys("Escape");
+    await browser.waitUntil(async () =>
+      browser.execute(() => document.querySelector("#help-title") === null),
+    );
+    await dispatchShortcut("3");
+    await waitForText(".payments-host.screen-visible h2", "입금 관리");
+  });
+
   it("moves through management applicants from the search field and refreshes detail", async () => {
     const keyboardFixture = `가상관리키보드${Date.now()}`;
     await registerE2ePerson(`${keyboardFixture}가`);
@@ -3881,7 +3929,7 @@ describe("QT Manager desktop flow", () => {
 
   it("refreshes incomplete on-site intakes immediately and confirms annual and one-issue payments", async () => {
     await clickButtonByText("신청자 관리");
-    await waitForText('[data-testid="draft-count-filter"]', "0명");
+    await waitForText('[data-testid="draft-count-filter"]', "누락");
     await clickButtonByText("현장 배부");
     const annual = `가상입금연간${Date.now()}`;
     const monthly = `가상입금한호${Date.now()}`;
@@ -3890,7 +3938,7 @@ describe("QT Manager desktop flow", () => {
     await clickButtonByText("1년 구독 신청");
     await waitForText(".toast", "현장 신청자를 추가했습니다");
     await clickButtonByText("신청자 관리");
-    await waitForText('[data-testid="draft-count-filter"]', "1명");
+    await waitForText('[data-testid="draft-count-filter"]', "누락");
     await browser.execute(() =>
       document
         .querySelector<HTMLButtonElement>('[data-testid="draft-count-filter"]')
@@ -3904,7 +3952,15 @@ describe("QT Manager desktop flow", () => {
     await clickButtonByText("구매·전달 기록");
     await waitForText(".toast", "개별 구매와 전달을 기록했습니다");
     await clickButtonByText("신청자 관리");
-    await waitForText('[data-testid="draft-count-filter"]', "2명");
+    await browser.waitUntil(async () =>
+      browser.execute(
+        (name) =>
+          Array.from(
+            document.querySelectorAll('[data-testid="management-person"]'),
+          ).some((row) => row.textContent?.includes(name)),
+        monthly,
+      ),
+    );
     expect(
       await browser.execute(
         () =>
@@ -4040,7 +4096,15 @@ describe("QT Manager desktop flow", () => {
         )
         ?.click(),
     );
-    await waitForText('[data-testid="management-person"]', monthly);
+    await browser.waitUntil(async () =>
+      browser.execute(
+        (name) =>
+          Array.from(
+            document.querySelectorAll('[data-testid="management-person"]'),
+          ).some((row) => row.textContent?.includes(name)),
+        monthly,
+      ),
+    );
     expect(await textOf(".management-person-list")).not.toContain(annual);
     await clickButtonByText("입금 관리");
     await clickButtonByText("확인한 내역 보기");
@@ -4118,7 +4182,7 @@ describe("QT Manager desktop flow", () => {
     expect(memoSearchFits).toBe(true);
     await browser.saveScreenshot("test-results/group-minimum.png");
     await clickButtonByText("신청자 관리");
-    await waitForText('[data-testid="draft-count-filter"]', "0명");
+    await waitForText('[data-testid="draft-count-filter"]', "누락");
     await clickButtonByText("입금 관리");
     await waitForText(
       '[data-testid="payment-queue"]',
@@ -4150,7 +4214,7 @@ describe("QT Manager desktop flow", () => {
     await waitForText("h2", "신청자 관리");
     await setInput('[data-testid="management-search"]', draftName);
     await waitForText('[data-testid="management-person"]', draftName);
-    await waitForText('[data-testid="draft-count-filter"]', "정보 보완 필요");
+    await waitForText('[data-testid="draft-count-filter"]', "누락");
     const countLabel = await browser.execute(() => {
       const button = document.querySelector<HTMLButtonElement>(
         '[data-testid="draft-count-filter"]',
@@ -4168,25 +4232,17 @@ describe("QT Manager desktop flow", () => {
         document.querySelectorAll<HTMLElement>(".management-filters > button"),
       );
       const rects = buttons.map((button) => button.getBoundingClientRect());
-      const labels = buttons.map((button) =>
-        button.querySelector("span")?.getBoundingClientRect(),
-      );
-      const counts = buttons.flatMap((button) => {
-        const count = button.querySelector(".filter-count");
-        return count ? [count.getBoundingClientRect()] : [];
-      });
+      const labels = buttons.map((button) => button.textContent?.trim());
       return (
         buttons.length === 3 &&
-        labels.every(
-          (label) => label && Math.abs(label.left - labels[0]!.left) < 1,
-        ) &&
+        labels.join("/") === "전체/누락/보관" &&
         rects.every(
           (rect, index) =>
             Math.abs(rect.width - rects[0].width) < 1 &&
-            (!index || rect.top >= rects[index - 1].bottom),
+            Math.abs(rect.top - rects[0].top) < 1 &&
+            (!index || rect.left >= rects[index - 1].right),
         ) &&
-        counts.length === 2 &&
-        Math.abs(counts[0].right - counts[1].right) < 1 &&
+        buttons.every((button) => !button.querySelector(".filter-count")) &&
         buttons.every((button) => button.scrollWidth <= button.clientWidth)
       );
     });

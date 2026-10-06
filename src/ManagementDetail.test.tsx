@@ -330,10 +330,10 @@ describe("ManagementScreen heading actions", () => {
     expect(markup).toContain("데이터 백업·복원");
     expect(markup).toContain("스프레드시트 붙여넣기");
     expect(markup).toContain("+ 신청자 등록");
-    expect(markup).toContain("정보 보완 필요 0명");
-    expect(markup).toContain("<span>보관된 신청자</span>");
+    expect(markup).toContain("<span>누락</span>");
+    expect(markup).toContain("<span>보관</span>");
     expect(markup).not.toContain("보관된 신청자만 보기");
-    expect(markup).toContain('<span class="filter-count">0명</span>');
+    expect(markup).not.toContain('class="filter-count"');
     expect(markup).not.toContain("입금 확인 필요");
     expect(markup).not.toContain("payment-queue");
     expect(markup).not.toContain("+ QT 신청자 정식 등록");

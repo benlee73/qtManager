@@ -8,6 +8,7 @@ export function screenForShortcut(
   if (!modified) return null;
   if (key === "1") return "distribution";
   if (key === "2") return "management";
+  if (key === "3") return "payments";
   return null;
 }
 

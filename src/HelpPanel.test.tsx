@@ -26,8 +26,8 @@ describe("HelpPanel", () => {
     expect(markup).toContain("신청자에 연결된 메모를 수정·보관·삭제");
     expect(markup).not.toContain("정식 등록");
     expect(markup).toContain("정보 보완이나 보관 상태는 작은 표시");
-    expect(markup).toContain("정보 보완 필요 N명");
-    expect(markup).toContain("또래가 없는 일반 신청자 수입니다.");
+    expect(markup).toContain("‘전체 / 누락 / 보관’");
+    expect(markup).toContain("또래가 없는 일반 신청자를 표시합니다.");
     expect(markup).toContain("보관된 구독은 과거 기록을 보존");
     expect(markup).toContain('data-testid="help-nav-people"');
     expect(markup).toContain('aria-current="location"');
@@ -54,6 +54,8 @@ describe("HelpPanel", () => {
     expect(markup).toContain('class="help-secondary-action"');
     expect(markup).toContain("⌘/Ctrl + 1");
     expect(markup).toContain("⌘/Ctrl + 2");
+    expect(markup).toContain("⌘/Ctrl + 3");
+    expect(markup).toContain("입금 관리로 이동");
     expect(markup).toContain("신청자 상세의 `신청자 삭제`");
     expect(markup).toContain('data-testid="help-backdrop"');
     expect(markup).toContain('data-testid="help-panel"');

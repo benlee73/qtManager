@@ -7,11 +7,13 @@ import {
 } from "./keyboardNavigation";
 
 describe("keyboard list navigation", () => {
-  it("maps modified number shortcuts to the two primary screens", () => {
+  it("maps modified number shortcuts to all three primary screens", () => {
     expect(screenForShortcut("1", true)).toBe("distribution");
     expect(screenForShortcut("2", true)).toBe("management");
     expect(screenForShortcut("1", false)).toBeNull();
-    expect(screenForShortcut("3", true)).toBeNull();
+    expect(screenForShortcut("3", true)).toBe("payments");
+    expect(screenForShortcut("3", false)).toBeNull();
+    expect(screenForShortcut("4", true)).toBeNull();
   });
 
   it("enters at the first item and moves down without passing the end", () => {

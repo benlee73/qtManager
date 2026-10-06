@@ -271,7 +271,7 @@ export function ManagementScreen({
             <button
               className={`count-filter ${filter === "completion" ? "active" : ""}`}
               data-testid="draft-count-filter"
-              aria-label={`정보 보완 필요 ${management?.draftCount ?? 0}명: ${profileCompletionNames(profileCompletionPeople(management?.people ?? []))}`}
+              aria-label={`누락: ${profileCompletionNames(profileCompletionPeople(management?.people ?? []))}`}
               type="button"
               aria-pressed={filter === "completion"}
               title={profileCompletionNames(
@@ -279,10 +279,7 @@ export function ManagementScreen({
               )}
               onClick={() => setFilter("completion")}
             >
-              <span>정보 보완 필요</span>{" "}
-              <span className="filter-count">
-                {management?.draftCount ?? 0}명
-              </span>
+              <span>누락</span>
             </button>
             <button
               className={`count-filter ${filter === "archived" ? "active" : ""}`}
@@ -291,10 +288,7 @@ export function ManagementScreen({
               aria-pressed={filter === "archived"}
               onClick={() => setFilter("archived")}
             >
-              <span>보관된 신청자</span>{" "}
-              <span className="filter-count">
-                {management?.archivedCount ?? 0}명
-              </span>
+              <span>보관</span>
             </button>
           </div>
           <div className="management-result-count">
