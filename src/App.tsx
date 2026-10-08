@@ -1225,7 +1225,18 @@ export default function App() {
           }
         />
       )}
-      {helpOpen && <HelpPanel onClose={() => setHelpOpen(false)} />}
+      {helpOpen && (
+        <HelpPanel
+          topic={
+            screen === "payments"
+              ? "payments"
+              : screen === "management"
+                ? "people"
+                : "distribution"
+          }
+          onClose={() => setHelpOpen(false)}
+        />
+      )}
     </div>
   );
 }

@@ -1666,6 +1666,17 @@ describe("QT Manager desktop flow", () => {
         ),
       );
     }
+    await browser.keys([
+      process.platform === "darwin" ? "Meta" : "Control",
+      "3",
+    ]);
+    await waitForText(".payments-host.screen-visible h2", "입금 관리");
+    await dispatchShortcut("1");
+    await browser.waitUntil(async () =>
+      browser.execute(
+        () => document.querySelector(".desk.screen-visible") !== null,
+      ),
+    );
     await clickButtonByText("+ 1년 구독");
     await dispatchShortcut("3");
     expect(
@@ -4022,7 +4033,32 @@ describe("QT Manager desktop flow", () => {
       );
     });
     expect(paymentControlsFit).toBe(true);
+    expect(
+      await browser.execute(() => {
+        const queue = document.querySelector('[data-testid="payment-queue"]');
+        return (
+          queue?.getAttribute("data-mode") === "pending" &&
+          queue
+            .querySelector('[data-testid="confirm-payment"]')
+            ?.classList.contains("primary-button")
+        );
+      }),
+    ).toBe(true);
     await browser.saveScreenshot("test-results/payment-queue.png");
+    await clickButtonByText("도움말");
+    await browser.waitUntil(async () =>
+      browser.execute(
+        () =>
+          document
+            .querySelector('[data-testid="help-nav-payments"]')
+            ?.getAttribute("aria-current") === "location",
+      ),
+    );
+    await waitForText('[data-testid="help-payments"]', "선택 입금 확인");
+    await browser.keys("Escape");
+    await browser.waitUntil(async () =>
+      browser.execute(() => document.querySelector("#help-title") === null),
+    );
     await browser.setWindowSize(2000, 1440);
     await browser.execute((name) => {
       const row = Array.from(
@@ -4060,6 +4096,28 @@ describe("QT Manager desktop flow", () => {
     expect(await textOf('[data-testid="payment-queue"]')).not.toContain(annual);
     await clickButtonByText("확인한 내역 보기");
     await waitForText('[data-testid="payment-queue"]', annual);
+    expect(
+      await browser.execute(() => {
+        const queue = document.querySelector('[data-testid="payment-queue"]');
+        return (
+          queue?.getAttribute("data-mode") === "history" &&
+          queue.querySelector(".payment-return") !== null &&
+          queue
+            .querySelector('[data-testid="confirm-payment"]')
+            ?.classList.contains("payment-cancel")
+        );
+      }),
+    ).toBe(true);
+    expect(
+      await browser.execute(() => {
+        const button = document.querySelector<HTMLElement>(".payment-return")!;
+        return (
+          button.scrollHeight <= button.clientHeight &&
+          button.scrollWidth <= button.clientWidth
+        );
+      }),
+    ).toBe(true);
+    await browser.saveScreenshot("test-results/payment-history.png");
     await clickButtonByText("확인 취소");
     await waitForText('[data-testid="payment-queue"] h3', "0건");
     await clickButtonByText("확인 대기 보기");
@@ -4238,9 +4296,11 @@ describe("QT Manager desktop flow", () => {
         labels.join("/") === "전체/누락/보관" &&
         rects.every(
           (rect, index) =>
-            Math.abs(rect.width - rects[0].width) < 1 &&
+            rect.width <= 80 &&
             Math.abs(rect.top - rects[0].top) < 1 &&
-            (!index || rect.left >= rects[index - 1].right),
+            (!index ||
+              (rect.left >= rects[index - 1].right &&
+                rect.left - rects[index - 1].right <= 3)),
         ) &&
         buttons.every((button) => !button.querySelector(".filter-count")) &&
         buttons.every((button) => button.scrollWidth <= button.clientWidth)

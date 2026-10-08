@@ -15,6 +15,19 @@ vi.mock("./support", () => ({
 }));
 
 describe("HelpPanel", () => {
+  it("opens the dedicated payments help with confirmation and cancellation guidance", () => {
+    const markup = renderToStaticMarkup(
+      <HelpPanel topic="payments" onClose={vi.fn()} />,
+    );
+    expect(markup).toMatch(
+      /data-testid="help-nav-payments"[^>]*aria-current="location"/,
+    );
+    expect(markup).toContain('data-testid="help-payments"');
+    expect(markup).toContain("선택 입금 확인");
+    expect(markup).toContain("확인 취소");
+    expect(markup).toContain("기존 자료는 입금 확인 대상에 올리지 않습니다.");
+  });
+
   it("explains the management-detail context without exposing personal data", () => {
     const markup = renderToStaticMarkup(
       <HelpPanel topic="people" onClose={vi.fn()} />,
@@ -42,7 +55,7 @@ describe("HelpPanel", () => {
     expect(markup).toContain('data-testid="help-search"');
     expect(markup).toContain("받은 백업 엑셀이 있다면 신청자 관리");
     expect(markup).toContain('class="help-card"');
-    expect(markup).toContain("도움말 2026-08-08");
+    expect(markup).toContain("도움말 2026-10-08");
     expect(markup).not.toContain("인터넷 없이 보는 사용법");
     expect(markup).not.toContain("->");
     expect(markup).toContain('class="help-step-copy"');

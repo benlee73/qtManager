@@ -18,6 +18,7 @@ type HelpTopic =
   | "notes"
   | "people"
   | "purchase"
+  | "payments"
   | "handover"
   | "shortcuts"
   | "install"
@@ -29,6 +30,7 @@ const topics: { id: HelpTopic; label: string }[] = [
   { id: "notes", label: "메모" },
   { id: "people", label: "신규 신청과 갱신" },
   { id: "purchase", label: "1달 구독" },
+  { id: "payments", label: "입금 관리" },
   { id: "handover", label: "데이터 백업·복원" },
   { id: "shortcuts", label: "단축키" },
   { id: "install", label: "설치 문제" },
@@ -367,6 +369,9 @@ export function HelpPanel({
                       메모가 상단에 표시됩니다. 다른 메모는 아래에 유지되며,
                       검색어를 지우면 최근 수정 순으로 돌아갑니다.
                     </li>
+                    <li>
+                      메모 검색창에서는 본문과 연결된 신청자 이름으로 찾습니다.
+                    </li>
                     <li>카드에는 긴 내용도 여러 줄로 모두 표시됩니다.</li>
                     <li>
                       메모 카드를 클릭하면 전문·수정·보관·삭제 화면이 열립니다.
@@ -419,6 +424,11 @@ export function HelpPanel({
                       갱신은 과거 구독을 수정하지 않고 새 6개 호를 추가합니다.
                     </li>
                     <li>기간이 다른 여러 권은 구독 이력을 따로 보존합니다.</li>
+                    <li>
+                      신청자 목록은 간이 등록을 먼저 표시하고, 각 등록 상태
+                      안에서는 이름순으로 정렬합니다. 새로 등록한 순서는
+                      아닙니다.
+                    </li>
                   </HelpList>
                 </HelpCard>
                 <HelpCard title="군지체 권수 기록">
@@ -444,11 +454,11 @@ export function HelpPanel({
                       신청자는 ‘보관’ 버튼으로 모아 볼 수 있습니다.
                     </li>
                     <li>
-                      ‘전체 / 누락 / 보관’ 필터는 한 줄로 표시합니다. ‘누락’은
-                      또래가 없는 일반 신청자를 표시합니다. 연락처는 선택이며
-                      군지체는 제외합니다. 버튼을 누르면 대상자만 필터링되고,
-                      마우스를 올리거나 포커스하면 대상 이름을 확인할 수
-                      있습니다.
+                      ‘전체 / 누락 / 보관’은 간격을 좁힌 한 줄 필터입니다.
+                      ‘누락’은 또래가 없는 일반 신청자를 표시합니다. 연락처는
+                      선택이며 군지체는 제외합니다. 버튼을 누르면 대상자만
+                      필터링되고, 마우스를 올리거나 포커스하면 대상 이름을
+                      확인할 수 있습니다.
                     </li>
                     <li>
                       구독 수·마지막 호는 상세에서 확인합니다. 구독 표는 오늘이
@@ -536,6 +546,70 @@ export function HelpPanel({
                   </li>
                 </HelpList>
               </HelpCard>
+            </HelpSection>
+
+            <HelpSection
+              id="payments"
+              title="입금 관리"
+              hidden={Boolean(
+                helpQuery.trim() && !matchingTopics?.has("payments"),
+              )}
+              sectionRef={(element) => registerSection("payments", element)}
+            >
+              <div className="help-card-grid">
+                <HelpCard title="입금 확인 필요">
+                  <HelpList>
+                    <li>왼쪽 입금 관리 메뉴 또는 ⌘/Ctrl+3으로 엽니다.</li>
+                    <li>
+                      기본 화면은 모든 호의 확인 대기 신청입니다. 새 1년 구독,
+                      갱신, 응답 붙여넣기와 1달 구독은 각각 확인 전으로
+                      시작합니다.
+                    </li>
+                    <li>
+                      이름·또래로 검색하고 신청자 이름을 누르면 상세로
+                      이동합니다.
+                    </li>
+                    <li>
+                      한 건은 ‘입금 확인’, 여러 건은 체크한 뒤 ‘선택 입금
+                      확인’을 누릅니다. 확인한 건은 대기 목록에서 빠집니다.
+                    </li>
+                  </HelpList>
+                </HelpCard>
+                <HelpCard title="확인한 내역 조회">
+                  <HelpList>
+                    <li>
+                      오른쪽 ‘확인한 내역 보기’로 완료 내역을 조회합니다. ‘확인
+                      대기 보기’로 주 작업 화면에 돌아갑니다.
+                    </li>
+                    <li>
+                      잘못 확인했으면 ‘확인 취소’를 누르세요. 여러 건은 체크 후
+                      ‘선택 확인 취소’로 대기 목록에 돌려놓을 수 있습니다.
+                    </li>
+                    <li>
+                      입금 확인·취소는 직후 되돌리기와 다시 실행을 지원합니다.
+                    </li>
+                    <li>
+                      화면 이동 후에도 검색어와 대기·내역 보기 선택을
+                      유지합니다.
+                    </li>
+                  </HelpList>
+                </HelpCard>
+                <HelpCard title="배부와 별도로 확인">
+                  <HelpList>
+                    <li>
+                      입금 확인 전에도 배부할 수 있으며 매 호 다시 확인하지
+                      않습니다.
+                    </li>
+                    <li>기존 자료는 입금 확인 대상에 올리지 않습니다.</li>
+                    <li>
+                      익명 구매도 별도 건으로 확인합니다. 군지체, 취소된 구매,
+                      보관된 구독은 제외하며 신청자 보관만으로 입금 건을 없애지
+                      않습니다.
+                    </li>
+                    <li>금액·결제 방법·계좌 자동 대조는 관리하지 않습니다.</li>
+                  </HelpList>
+                </HelpCard>
+              </div>
             </HelpSection>
 
             <HelpSection
@@ -741,7 +815,7 @@ export function HelpPanel({
             </HelpSection>
 
             <footer>
-              앱 {support?.appVersion ?? "버전 확인 중"} · 도움말 2026-08-08
+              앱 {support?.appVersion ?? "버전 확인 중"} · 도움말 2026-10-08
             </footer>
           </div>
         </div>

@@ -19,6 +19,10 @@ describe("PaymentsScreen", () => {
     expect(markup).toContain('placeholder="이름, 또래 검색"');
     expect(markup).toContain('data-testid="payment-queue"');
     expect(markup).toContain("확인한 내역 보기");
+    expect(markup).toContain('data-mode="pending"');
+    expect(markup).toMatch(
+      /class="primary-button compact"[^>]*[\s\S]*선택 입금 확인/,
+    );
     expect(markup).not.toContain("정보 보완 필요");
     expect(markup).not.toContain("보관된 신청자");
   });

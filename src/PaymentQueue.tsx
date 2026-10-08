@@ -32,31 +32,53 @@ export function PaymentQueue({
     }
   }
   return (
-    <section className="payment-queue" data-testid="payment-queue">
+    <section
+      className="payment-queue"
+      data-testid="payment-queue"
+      data-mode={showConfirmed ? "history" : "pending"}
+    >
       <header>
-        <h3>
-          {showConfirmed ? "입금 확인 내역" : "입금 확인 필요"} {visible.length}
-          건
-        </h3>
+        {showConfirmed && (
+          <button
+            type="button"
+            className="secondary-button compact payment-return"
+            onClick={() => {
+              setShowConfirmed(false);
+              setSelected(new Set());
+            }}
+          >
+            <span aria-hidden="true">← </span>확인 대기 보기
+          </button>
+        )}
+        <div className="payment-queue-title">
+          <h3>
+            {showConfirmed ? "입금 확인 내역" : "입금 확인 필요"}{" "}
+            {visible.length}건
+          </h3>
+          {showConfirmed && (
+            <p>확인이 끝난 신청입니다. 잘못 확인한 건은 취소할 수 있습니다.</p>
+          )}
+        </div>
         <button
           type="button"
-          className="secondary-button compact"
+          className={`${showConfirmed ? "secondary-button" : "primary-button"} compact`}
           disabled={busy || !selection.length}
           onClick={() => void confirm(selection)}
         >
           {showConfirmed ? "선택 확인 취소" : "선택 입금 확인"}
         </button>
-        <button
-          type="button"
-          className="text-button"
-          aria-pressed={showConfirmed}
-          onClick={() => {
-            setShowConfirmed((current) => !current);
-            setSelected(new Set());
-          }}
-        >
-          {showConfirmed ? "확인 대기 보기" : "확인한 내역 보기"}
-        </button>
+        {!showConfirmed && (
+          <button
+            type="button"
+            className="text-button payment-history-link"
+            onClick={() => {
+              setShowConfirmed(true);
+              setSelected(new Set());
+            }}
+          >
+            확인한 내역 보기
+          </button>
+        )}
       </header>
       <div className="payment-table-scroll">
         <table>
@@ -129,9 +151,16 @@ export function PaymentQueue({
                     {formatApplicationDate(row.appliedAt)}
                   </td>
                   <td>
+                    {showConfirmed && (
+                      <span className="payment-confirmed-status">확인됨</span>
+                    )}
                     <button
                       type="button"
-                      className="secondary-button compact"
+                      className={
+                        showConfirmed
+                          ? "text-button payment-cancel"
+                          : "primary-button compact"
+                      }
                       disabled={busy}
                       data-testid="confirm-payment"
                       onClick={() => void confirm([row])}
