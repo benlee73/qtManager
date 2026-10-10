@@ -1559,7 +1559,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .help-backdrop,
-  .help-panel {
+  .help-panel,
+  .help-backdrop-open .help-panel,
+  .help-backdrop-closing .help-panel {
     transition: none;
     animation: none;
   }

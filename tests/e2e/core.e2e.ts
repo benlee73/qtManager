@@ -635,8 +635,6 @@ describe("QT Manager desktop flow", () => {
           alignItems: backdropStyle.alignItems,
           layoutRight: panel.offsetLeft + panel.offsetWidth,
           topGap: rect.top,
-          transitionProperty: panelStyle.transitionProperty,
-          transitionDuration: panelStyle.transitionDuration,
           animationName: panelStyle.animationName,
         };
       }),
@@ -647,10 +645,28 @@ describe("QT Manager desktop flow", () => {
       backdropDisplay: "flex",
       justifyContent: "flex-end",
       alignItems: "stretch",
-      transitionProperty: expect.stringContaining("transform"),
-      transitionDuration: expect.stringContaining("0.18s"),
-      animationName: "help-panel-slide-in",
     });
+    const motion = await browser.execute(() => {
+      const style = getComputedStyle(
+        document.querySelector<HTMLElement>('[data-testid="help-panel"]')!,
+      );
+      return {
+        reduced: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+        transitionProperty: style.transitionProperty,
+        transitionDuration: style.transitionDuration,
+        animationName: style.animationName,
+        animationDuration: style.animationDuration,
+      };
+    });
+    if (motion.reduced) {
+      expect(motion.transitionProperty).toBe("none");
+      expect(motion.animationName).toBe("none");
+    } else {
+      expect(motion.transitionProperty).toContain("transform");
+      expect(motion.transitionDuration).toContain("0.18s");
+      expect(motion.animationName).toBe("help-panel-slide-in");
+      expect(motion.animationDuration).toBe("0.18s");
+    }
     expect(
       await browser.execute(() => {
         const panel = document.querySelector<HTMLElement>(
@@ -1178,7 +1194,7 @@ describe("QT Manager desktop flow", () => {
     });
     await setPersonFilterPreset("전체");
     await setInput('[data-testid="people-search"]', name);
-    await waitForText(".memo-list", contents[0]);
+    for (const content of contents) await waitForText(".memo-list", content);
     const distributionCount = async () =>
       (
         await invokeTauri<{ distributions: unknown[] }>(
@@ -2512,10 +2528,9 @@ describe("QT Manager desktop flow", () => {
       const list = document.querySelector<HTMLElement>(".person-list")!;
       const fixture = document.createElement("div");
       fixture.dataset.tabStateFixture = "distribution";
-      fixture.style.height = "900px";
+      fixture.style.height = `${list.clientHeight + 900}px`;
       fixture.setAttribute("aria-hidden", "true");
       list.append(fixture);
-      list.scrollTop = 32;
       document
         .querySelector<HTMLElement>('[data-testid="person-row"]')
         ?.click();
@@ -2531,6 +2546,7 @@ describe("QT Manager desktop flow", () => {
     );
     const distributionBefore = await browser.execute(() => {
       const list = document.querySelector<HTMLElement>(".person-list")!;
+      list.scrollTop = 32;
       return {
         scrollTop: list.scrollTop,
         selected: document
@@ -2552,7 +2568,7 @@ describe("QT Manager desktop flow", () => {
       )!;
       const fixture = document.createElement("div");
       fixture.dataset.tabStateFixture = "management";
-      fixture.style.height = "900px";
+      fixture.style.height = `${detail.clientHeight + 900}px`;
       fixture.setAttribute("aria-hidden", "true");
       detail.append(fixture);
       detail.scrollTop = 32;
