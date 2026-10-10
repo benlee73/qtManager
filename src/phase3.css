@@ -122,7 +122,7 @@
   align-self: flex-start;
   align-items: stretch;
   gap: 2px;
-  margin: 0.7rem 12px 0;
+  margin: 0.7rem 0 0;
   padding: 4px;
   border: 1px solid var(--line-soft);
   border-radius: 0.55rem;
@@ -170,8 +170,8 @@
   gap: 7px;
   min-height: 0;
   height: auto;
-  margin-top: 0.7rem;
-  padding: 0.65rem 0.1rem 0;
+  margin-top: 0;
+  padding: 2px 0.1rem 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
@@ -1588,4 +1588,15 @@
   overflow-wrap: anywhere;
   white-space: normal;
   line-height: 1.35;
+}
+
+.subscription-date-memo {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+}
+.privacy-warning ul {
+  margin: 0;
+  padding-left: 20px;
+}
+.privacy-warning li + li {
+  margin-top: 3px;
 }

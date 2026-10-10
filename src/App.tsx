@@ -1,3 +1,4 @@
+import { installCompositionClicks } from "./compositionClicks";
 import { searchMemos } from "./distributionView";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -158,6 +159,8 @@ export default function App() {
     const timeout = window.setTimeout(refresh, 70);
     return () => window.clearTimeout(timeout);
   }, [refresh]);
+
+  useEffect(() => installCompositionClicks(document), []);
 
   const mutate = useCallback(
     async (
@@ -1219,7 +1222,6 @@ export default function App() {
               if (saved) {
                 setDeleteTarget(null);
                 setMemoDetail(null);
-                setArchiveOpen(false);
               }
             })
           }

@@ -246,7 +246,7 @@ function PersonDetailContent({
               type="button"
               onClick={() => onRenew(detail)}
             >
-              구독 추가·갱신
+              구독 추가
             </button>
           )}
         </div>
@@ -507,5 +507,7 @@ function displayDate(value: string) {
 }
 
 function isLegacyMigrationMemo(value: string) {
-  return value.trim() === "2026년 기존 배부현황 최초 이전";
+  return ["2026년 기존 배부현황 최초 이전", "현장 간이 등록"].includes(
+    value.trim(),
+  );
 }

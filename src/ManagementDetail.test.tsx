@@ -365,8 +365,39 @@ describe("ManagementEditDialog", () => {
     expect(markup).toContain("다음 배부 때 수량 확인");
     expect(markup).toContain("연락처 확인 완료");
     expect(markup).toContain("메모");
+    expect(markup).not.toContain("메모 안내");
     expect(markup).not.toContain("linked-memo-actions");
     expect(markup).not.toContain(">보관<");
     expect(markup).not.toContain(">삭제<");
   });
+});
+
+it("hides the internal on-site subscription memo while preserving user notes", () => {
+  const markup = renderToStaticMarkup(
+    <PersonDetailPanel
+      detail={{
+        ...detail,
+        subscriptions: [
+          { ...detail.subscriptions[0], memo: "현장 간이 등록" },
+          detail.subscriptions[0],
+        ],
+      }}
+      busy={false}
+      onEdit={vi.fn()}
+      onRenew={vi.fn()}
+      onToggleArchived={vi.fn()}
+    />,
+  );
+  expect(markup).not.toContain("현장 간이 등록");
+  expect(markup).toContain("현재 구독 메모");
+  const empty = renderToStaticMarkup(
+    <ManagementEditDialog
+      person={{ ...detail, memos: [] }}
+      busy={false}
+      onClose={vi.fn()}
+      onSaved={vi.fn(async () => true)}
+    />,
+  );
+  expect(empty).not.toContain("등록된 메모가 없습니다.");
+  expect(empty).not.toContain("메모 안내");
 });

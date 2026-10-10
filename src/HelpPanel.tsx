@@ -28,7 +28,7 @@ const topics: { id: HelpTopic; label: string }[] = [
   { id: "quick-start", label: "빠른 시작" },
   { id: "distribution", label: "검색과 배부" },
   { id: "notes", label: "메모" },
-  { id: "people", label: "신규 신청과 갱신" },
+  { id: "people", label: "신규 신청과 구독 추가" },
   { id: "purchase", label: "1달 구독" },
   { id: "payments", label: "입금 관리" },
   { id: "handover", label: "데이터 백업·복원" },
@@ -382,7 +382,8 @@ export function HelpPanel({
                     </li>
                     <li>
                       보관함에서는 메모를 복원하거나 삭제할 수 있습니다. 삭제는
-                      확인 후 되돌릴 수 없습니다.
+                      확인 후 되돌릴 수 없습니다. 삭제 후에도 보관함은 열려 있고
+                      남은 메모를 계속 확인합니다.
                     </li>
                     <li>
                       삭제는 확인 후 영구 삭제되므로 보관을 먼저 권장합니다.
@@ -399,14 +400,14 @@ export function HelpPanel({
 
             <HelpSection
               id="people"
-              title="신규 신청과 갱신"
+              title="신규 신청과 구독 추가"
               hidden={Boolean(
                 helpQuery.trim() && !matchingTopics?.has("people"),
               )}
               sectionRef={(element) => registerSection("people", element)}
             >
               <div className="help-card-grid">
-                <HelpCard title="등록과 갱신">
+                <HelpCard title="등록과 구독 추가">
                   <HelpList>
                     <li>
                       신청자 관리에서 이름을 입력하고, 또래·연락처를 선택적으로
@@ -417,17 +418,46 @@ export function HelpPanel({
                       정리되며, 010이 아닌 번호는 저장할 수 없습니다.
                     </li>
                     <li>
-                      ‘1년 구독’으로 현장 신청한 사람은 나중에 ‘정보 수정’으로
-                      보완합니다.
+                      현장 ‘1년 구독’은 신규 인원의 이름·또래가 필수이며
+                      연락처는 선택입니다. 신청 시 누락된 필드는 빨간 입력
+                      오류로 표시됩니다.
                     </li>
                     <li>
-                      갱신은 과거 구독을 수정하지 않고 새 6개 호를 추가합니다.
+                      현장 ‘1년 구독’에서도 기존 신청자를 검색해 선택하면 그
+                      사람에게 구독을 추가합니다. 기간이 겹치면 확인 후
+                      추가합니다.
+                    </li>
+                    <li>
+                      ‘구독 추가’는 과거 구독을 수정하지 않고 새 6개 호를
+                      추가합니다.
                     </li>
                     <li>기간이 다른 여러 권은 구독 이력을 따로 보존합니다.</li>
                     <li>
-                      신청자 목록은 간이 등록을 먼저 표시하고, 각 등록 상태
-                      안에서는 이름순으로 정렬합니다. 새로 등록한 순서는
+                      1년·1달 신청창은 같은 순서로 검색·선택, 또래·연락처,
+                      수량·선택 메모를 입력합니다. 1년 구독의 메모는 해당 구독
+                      이력에 남습니다.
+                    </li>
+                    <li>
+                      신청자 목록은 실제 또래가 누락된 사람을 먼저 표시하고,
+                      나머지는 이름순으로 정렬합니다. 군지체는 누락 대상이
                       아닙니다.
+                    </li>
+                  </HelpList>
+                </HelpCard>
+                <HelpCard title="1달 구독의 구매자 선택">
+                  <HelpList>
+                    <li>
+                      이름·또래로 검색하고 위·아래 방향키로 후보를 이동한 뒤
+                      Enter로 선택합니다. 마우스는 한 번 클릭으로 선택합니다.
+                    </li>
+                    <li>
+                      결과의 마지막 ‘신규 인원으로 추가’를 선택하면 동명이인도
+                      새 신청자로 기록합니다. 또래·연락처는 선택입니다. 선택하면
+                      후보 목록이 닫히고 ‘신규 인원’으로 표시됩니다.
+                    </li>
+                    <li>
+                      검색 결과가 없으면 신규 입력으로 전환하며, 이름을 비우면
+                      익명 구매로 기록합니다.
                     </li>
                   </HelpList>
                 </HelpCard>

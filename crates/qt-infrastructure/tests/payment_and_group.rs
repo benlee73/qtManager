@@ -46,11 +46,12 @@ fn new_intakes_are_pending_and_confirmation_is_independent_of_distribution_and_c
         &services,
         CreateDraftRequest {
             name: "가상연간".into(),
-            cohort: None,
+            cohort: Some("00".into()),
             phone: None,
             issue_year: 2026,
             issue_month: 11,
             quantity: 2,
+            memo: None,
         },
     )
     .unwrap();

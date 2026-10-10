@@ -51,7 +51,8 @@ impl PeopleManagementRepository for SqliteCoreRepository {
                     OR coalesce(cohort, '') || lower(replace(name, ' ', '')) LIKE '%' || ?2 || '%'
                     OR (?3 != '' AND coalesce(normalized_phone, '') LIKE '%' || ?3 || '%')
                   )
-                ORDER BY CASE status WHEN 'draft' THEN 0 WHEN 'active' THEN 1 ELSE 2 END,
+                ORDER BY CASE WHEN status != 'archived' AND NOT is_group
+                                   AND coalesce(trim(cohort), '') = '' THEN 0 ELSE 1 END,
                          name, id
                 ",
             )

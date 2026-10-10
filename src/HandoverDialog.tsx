@@ -197,10 +197,13 @@ export function HandoverDialog({
 
         <div className="privacy-warning" data-testid="privacy-warning">
           <strong>개인정보 주의</strong>
-          <span>
-            파일에는 이름과 연락처가 포함됩니다. 안전하게 전달·보관하고
-            백업·복원 후 불필요한 사본은 삭제하세요. 파일은 암호화되지 않습니다.
-          </span>
+          <ul>
+            <li>파일에는 이름과 연락처가 포함됩니다.</li>
+            <li>
+              안전하게 전달·보관하고 백업·복원 후 불필요한 사본은 삭제하세요.
+            </li>
+            <li>파일은 암호화되지 않습니다.</li>
+          </ul>
         </div>
 
         <div className="handover-actions">

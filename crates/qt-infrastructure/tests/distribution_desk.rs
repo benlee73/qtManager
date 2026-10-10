@@ -62,6 +62,7 @@ fn search_prioritizes_linked_memos_without_hiding_or_modifying_other_memos() {
                 issue_year: 2026,
                 issue_month: 7,
                 quantity: 1,
+                memo: None,
             },
         )
         .unwrap();
@@ -165,6 +166,7 @@ fn persists_and_searches_complete_distribution_desk_flow_after_reopen() {
             issue_year: 2026,
             issue_month: 7,
             quantity: 2,
+            memo: None,
         },
     )
     .unwrap();

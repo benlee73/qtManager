@@ -1592,6 +1592,9 @@ kbd {
   font-weight: 700;
   line-height: 1.45;
 }
+.field .form-error {
+  margin: 0;
+}
 
 .linked-check-items {
   display: grid;
@@ -1710,6 +1713,7 @@ kbd {
 .field-grid {
   display: grid;
   grid-template-columns: 1fr 0.65fr;
+  align-items: start;
   gap: 8px;
 }
 
@@ -1747,6 +1751,7 @@ kbd {
   text-align: left;
 }
 
+.purchase-person-result[aria-selected="true"],
 .purchase-person-result:hover,
 .purchase-person-result:focus-visible {
   border-color: var(--accent);
@@ -1806,9 +1811,13 @@ kbd {
   border-top: 1px solid var(--line);
   padding-top: 8px;
 }
+.purchase-new-person-fields .field {
+  margin-bottom: 0;
+}
 
 .field {
   display: grid;
+  align-content: start;
   gap: 5px;
   margin-bottom: 10px;
   color: var(--muted);
@@ -1915,7 +1924,6 @@ kbd {
 
 .memo-detail-dialog {
   width: min(500px, 100%);
-  min-height: 320px;
 }
 
 .memo-detail-title-line {
@@ -2121,6 +2129,7 @@ kbd {
 }
 
 .memo-search {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2135,15 +2144,24 @@ kbd {
   color: var(--text);
   width: 100%;
   min-width: 0;
-  padding: 6px 8px;
+  padding: 6px 8px 6px 28px;
   font-size: var(--font-sm);
+}
+.memo-search > span {
+  position: absolute;
+  left: 9px;
+  pointer-events: none;
+}
+.field input[aria-invalid="true"] {
+  border-color: var(--red);
+  box-shadow: 0 0 0 1px var(--red);
 }
 .management-filters {
   gap: 2px;
 }
 .management-result-count {
   color: var(--muted);
-  padding: 4px 12px 8px;
+  padding: 10px 0 6px;
   font-size: var(--font-sm);
 }
 .payments-screen > .payment-queue {
@@ -2172,7 +2190,9 @@ kbd {
 }
 .payment-queue header {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  height: 88px;
+  flex-shrink: 0;
   align-items: center;
   gap: 8px;
   padding: 12px;
@@ -2187,6 +2207,7 @@ kbd {
   overflow: auto;
 }
 .payment-queue table {
+  table-layout: fixed;
   width: 100%;
   border-collapse: collapse;
   font-size: var(--font-sm);
@@ -2201,6 +2222,40 @@ kbd {
 .payment-queue th {
   color: var(--muted);
   font-weight: 400;
+}
+.payment-queue tbody td {
+  height: 48px;
+  padding-block: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+.payment-person-link {
+  color: var(--text);
+  text-align: left;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.payment-person-link:hover,
+.payment-person-link:focus-visible {
+  text-decoration: underline;
+}
+.payment-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+}
+.payment-queue .payment-row-actions button {
+  min-height: 32px;
+  flex-shrink: 0;
+}
+.payment-row-actions .payment-confirmed-status {
+  margin: 0;
+  font-size: var(--font-meta);
 }
 
 .payment-queue th,
@@ -2249,4 +2304,44 @@ kbd {
 }
 .payment-cancel {
   font-size: var(--font-meta);
+}
+
+.payment-queue-title {
+  min-width: 0;
+  flex: 1;
+}
+.payment-col-selection {
+  width: 36px;
+}
+.payment-col-person {
+  width: 18%;
+}
+.payment-col-kind {
+  width: 12%;
+}
+.payment-col-issue {
+  width: 23%;
+}
+.payment-col-quantity {
+  width: 7%;
+}
+.payment-col-date {
+  width: 20%;
+}
+.payment-col-action {
+  width: calc(20% - 36px);
+}
+.payment-queue input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  vertical-align: middle;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.payment-queue td .text-button {
+  max-width: 100%;
+}
+.payment-queue td:last-child {
+  white-space: normal;
 }

@@ -18,6 +18,8 @@ describe("HandoverDialog", () => {
       ),
     ).toHaveLength(2);
     expect(markup).toContain('data-testid="export-state"');
+    expect(markup).toContain("<li>파일에는 이름과 연락처가 포함됩니다.</li>");
+    expect(markup).toContain("<li>파일은 암호화되지 않습니다.</li>");
     expect(markup).toContain('data-testid="choose-state-import"');
   });
 });

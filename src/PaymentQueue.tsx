@@ -38,18 +38,6 @@ export function PaymentQueue({
       data-mode={showConfirmed ? "history" : "pending"}
     >
       <header>
-        {showConfirmed && (
-          <button
-            type="button"
-            className="secondary-button compact payment-return"
-            onClick={() => {
-              setShowConfirmed(false);
-              setSelected(new Set());
-            }}
-          >
-            <span aria-hidden="true">← </span>확인 대기 보기
-          </button>
-        )}
         <div className="payment-queue-title">
           <h3>
             {showConfirmed ? "입금 확인 내역" : "입금 확인 필요"}{" "}
@@ -67,6 +55,18 @@ export function PaymentQueue({
         >
           {showConfirmed ? "선택 확인 취소" : "선택 입금 확인"}
         </button>
+        {showConfirmed && (
+          <button
+            type="button"
+            className="secondary-button compact payment-return"
+            onClick={() => {
+              setShowConfirmed(false);
+              setSelected(new Set());
+            }}
+          >
+            <span aria-hidden="true">← </span>확인 대기 보기
+          </button>
+        )}
         {!showConfirmed && (
           <button
             type="button"
@@ -82,6 +82,15 @@ export function PaymentQueue({
       </header>
       <div className="payment-table-scroll">
         <table>
+          <colgroup>
+            <col className="payment-col-selection" />
+            <col className="payment-col-person" />
+            <col className="payment-col-kind" />
+            <col className="payment-col-issue" />
+            <col className="payment-col-quantity" />
+            <col className="payment-col-date" />
+            <col className="payment-col-action" />
+          </colgroup>
           <thead>
             <tr>
               <th>
@@ -132,7 +141,10 @@ export function PaymentQueue({
                     {row.personId ? (
                       <button
                         type="button"
-                        className="text-button"
+                        className="text-button payment-person-link"
+                        title={
+                          row.cohort ? `${row.cohort} ${row.name}` : row.name
+                        }
                         onClick={() => onViewPerson(row.personId!)}
                       >
                         {row.cohort ? `${row.cohort} ` : ""}
@@ -151,22 +163,24 @@ export function PaymentQueue({
                     {formatApplicationDate(row.appliedAt)}
                   </td>
                   <td>
-                    {showConfirmed && (
-                      <span className="payment-confirmed-status">확인됨</span>
-                    )}
-                    <button
-                      type="button"
-                      className={
-                        showConfirmed
-                          ? "text-button payment-cancel"
-                          : "primary-button compact"
-                      }
-                      disabled={busy}
-                      data-testid="confirm-payment"
-                      onClick={() => void confirm([row])}
-                    >
-                      {showConfirmed ? "확인 취소" : "입금 확인"}
-                    </button>
+                    <div className="payment-row-actions">
+                      {showConfirmed && (
+                        <span className="payment-confirmed-status">확인됨</span>
+                      )}
+                      <button
+                        type="button"
+                        className={
+                          showConfirmed
+                            ? "text-button payment-cancel"
+                            : "primary-button compact"
+                        }
+                        disabled={busy}
+                        data-testid="confirm-payment"
+                        onClick={() => void confirm([row])}
+                      >
+                        {showConfirmed ? "확인 취소" : "입금 확인"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );

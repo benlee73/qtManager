@@ -256,6 +256,8 @@ pub struct UndoDistributionResult {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateDraftRequest {
+    #[serde(default)]
+    pub memo: Option<String>,
     pub name: String,
     pub cohort: Option<String>,
     pub phone: Option<String>,
@@ -797,6 +799,9 @@ where
     if name.is_empty() {
         return Err(qt_domain::DomainError::DraftNameRequired.into());
     }
+    if cohort.is_none() {
+        return Err(qt_domain::DomainError::AnnualCohortRequired.into());
+    }
     let now = services.clock.now();
     let person_phone = format_phone(request.phone.as_deref().unwrap_or_default())?;
     let person = Person {
@@ -822,7 +827,7 @@ where
         applied_at: Some(now.clone()),
         source: SubscriptionSource::OnSite,
         source_reference: None,
-        memo: Some("현장 간이 등록".into()),
+        memo: clean_optional(request.memo).or_else(|| Some("현장 간이 등록".into())),
         created_at: now.clone(),
         updated_at: now.clone(),
         archived_at: None,
@@ -2343,7 +2348,7 @@ mod tests {
     }
 
     #[test]
-    fn draft_requires_name_but_allows_missing_cohort() {
+    fn draft_requires_name_and_cohort_before_saving() {
         let mut repository = MemoryRepository {
             operator: Some("담당자".into()),
             ..Default::default()
@@ -2358,16 +2363,36 @@ mod tests {
             &services,
             CreateDraftRequest {
                 name: "현장 단체".into(),
+                cohort: Some("00".into()),
+                phone: None,
+                issue_year: 2026,
+                issue_month: 7,
+                quantity: 1,
+                memo: Some("  가상 구독 메모  ".into()),
+            },
+        )
+        .unwrap();
+        assert_eq!(repository.records[0].person.name, "현장 단체");
+        assert_eq!(
+            repository.records[0].subscriptions[0].memo.as_deref(),
+            Some("가상 구독 메모")
+        );
+        assert_eq!(repository.records[0].person.cohort.as_deref(), Some("00"));
+        let missing = create_draft(
+            &mut repository,
+            &services,
+            CreateDraftRequest {
+                name: "가상누락".into(),
                 cohort: None,
                 phone: None,
                 issue_year: 2026,
                 issue_month: 7,
                 quantity: 1,
+                memo: None,
             },
-        )
-        .unwrap();
-        assert_eq!(repository.records[0].person.name, "현장 단체");
-        assert_eq!(repository.records[0].person.cohort, None);
+        );
+        assert!(missing.is_err());
+        assert_eq!(repository.records.len(), 1);
 
         let error = create_draft(
             &mut repository,
@@ -2379,6 +2404,7 @@ mod tests {
                 issue_year: 2026,
                 issue_month: 7,
                 quantity: 1,
+                memo: None,
             },
         )
         .expect_err("이름이 없는 간이 등록은 거부되어야 합니다.");

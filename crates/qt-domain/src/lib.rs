@@ -90,6 +90,8 @@ pub enum DomainError {
     EmptyTitle,
     #[error("간이 등록에는 이름이 필요합니다.")]
     DraftNameRequired,
+    #[error("1년 구독 신청에는 또래가 필요합니다.")]
+    AnnualCohortRequired,
     #[error("연락처는 010-xxxx-xxxx 형식이어야 합니다.")]
     InvalidPhone,
 }

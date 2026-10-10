@@ -52,27 +52,57 @@ describe("QT Manager desktop flow", () => {
         .querySelector<HTMLButtonElement>('[data-testid="open-draft"]')
         ?.click();
     });
+    await browser.waitUntil(async () =>
+      browser.execute(
+        () =>
+          document.querySelector<HTMLButtonElement>(
+            '[data-testid="draft-form"] button[type="submit"]',
+          )?.disabled === false,
+      ),
+    );
     await browser.execute(() => {
       document
         .querySelector<HTMLFormElement>('[data-testid="draft-form"]')
         ?.requestSubmit();
     });
     await waitForText('[data-testid="draft-form-error"]', "이름을 입력하세요.");
-    await browser.waitUntil(
-      async () =>
-        (await browser.execute(
-          () =>
-            document.querySelector('[data-testid="draft-form-error"]') === null,
-        )) === true,
-      {
-        timeout: 8_000,
-        interval: 250,
-        timeoutMsg: "간이 등록 입력 오류가 자동으로 사라지지 않았습니다.",
-      },
-    );
+    expect(
+      await browser.execute(() => {
+        const name =
+          document.querySelector<HTMLInputElement>("input[name='name']")!;
+        const cohort = document.querySelector<HTMLInputElement>(
+          "input[name='cohort']",
+        )!;
+        return (
+          name.getAttribute("aria-invalid") === "true" &&
+          cohort.getAttribute("aria-invalid") === "true"
+        );
+      }),
+    ).toBe(true);
+    const alignedInputs = async () =>
+      browser.execute(() => {
+        const name = document
+          .querySelector<HTMLInputElement>("input[name='phone']")!
+          .getBoundingClientRect();
+        const cohort = document
+          .querySelector<HTMLInputElement>("input[name='cohort']")!
+          .getBoundingClientRect();
+        return (
+          Math.abs(name.top - cohort.top) < 1 &&
+          Math.abs(name.height - cohort.height) < 1
+        );
+      });
+    expect(await alignedInputs()).toBe(true);
     await setInput("input[name='name']", applicant);
+    await clickButtonByText("1년 구독 신청");
+    await waitForText(
+      '[data-testid="draft-cohort-error"]',
+      "또래를 입력하세요.",
+    );
+    expect(await alignedInputs()).toBe(true);
     await setInput("input[name='cohort']", "00");
     await setInput("input[name='quantity']", "2");
+    await setInput("input[name='note']", "가상 연간 메모");
     await browser.execute(() => {
       document
         .querySelector<HTMLFormElement>('[data-testid="draft-form"]')
@@ -174,6 +204,156 @@ describe("QT Manager desktop flow", () => {
     await waitForText('[data-testid="person-row"]', "일부 배부");
   });
 
+  it("selects purchase candidates by keyboard and one pointer click, including the last new-person option", async () => {
+    const prefix = `가상선택${Date.now()}`;
+    await registerE2ePerson(`${prefix}가`);
+    await registerE2ePerson(`${prefix}나`);
+    await clickButtonByText("+ 1달 구독");
+    await setInput('[data-testid="purchase-person-search"]', prefix);
+    await waitForText('[data-testid="purchase-person-result"]', prefix);
+    const search = '[data-testid="purchase-person-search"]';
+    const key = async (value: string, composing = false) =>
+      browser.execute(
+        (selector, value, composing) => {
+          document.querySelector<HTMLInputElement>(selector)?.dispatchEvent(
+            new KeyboardEvent("keydown", {
+              key: value,
+              bubbles: true,
+              isComposing: composing,
+            }),
+          );
+        },
+        search,
+        value,
+        composing,
+      );
+    await key("ArrowDown");
+    await key("Enter", true);
+    expect(
+      await browser.execute(
+        () => document.querySelector(".purchase-person-selected") === null,
+      ),
+    ).toBe(true);
+    await key("ArrowDown");
+    await key("ArrowUp");
+    await key("Enter");
+    await waitForText(".purchase-person-selected", `${prefix}가`);
+    await clickButtonByText("선택 해제");
+    await setInput(search, prefix);
+    await waitForText('[data-testid="purchase-person-result"]', prefix);
+    await browser.$('[data-testid="purchase-person-result"]').click();
+    await waitForText(".purchase-person-selected", `${prefix}가`);
+    await clickButtonByText("선택 해제");
+    await setInput(search, prefix);
+    await waitForText('[data-testid="purchase-person-result"]', prefix);
+    expect(
+      await browser.execute(() =>
+        document
+          .querySelector(".purchase-person-results")
+          ?.lastElementChild?.getAttribute("data-testid"),
+      ),
+    ).toBe("purchase-new-person-toggle");
+    await key("ArrowUp");
+    await key("Enter");
+    await waitForText(".purchase-new-person-fields", "또래 (선택)");
+    expect(
+      await browser.execute(
+        () =>
+          document.querySelector('[data-testid="new-person-selected"]') !==
+            null && document.querySelector(".purchase-person-results") === null,
+      ),
+    ).toBe(true);
+    await browser.keys("Escape");
+  });
+
+  it("adds an annual subscription to the explicitly selected person without duplicating their profile", async () => {
+    const name = `가상기존연간${Date.now()}`;
+    const personId = await registerE2ePerson(name);
+    await clickButtonByText("+ 1년 구독");
+    await setInput("input[name='name']", name);
+    await waitForText('[data-testid="purchase-person-result"]', name);
+    await browser.$('[data-testid="purchase-person-result"]').click();
+    await waitForText(".purchase-person-selected", name);
+    expect(
+      await browser.execute(
+        () => document.querySelector("input[name='cohort']") === null,
+      ),
+    ).toBe(true);
+    await setInput("input[name='quantity']", "2");
+    await clickButtonByText("1년 구독 신청");
+    await waitForText(
+      ".duplicate-warning",
+      "기존 구독과 기간이 겹칠 수 있습니다.",
+    );
+    await browser.$('.duplicate-warning input[type="checkbox"]').click();
+    await clickButtonByText("1년 구독 신청");
+    await waitForText(".toast", "기존 신청자에 1년 구독을 추가했습니다.");
+    const detail = await invokeTauri<{
+      cohort: string;
+      subscriptions: { quantity: number; paymentStatus: string }[];
+    }>("load_person_detail_command", { personId });
+    expect(detail.cohort).toBe("00");
+    expect(detail.subscriptions).toHaveLength(2);
+    expect(
+      detail.subscriptions.some(
+        (subscription) =>
+          subscription.quantity === 2 &&
+          subscription.paymentStatus === "pending",
+      ),
+    ).toBe(true);
+    const management = await invokeTauri<{ people: { id: string }[] }>(
+      "load_people_management_command",
+      { query: name, includeArchived: false },
+    );
+    expect(management.people.map((person) => person.id)).toEqual([personId]);
+  });
+
+  it("activates quick memo add once when IME release arrives before press", async () => {
+    const content = `가상한글조합메모${Date.now()}`;
+    await setInput("#quick-item", content);
+    await browser.execute(() => {
+      const input = document.querySelector<HTMLInputElement>("#quick-item")!;
+      const button = document.querySelector<HTMLButtonElement>(
+        '[data-testid="add-memo"]',
+      )!;
+      input.focus();
+      input.dispatchEvent(
+        new CompositionEvent("compositionstart", { bubbles: true }),
+      );
+      button.dispatchEvent(
+        new PointerEvent("pointerup", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }),
+      );
+      input.dispatchEvent(
+        new CompositionEvent("compositionend", { bubbles: true }),
+      );
+      button.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }),
+      );
+      button.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }),
+      );
+    });
+    await waitForText(".memo-list", content);
+    expect(
+      await browser.execute(
+        (content) =>
+          [...document.querySelectorAll(".memo-card")].filter((card) =>
+            card.textContent?.includes(content),
+          ).length,
+        content,
+      ),
+    ).toBe(1);
+    expect(await browser.$("#quick-item").getValue()).toBe("");
+  });
+
   it("explicitly links a one-time purchase or creates a purchase-only applicant", async () => {
     const existing = `가상구매연결${Date.now()}`;
     await registerE2ePerson(existing);
@@ -218,7 +398,14 @@ describe("QT Manager desktop flow", () => {
     await clickButtonByText("현장 배부");
     await clickButtonByText("+ 1달 구독");
     await setInput("input[name='buyerName']", newPerson);
-    await waitForText(".purchase-new-person-fields", "구독 없이");
+    await waitForText(".purchase-new-person-fields", "또래 (선택)");
+    await setInput("input[name='purchasePhone']", "11111111111");
+    await clickButtonByText("구매·전달 기록");
+    await waitForText(
+      "#purchase-phone-error",
+      "연락처는 010-xxxx-xxxx 형식으로 입력하세요.",
+    );
+    await setInput("input[name='purchasePhone']", "");
     await setInput("input[name='purchaseCohort']", "01");
     await setInput("input[name='quantity']", "1");
     await clickButtonByText("구매·전달 기록");
@@ -347,10 +534,7 @@ describe("QT Manager desktop flow", () => {
     );
     await clickButtonByText("현장 배부");
     await clickButtonByText("구독 갱신");
-    await waitForText(
-      "#management-dialog-title",
-      `${expiredName} · 구독 추가·갱신`,
-    );
+    await waitForText("#management-dialog-title", `${expiredName} · 구독 추가`);
     await browser.execute(() =>
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
     );
@@ -1235,6 +1419,17 @@ describe("QT Manager desktop flow", () => {
     }, linked);
     await waitForText(".memo-detail-dialog", linked);
     expect(
+      await browser.execute(() => {
+        const dialog = document
+          .querySelector(".memo-detail-dialog")!
+          .getBoundingClientRect();
+        const actions = document
+          .querySelector(".memo-detail-actions")!
+          .getBoundingClientRect();
+        return dialog.bottom - actions.bottom;
+      }),
+    ).toBeLessThanOrEqual(25);
+    expect(
       await browser.execute(
         () => document.querySelector(".memo-detail-editor") === null,
       ),
@@ -1389,10 +1584,15 @@ describe("QT Manager desktop flow", () => {
     await waitForText(".toast", "메모를 삭제했습니다.");
     await browser.waitUntil(
       async () =>
-        (await browser.execute(() =>
-          document.querySelector(".memo-archive-dialog"),
-        )) === null,
-      { timeoutMsg: "보관함 메모 삭제 후 보관함이 닫히지 않았습니다." },
+        await browser.execute((content) => {
+          const archive = document.querySelector(".memo-archive-dialog");
+          return (
+            archive !== null &&
+            !archive.textContent?.includes(content) &&
+            document.querySelector(".delete-confirm-dialog") === null
+          );
+        }, archivedOnly),
+      { timeoutMsg: "삭제된 메모를 제외한 보관함이 유지되지 않았습니다." },
     );
   });
 
@@ -3570,7 +3770,7 @@ describe("QT Manager desktop flow", () => {
           insideViewport: true,
         },
         {
-          text: "구독 추가·갱신",
+          text: "구독 추가",
           expectedClass: "primary-button",
           hasExpectedClass: true,
           hasOppositeClass: false,
@@ -3941,11 +4141,38 @@ describe("QT Manager desktop flow", () => {
   it("refreshes incomplete on-site intakes immediately and confirms annual and one-issue payments", async () => {
     await clickButtonByText("신청자 관리");
     await waitForText('[data-testid="draft-count-filter"]', "누락");
+    expect(
+      await browser.execute(() => {
+        const search = document
+          .querySelector(".management-search")!
+          .getBoundingClientRect();
+        const filters = document
+          .querySelector(".management-counts")!
+          .getBoundingClientRect();
+        const count = document
+          .querySelector(".management-result-count")!
+          .getBoundingClientRect();
+        const list = document
+          .querySelector(".management-person-list")!
+          .getBoundingClientRect();
+        return (
+          Math.abs(search.left - filters.left) < 1 &&
+          list.top - count.bottom <= 4
+        );
+      }),
+    ).toBe(true);
+
     await clickButtonByText("현장 배부");
     const annual = `가상입금연간${Date.now()}`;
     const monthly = `가상입금한호${Date.now()}`;
     await clickButtonByText("+ 1년 구독");
     await setInput("input[name='name']", annual);
+    await clickButtonByText("1년 구독 신청");
+    await waitForText(
+      '[data-testid="draft-cohort-error"]',
+      "또래를 입력하세요.",
+    );
+    await setInput("input[name='cohort']", "00");
     await clickButtonByText("1년 구독 신청");
     await waitForText(".toast", "현장 신청자를 추가했습니다");
     await clickButtonByText("신청자 관리");
@@ -3955,11 +4182,13 @@ describe("QT Manager desktop flow", () => {
         .querySelector<HTMLButtonElement>('[data-testid="draft-count-filter"]')
         ?.click(),
     );
-    await waitForText('[data-testid="management-person"]', annual);
+    expect(await textOf('[data-testid="management-person"]')).not.toContain(
+      annual,
+    );
     await clickButtonByText("현장 배부");
     await clickButtonByText("+ 1달 구독");
     await setInput("input[name='buyerName']", monthly);
-    await waitForText(".purchase-new-person-fields", "구독 없이");
+    await waitForText(".purchase-new-person-fields", "또래 (선택)");
     await clickButtonByText("구매·전달 기록");
     await waitForText(".toast", "개별 구매와 전달을 기록했습니다");
     await clickButtonByText("신청자 관리");
@@ -4094,8 +4323,63 @@ describe("QT Manager desktop flow", () => {
     );
     await waitForText('[data-testid="payment-queue"] h3', "1건");
     expect(await textOf('[data-testid="payment-queue"]')).not.toContain(annual);
+    const headerGeometry = async () =>
+      browser.execute(() =>
+        Array.from(document.querySelectorAll(".payment-queue th")).map(
+          (cell) => {
+            const rect = cell.getBoundingClientRect();
+            return {
+              x: rect.x,
+              y: rect.y,
+              width: rect.width,
+              height: rect.height,
+              font: getComputedStyle(cell).fontSize,
+            };
+          },
+        ),
+      );
+    const rowHeight = async () =>
+      browser.execute(
+        () =>
+          document
+            .querySelector('[data-testid="payment-row"]')!
+            .getBoundingClientRect().height,
+      );
+    const pendingRowHeight = await rowHeight();
+    expect(
+      await browser.execute(() => {
+        const name = document.querySelector(".payment-person-link")!;
+        const cell = document.querySelector(
+          ".payment-queue tbody td:nth-child(3)",
+        )!;
+        return getComputedStyle(name).color === getComputedStyle(cell).color;
+      }),
+    ).toBe(true);
+    const pendingGeometry = await headerGeometry();
     await clickButtonByText("확인한 내역 보기");
     await waitForText('[data-testid="payment-queue"]', annual);
+    expect(await headerGeometry()).toEqual(pendingGeometry);
+    expect(await rowHeight()).toBe(pendingRowHeight);
+    for (const width of [900, 1120]) {
+      await browser.setWindowSize(width, 760);
+      const historyGeometry = await headerGeometry();
+      await clickButtonByText("확인 대기 보기");
+      expect(await headerGeometry()).toEqual(historyGeometry);
+      expect(
+        await browser.execute(() => {
+          const checkbox = document.querySelector<HTMLInputElement>(
+            ".payment-queue th input",
+          )!;
+          return (
+            checkbox.getBoundingClientRect().width >= 20 &&
+            checkbox.getBoundingClientRect().height >= 20
+          );
+        }),
+      ).toBe(true);
+      await clickButtonByText("확인한 내역 보기");
+      expect(await headerGeometry()).toEqual(historyGeometry);
+    }
+    await browser.setWindowSize(2000, 1440);
     expect(
       await browser.execute(() => {
         const queue = document.querySelector('[data-testid="payment-queue"]');
@@ -4251,19 +4535,11 @@ describe("QT Manager desktop flow", () => {
 
   it("filters and names applicants that need profile completion", async () => {
     const draftName = `가상보완대상${Date.now()}`;
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLButtonElement>('[data-testid="open-draft"]')
-        ?.click();
-    });
-    await setInput("input[name='name']", draftName);
-    await setInput("input[name='quantity']", "1");
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLFormElement>('[data-testid="draft-form"]')
-        ?.requestSubmit();
-    });
-    await waitForText(".toast", "현장 신청자를 추가했습니다");
+    await clickButtonByText("+ 1달 구독");
+    await setInput('[data-testid="purchase-person-search"]', draftName);
+    await waitForText(".purchase-new-person-fields", "또래 (선택)");
+    await clickButtonByText("구매·전달 기록");
+    await waitForText(".toast", "개별 구매와 전달을 기록했습니다");
     await browser.execute(() => {
       document
         .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
@@ -5126,7 +5402,7 @@ async function prepareManagementCapture(
             ),
           ]
             .map((button) => button.textContent?.trim() ?? "")
-            .join("|") === "정보 수정|구독 추가·갱신",
+            .join("|") === "정보 수정|구독 추가",
       ),
     { timeoutMsg: `${theme} 테마에서 상세 버튼 전문이 준비되지 않았습니다.` },
   );

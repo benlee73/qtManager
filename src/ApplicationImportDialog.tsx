@@ -7,6 +7,7 @@ import {
   importApplications,
   previewApplications,
 } from "./applicationImport";
+import { importPreviewMessage } from "./importPreviewMessage";
 import { insertAtSelection } from "./textEditing";
 
 const DEFAULT_MAPPING: ColumnMapping = {
@@ -295,7 +296,7 @@ function PreviewRow({
           {row.issueLabel ?? "시작 호 없음"} · {row.quantity ?? 0}권 ·{" "}
           {row.phone ?? "연락처 없음"}
         </p>
-        <small>{row.message}</small>
+        <small>{importPreviewMessage(row, decision, checked)}</small>
         {row.status === "candidate" && (
           <select
             data-testid={`candidate-decision-${row.rowNumber}`}

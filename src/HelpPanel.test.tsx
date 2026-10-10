@@ -34,6 +34,12 @@ describe("HelpPanel", () => {
     );
 
     expect(markup).toContain("오늘이 포함된 호");
+    expect(markup).toContain("현장 ‘1년 구독’은 신규 인원의 이름·또래가 필수");
+    expect(markup).toContain("그 사람에게 구독을 추가합니다.");
+    expect(markup).toContain("1년 구독의 메모는 해당 구독 이력에 남습니다.");
+    expect(markup).toContain("삭제 후에도 보관함은 열려 있고");
+    expect(markup).toContain("실제 또래가 누락된 사람을 먼저");
+    expect(markup).toContain("Enter로 선택합니다");
     expect(markup).toContain("현장 배부에서 선택한 QT 호");
     expect(markup).toContain("메모 추가와 연결");
     expect(markup).toContain("신청자에 연결된 메모를 수정·보관·삭제");

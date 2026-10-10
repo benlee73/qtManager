@@ -1,9 +1,14 @@
+import {
+  validatePurchaseInput,
+  type PurchaseInput,
+} from "./purchaseValidation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { ReversibleAction } from "./actionHistory";
-import { validateDraftInput } from "./draftValidation";
+import { AnnualSubscriptionForm } from "./AnnualSubscriptionForm";
 import { handlePhoneInput } from "./phone";
-import { filterPurchasePeople, purchasePersonLabel } from "./purchasePeople";
+import { filterPurchasePeople } from "./purchasePeople";
+import { PurchasePersonPicker } from "./PurchasePersonPicker";
 import {
   activeDistributionMemos,
   distributionAllocations,
@@ -17,7 +22,6 @@ import {
   cancelLatestPurchase,
   cancelPersonDistribution,
   createMemo,
-  createDraft,
   distributeAllocations,
   recordPurchase,
   recordGroupDistribution,
@@ -68,7 +72,6 @@ export function Phase2DialogContent({
     dialog.type === "group-distribution"
       ? activeDistributionMemos(memos, dialog.person.personId)
       : [];
-  const [draftError, setDraftError] = useState<string | null>(null);
   const [purchasePeople, setPurchasePeople] = useState<PersonSummary[]>([]);
   const [purchasePeopleLoading, setPurchasePeopleLoading] = useState(true);
   const [purchasePeopleError, setPurchasePeopleError] = useState(false);
@@ -76,6 +79,11 @@ export function Phase2DialogContent({
   const [selectedPurchasePerson, setSelectedPurchasePerson] =
     useState<PersonSummary | null>(null);
   const [purchaseNewPersonMode, setPurchaseNewPersonMode] = useState(false);
+  const [purchaseErrors, setPurchaseErrors] = useState<
+    Partial<Record<keyof PurchaseInput, string>>
+  >({});
+  const clearPurchaseError = (field: keyof PurchaseInput) =>
+    setPurchaseErrors((current) => ({ ...current, [field]: undefined }));
 
   useEffect(() => {
     if (dialog.type !== "purchase") return;
@@ -94,12 +102,6 @@ export function Phase2DialogContent({
       active = false;
     };
   }, [dialog.type]);
-
-  useEffect(() => {
-    if (!draftError) return;
-    const timeout = window.setTimeout(() => setDraftError(null), 7000);
-    return () => window.clearTimeout(timeout);
-  }, [draftError]);
 
   if (dialog.type === "group-distribution") {
     return (
@@ -190,100 +192,12 @@ export function Phase2DialogContent({
   }
   if (dialog.type === "draft") {
     return (
-      <FormDialog title="1년 구독" onClose={onClose}>
-        <form
-          data-testid="draft-form"
-          noValidate
-          onSubmit={(event) => {
-            event.preventDefault();
-            const data = new FormData(event.currentTarget);
-            const input = {
-              name: String(data.get("name") ?? ""),
-              cohort: String(data.get("cohort") ?? ""),
-              phone: String(data.get("phone") ?? ""),
-              quantity: Number(data.get("quantity")),
-            };
-            const validationError = validateDraftInput(input);
-            if (validationError) {
-              setDraftError(validationError);
-              if (!input.name.trim()) {
-                (
-                  event.currentTarget.elements.namedItem(
-                    "name",
-                  ) as HTMLInputElement | null
-                )?.focus();
-              }
-              return;
-            }
-            setDraftError(null);
-            void mutate(
-              () => createDraft(issue, input),
-              "현장 신청자를 추가했습니다. 목록에서 바로 배부할 수 있습니다.",
-            );
-          }}
-        >
-          <p className="dialog-description">
-            이름은 반드시 입력해야 합니다. 또래와 연락처는 나중에 보완할 수
-            있으며, 현재 호부터 연속 6개 호 구독으로 기록합니다.
-          </p>
-          <div className="field-grid">
-            <Field label="이름">
-              <input
-                name="name"
-                required
-                autoFocus
-                placeholder="이름을 입력하세요"
-                onChange={() => setDraftError(null)}
-              />
-            </Field>
-            <Field label="또래">
-              <input
-                name="cohort"
-                inputMode="numeric"
-                pattern="[0-9]{2}"
-                maxLength={2}
-                placeholder="94"
-                onInput={(event) => {
-                  const input = event.currentTarget;
-                  const digits = input.value.replace(/[^0-9]/g, "").slice(0, 2);
-                  if (digits !== input.value) input.value = digits;
-                  setDraftError(null);
-                }}
-              />
-            </Field>
-          </div>
-          <Field label="연락처">
-            <input
-              name="phone"
-              inputMode="tel"
-              placeholder="010-1234-5678 (선택)"
-              maxLength={13}
-              pattern="010-[0-9]{4}-[0-9]{4}"
-              onInput={handlePhoneInput}
-              onChange={() => setDraftError(null)}
-            />
-          </Field>
-          <Field label="매 호 받을 수량">
-            <input
-              name="quantity"
-              type="number"
-              min={1}
-              defaultValue={1}
-              required
-              onChange={() => setDraftError(null)}
-            />
-          </Field>
-          {draftError && (
-            <p
-              className="form-error draft-form-error"
-              role="alert"
-              data-testid="draft-form-error"
-            >
-              {draftError}
-            </p>
-          )}
-          <SubmitButton busy={busy}>1년 구독 신청</SubmitButton>
-        </form>
+      <FormDialog
+        title="1년 구독"
+        className="purchase-dialog"
+        onClose={onClose}
+      >
+        <AnnualSubscriptionForm issue={issue} busy={busy} mutate={mutate} />
       </FormDialog>
     );
   }
@@ -338,9 +252,11 @@ export function Phase2DialogContent({
         onClose={onClose}
       >
         <form
+          noValidate
           onSubmit={(event) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
+            if (busy || purchasePeopleLoading || purchasePeopleError) return;
             const buyerName = String(data.get("buyerName") ?? "").trim();
             const quantity = Number(data.get("quantity"));
             const note = String(data.get("note") ?? "");
@@ -357,6 +273,24 @@ export function Phase2DialogContent({
               quantity,
               note,
             };
+            const invalid = validatePurchaseInput(
+              {
+                buyerName,
+                purchaseCohort: newPersonInput.cohort,
+                purchasePhone: newPersonInput.phone,
+                quantity,
+              },
+              addNewPerson,
+            );
+            setPurchaseErrors(invalid);
+            if (Object.keys(invalid).length) {
+              (
+                event.currentTarget.elements.namedItem(
+                  Object.keys(invalid)[0],
+                ) as HTMLInputElement | null
+              )?.focus();
+              return;
+            }
             // Undo/redo keeps the newly created applicant identity stable. A
             // redo must add another purchase to the same record, rather than
             // creating a second applicant with the same name.
@@ -390,110 +324,43 @@ export function Phase2DialogContent({
           }}
         >
           <p className="dialog-description">
-            {issue.year}년 {issue.startMonth}~{issue.startMonth + 1}월호만
-            구매해 바로 전달합니다. 기존 신청자를 선택하면 구매 이력이 연결되고,
-            찾지 못한 경우에만 새 인원을 추가합니다.
+            {issue.year}년 {issue.startMonth}~{issue.startMonth + 1}월호
           </p>
           <div className="purchase-person-picker">
-            <Field label="구매자 이름 또는 또래">
-              <input
-                name="buyerName"
-                value={purchaseQuery}
-                autoFocus
-                required={addNewPerson}
-                placeholder="이름·또래 검색 (비워두면 익명)"
-                data-testid="purchase-person-search"
-                onChange={(event) => {
-                  setPurchaseQuery(event.currentTarget.value);
-                  setSelectedPurchasePerson(null);
-                  setPurchaseNewPersonMode(false);
-                }}
-              />
-            </Field>
-            {selectedPurchasePerson ? (
-              <div className="purchase-person-selected">
-                <span>
-                  연결할 신청자:{" "}
-                  <strong>{purchasePersonLabel(selectedPurchasePerson)}</strong>
-                </span>
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={() => {
-                    setSelectedPurchasePerson(null);
-                    setPurchaseQuery("");
-                  }}
-                >
-                  선택 해제
-                </button>
-              </div>
-            ) : (
-              <>
-                {purchasePeopleError && (
-                  <p className="form-error">
-                    신청자 목록을 불러오지 못했습니다. 창을 닫고 다시 시도해
-                    주세요.
-                  </p>
-                )}
-                {purchasePeopleLoading && (
-                  <p className="purchase-person-hint">
-                    신청자 목록을 불러오는 중…
-                  </p>
-                )}
-                {!purchasePeopleLoading &&
-                  !purchasePeopleError &&
-                  purchaseQuery.trim() && (
-                    <div className="purchase-person-results" role="listbox">
-                      {purchaseMatches.map((person) => (
-                        <button
-                          key={person.id}
-                          type="button"
-                          className="purchase-person-result"
-                          data-testid="purchase-person-result"
-                          onClick={() => {
-                            setSelectedPurchasePerson(person);
-                            setPurchaseQuery(person.name);
-                            setPurchaseNewPersonMode(false);
-                          }}
-                        >
-                          <span className="purchase-person-cohort">
-                            {person.cohort ?? "--"}
-                          </span>
-                          <span>{person.name}</span>
-                        </button>
-                      ))}
-                      {purchaseMatches.length === 0 && (
-                        <p className="purchase-person-hint">
-                          일치하는 기존 신청자가 없어 신규 인원으로 추가합니다.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                {purchaseQuery.trim() && purchaseMatches.length > 0 && (
-                  <button
-                    type="button"
-                    className="purchase-new-person-toggle"
-                    data-testid="purchase-new-person-toggle"
-                    onClick={() =>
-                      setPurchaseNewPersonMode((current) => !current)
-                    }
-                  >
-                    {purchaseNewPersonMode
-                      ? "기존 신청자 선택으로 돌아가기"
-                      : "신규 인원으로 추가"}
-                  </button>
-                )}
-              </>
-            )}
+            <PurchasePersonPicker
+              query={purchaseQuery}
+              matches={purchaseMatches}
+              selected={selectedPurchasePerson}
+              loading={purchasePeopleLoading}
+              failed={purchasePeopleError}
+              newPerson={addNewPerson}
+              error={purchaseErrors.buyerName}
+              onQuery={(query) => {
+                setPurchaseQuery(query);
+                setPurchaseErrors({});
+                setSelectedPurchasePerson(null);
+                setPurchaseNewPersonMode(false);
+              }}
+              onSelect={(person) => {
+                setSelectedPurchasePerson(person);
+                setPurchaseErrors({});
+                setPurchaseQuery(person?.name ?? "");
+                setPurchaseNewPersonMode(false);
+              }}
+              onNew={() => setPurchaseNewPersonMode(true)}
+            />
             {addNewPerson && !selectedPurchasePerson && (
               <div className="purchase-new-person-fields">
-                <p className="purchase-person-hint">
-                  구독 없이 이번 구매 이력만 연결된 신청자로 저장합니다.
-                </p>
                 <div className="field-grid">
                   <Field label="또래 (선택)">
                     <input
                       name="purchaseCohort"
+                      aria-invalid={Boolean(purchaseErrors.purchaseCohort)}
+                      aria-describedby={
+                        purchaseErrors.purchaseCohort
+                          ? "purchase-cohort-error"
+                          : undefined
+                      }
                       inputMode="numeric"
                       pattern="[0-9]{2}"
                       maxLength={2}
@@ -504,18 +371,44 @@ export function Phase2DialogContent({
                           .replace(/[^0-9]/g, "")
                           .slice(0, 2);
                         if (digits !== input.value) input.value = digits;
+                        clearPurchaseError("purchaseCohort");
                       }}
                     />
+                    {purchaseErrors.purchaseCohort && (
+                      <span
+                        className="form-error"
+                        id="purchase-cohort-error"
+                        role="alert"
+                      >
+                        {purchaseErrors.purchaseCohort}
+                      </span>
+                    )}
                   </Field>
                   <Field label="연락처 (선택)">
                     <input
                       name="purchasePhone"
+                      aria-invalid={Boolean(purchaseErrors.purchasePhone)}
+                      aria-describedby={
+                        purchaseErrors.purchasePhone
+                          ? "purchase-phone-error"
+                          : undefined
+                      }
+                      onChange={() => clearPurchaseError("purchasePhone")}
                       inputMode="tel"
                       placeholder="010-1234-5678"
                       maxLength={13}
                       pattern="010-[0-9]{4}-[0-9]{4}"
                       onInput={handlePhoneInput}
                     />
+                    {purchaseErrors.purchasePhone && (
+                      <span
+                        className="form-error"
+                        id="purchase-phone-error"
+                        role="alert"
+                      >
+                        {purchaseErrors.purchasePhone}
+                      </span>
+                    )}
                   </Field>
                 </div>
               </div>
@@ -524,11 +417,25 @@ export function Phase2DialogContent({
           <Field label="수량">
             <input
               name="quantity"
+              aria-invalid={Boolean(purchaseErrors.quantity)}
+              aria-describedby={
+                purchaseErrors.quantity ? "purchase-quantity-error" : undefined
+              }
+              onChange={() => clearPurchaseError("quantity")}
               type="number"
               min={1}
               defaultValue={1}
               required
             />
+            {purchaseErrors.quantity && (
+              <span
+                className="form-error"
+                id="purchase-quantity-error"
+                role="alert"
+              >
+                {purchaseErrors.quantity}
+              </span>
+            )}
           </Field>
           <Field label="선택 메모">
             <input name="note" />

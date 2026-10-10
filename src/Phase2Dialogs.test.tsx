@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { validateDraftInput } from "./draftValidation";
+import { validateDraftFields, validateDraftInput } from "./draftValidation";
 import { Phase2DialogContent } from "./Phase2Dialogs";
 import type { DeskPerson } from "./phase2";
 
@@ -13,11 +13,31 @@ const validInput = {
 };
 
 describe("현장 간이 등록 입력", () => {
-  it("requires a name while allowing the cohort to be omitted", () => {
-    expect(validateDraftInput({ ...validInput, cohort: "" })).toBeNull();
+  it("adds to an existing profile with missing cohort without re-registering it, but still validates quantity", () => {
+    expect(
+      validateDraftFields({ ...validInput, name: "", cohort: "" }, true),
+    ).toEqual({});
+    expect(
+      validateDraftFields(
+        { ...validInput, name: "", cohort: "", quantity: 0 },
+        true,
+      ),
+    ).toEqual({ quantity: "수량은 1권 이상 입력하세요." });
+  });
+  it("requires both name and cohort for annual on-site registration", () => {
+    expect(validateDraftInput({ ...validInput, cohort: "" })).toBe(
+      "또래를 입력하세요.",
+    );
     expect(validateDraftInput({ ...validInput, name: "   " })).toBe(
       "이름을 입력하세요.",
     );
+  });
+
+  it("reports every required field in one submit and allows an omitted phone", () => {
+    expect(
+      validateDraftFields({ ...validInput, name: " ", cohort: " " }),
+    ).toEqual({ name: "이름을 입력하세요.", cohort: "또래를 입력하세요." });
+    expect(validateDraftFields(validInput)).toEqual({});
   });
 
   it("accepts only a two-digit cohort when it is provided", () => {
@@ -88,7 +108,7 @@ describe("배부 확인", () => {
     );
 
     expect(markup).toContain('data-testid="purchase-person-search"');
-    expect(markup).toContain("기존 신청자를 선택하면 구매");
+    expect(markup).not.toContain("기존 신청자를 선택하면 구매");
   });
 
   it("marks the partial distribution dialog for balanced quantity spacing", () => {
@@ -144,6 +164,9 @@ describe("현장 구독 메뉴 이름", () => {
         />,
       );
       expect(markup).toContain(`<h2 id="dialog-title">${label}</h2>`);
+      expect(markup).toContain('class="dialog purchase-dialog"');
+      expect(markup).toContain("선택 메모");
+      expect(markup).toContain("2026년 9~10월호");
       if (type === "purchase") expect(markup).toContain("2026년 9~10월호");
     },
   );

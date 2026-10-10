@@ -206,7 +206,13 @@ export function undoDistribution(issue: Issue, subscriptionId?: string) {
 
 export function createDraft(
   issue: Issue,
-  input: { name: string; cohort: string; phone: string; quantity: number },
+  input: {
+    name: string;
+    cohort: string;
+    phone: string;
+    quantity: number;
+    memo?: string;
+  },
 ) {
   return invoke<void>("create_draft_command", {
     request: {
@@ -216,6 +222,7 @@ export function createDraft(
       issueYear: issue.year,
       issueMonth: issue.startMonth,
       quantity: input.quantity,
+      memo: input.memo || null,
     },
   });
 }

@@ -32,6 +32,9 @@ describe("RenewDialog", () => {
     expect(markup).not.toContain('list="subscription-year-options"');
     expect(markup).not.toContain('list="subscription-quantity-options"');
     expect(markup).not.toContain("<datalist");
+    expect(markup).toContain("가상 신청자 · 구독 추가");
+    expect(markup).not.toContain("추가·갱신");
+    expect(markup).toContain("subscription-date-memo");
     expect(markup).toContain('name="issueYear"');
     expect(markup).toContain('name="quantity"');
   });

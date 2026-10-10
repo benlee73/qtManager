@@ -189,14 +189,6 @@ function LinkedMemos({
     <section className="linked-memos-editor" data-testid="linked-memos-editor">
       <div className="linked-memos-heading">
         <h3>메모</h3>
-        <span className="info-tooltip linked-memos-tooltip">
-          <button type="button" aria-label="메모 안내">
-            i
-          </button>
-          <span role="tooltip">
-            필요할 때 이 사람에게만 적용되는 내용을 적습니다.
-          </span>
-        </span>
       </div>
       <div className="linked-memo-create">
         <textarea
@@ -248,9 +240,6 @@ function LinkedMemos({
             {memo.content}
           </button>
         ))}
-        {visibleMemos.length === 0 && (
-          <p className="linked-memo-empty">등록된 메모가 없습니다.</p>
-        )}
       </div>
       {selectedMemo && (
         <MemoDetailDialog
@@ -363,7 +352,7 @@ export function RenewDialog({
   }
 
   return (
-    <FormDialog title={`${person.name} · 구독 추가·갱신`} onClose={onClose}>
+    <FormDialog title={`${person.name} · 구독 추가`} onClose={onClose}>
       <form
         data-testid="renew-form"
         onSubmit={(event) => {
@@ -484,7 +473,7 @@ function SubscriptionFields({
           />
         </Field>
       </div>
-      <div className="field-grid">
+      <div className="field-grid subscription-date-memo">
         <Field label="신청일">
           <input name="appliedAt" type="date" />
         </Field>

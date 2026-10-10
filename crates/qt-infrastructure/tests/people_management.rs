@@ -350,3 +350,54 @@ fn check_item_change(item: &CheckItem) -> ChangeLog {
         after_json: None,
     }
 }
+
+#[test]
+fn orders_actual_missing_cohort_first_without_draft_or_group_priority() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join("sorting.sqlite");
+    let mut repository = SqliteCoreRepository::open(&path).unwrap();
+    PeopleManagementRepository::migrate(&mut repository).unwrap();
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    let people = [
+        ("complete-draft", "다완료", Some("00"), "draft", false),
+        ("complete-active", "가완료", Some("01"), "active", false),
+        ("missing-draft", "나누락", None, "draft", false),
+        ("missing-active", "가누락", None, "active", false),
+        ("group", "나군지체", None, "active", true),
+        ("archived", "가보관", None, "archived", false),
+    ];
+    for (id, name, cohort, status, group) in people {
+        connection.execute(
+            "INSERT INTO people(id,name,cohort,status,is_group,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,'2026-10-08','2026-10-08')",
+            rusqlite::params![id, name, cohort, status, group],
+        ).unwrap();
+    }
+    let rows = repository.list_people("", false).unwrap();
+    assert_eq!(
+        rows.iter()
+            .map(|row| row.person.id.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "missing-active",
+            "missing-draft",
+            "complete-active",
+            "group",
+            "complete-draft"
+        ]
+    );
+    let with_archived = repository.list_people("", true).unwrap();
+    assert_eq!(
+        with_archived
+            .iter()
+            .map(|row| row.person.id.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "missing-active",
+            "missing-draft",
+            "archived",
+            "complete-active",
+            "group",
+            "complete-draft"
+        ]
+    );
+}
