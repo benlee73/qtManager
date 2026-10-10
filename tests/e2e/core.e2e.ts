@@ -1192,6 +1192,11 @@ describe("QT Manager desktop flow", () => {
     await invokeTauri("create_memo_command", {
       request: { personId: null, content: "미연결 메모도 확인에서 제외" },
     });
+    // Direct fixture writes do not use the UI mutation's refresh. Reload after
+    // the final write so an earlier search response cannot retain active memos
+    // whose archived state has since been committed.
+    await refreshApp("메모 fixture의 최종 보관 상태를 불러오지 못했습니다.");
+    await configureOperatorIfNeeded();
     await setPersonFilterPreset("전체");
     await setInput('[data-testid="people-search"]', name);
     for (const content of contents) await waitForText(".memo-list", content);
@@ -1278,6 +1283,9 @@ describe("QT Manager desktop flow", () => {
     await invokeTauri("update_memo_status_command", {
       request: { id: onlyArchived, archived: true },
     });
+    await refreshApp("보관 메모만 있는 신청자 상태를 불러오지 못했습니다.");
+    await configureOperatorIfNeeded();
+    await setPersonFilterPreset("전체");
     await setInput('[data-testid="people-search"]', noMemoName);
     await waitForText('[data-testid="person-row"]', noMemoName);
     await browser.execute(() =>
