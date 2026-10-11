@@ -28,6 +28,9 @@ export function AnnualSubscriptionForm({
   const [overlap, setOverlap] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const matches = filterPurchasePeople(people, query);
+  const addingNewPerson =
+    newPerson ||
+    (!loading && !failed && Boolean(query.trim()) && matches.length === 0);
   useEffect(() => {
     let active = true;
     void loadManagement("", false)
@@ -117,13 +120,7 @@ export function AnnualSubscriptionForm({
           selected={selected}
           loading={loading}
           failed={failed}
-          newPerson={
-            newPerson ||
-            (!loading &&
-              !failed &&
-              Boolean(query.trim()) &&
-              matches.length === 0)
-          }
+          newPerson={addingNewPerson}
           error={errors.name}
           onQuery={(value) => {
             setQuery(value);
@@ -142,7 +139,7 @@ export function AnnualSubscriptionForm({
             reset();
           }}
         />
-        {!selected && (
+        {addingNewPerson && !selected && (
           <div className="purchase-new-person-fields">
             <div className="field-grid">
               <Field label="또래">

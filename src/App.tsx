@@ -23,7 +23,7 @@ import {
   DEFAULT_PERSON_FILTERS,
   activeDistributionMemos,
   distributionAllocations,
-  filterLabel,
+  distributionListHeading,
   filterPeople,
   issueLabelParts,
   type PersonFilter,
@@ -273,6 +273,12 @@ export default function App() {
         (person) => person.personId === personContextMenu.personId,
       )
     : null;
+
+  const listHeading = distributionListHeading(
+    visiblePeople,
+    new Set(listFilters),
+    query,
+  );
 
   const selectedIssueParts = issueLabelParts(issue);
 
@@ -782,8 +788,7 @@ export default function App() {
             </div>
             <div className="table-title">
               <h2>
-                {query ? "검색 결과" : filterLabel(new Set(listFilters))}{" "}
-                <b>{visiblePeople.length}</b>
+                {listHeading.label} <b>{listHeading.count}</b>
               </h2>
               <div className="list-filters">
                 <PersonFilterMenu

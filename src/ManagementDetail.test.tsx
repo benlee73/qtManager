@@ -194,6 +194,12 @@ describe("PersonDetailPanel", () => {
     expect(markup).toContain('data-testid="person-memo-form"');
     expect(markup).toContain("메모");
     expect(markup).toContain('data-testid="purchase-history"');
+    expect(markup).toContain("구독 이력 5건");
+    expect(markup).toContain("1달 구독");
+    expect(markup).not.toContain("개별 구매 이력");
+    expect(markup).toMatch(
+      /구독 이력 5건[\s\S]*purchase-history[\s\S]*배부 이력 1건/,
+    );
     expect(markup).toContain("2026년 7~8월호");
   });
 
@@ -370,6 +376,51 @@ describe("ManagementEditDialog", () => {
     expect(markup).not.toContain(">보관<");
     expect(markup).not.toContain(">삭제<");
   });
+});
+
+it("keeps group distribution records separate from subscriptions", () => {
+  const markup = renderToStaticMarkup(
+    <PersonDetailPanel
+      detail={{
+        ...detail,
+        isGroup: true,
+        subscriptions: [],
+        purchases: [{ ...detail.purchases![0], isGroupDistribution: true }],
+      }}
+      busy={false}
+      onEdit={vi.fn()}
+      onRenew={vi.fn()}
+      onToggleArchived={vi.fn()}
+    />,
+  );
+  expect(markup).toContain("구독 이력 0건");
+  expect(markup).toContain("배부 권수 기록 1건");
+  expect(markup).not.toContain("1달 구독");
+});
+
+it("identifies purchase reversals and leaves payment wording in the payment screen", () => {
+  const markup = renderToStaticMarkup(
+    <PersonDetailPanel
+      detail={{
+        ...detail,
+        subscriptions: detail.subscriptions.map((entry) => ({
+          ...entry,
+          paymentStatus: "confirmed",
+        })),
+        purchases: [
+          { ...detail.purchases![0], reversed: true },
+          { ...detail.purchases![0], paymentStatus: "pending" },
+        ],
+      }}
+      busy={false}
+      onEdit={vi.fn()}
+      onRenew={vi.fn()}
+      onToggleArchived={vi.fn()}
+    />,
+  );
+  expect(markup).toContain("구매·전달 취소");
+  expect(markup).toContain("구매·전달");
+  expect(markup).not.toContain("입금 확인");
 });
 
 it("hides the internal on-site subscription memo while preserving user notes", () => {

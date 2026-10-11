@@ -12,6 +12,7 @@ import {
   issueLabelParts,
   subscriptionPeriodText,
   subscriptionHeadline,
+  distributionListHeading,
 } from "./distributionView";
 
 function person(
@@ -52,6 +53,30 @@ describe("distribution list filters", () => {
     expect(filterPeople(people, new Set(DEFAULT_PERSON_FILTERS))).toHaveLength(
       2,
     );
+  });
+
+  it("counts group deliveries separately in the remaining-applicant heading", () => {
+    const group = { ...person("미배부"), isGroup: true };
+    const rows = filterPeople(
+      [...people, group],
+      new Set(DEFAULT_PERSON_FILTERS),
+    );
+    expect(
+      distributionListHeading(rows, new Set(DEFAULT_PERSON_FILTERS), ""),
+    ).toEqual({
+      label: "남은 신청자",
+      count: 2,
+    });
+    expect(
+      distributionListHeading(
+        [group],
+        new Set(DEFAULT_PERSON_FILTERS),
+        "군지체",
+      ),
+    ).toEqual({
+      label: "검색 결과",
+      count: 1,
+    });
   });
 
   it("combines selected categories and classifies expired people only once", () => {

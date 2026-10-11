@@ -73,10 +73,7 @@ describe("QT Manager desktop flow", () => {
         const cohort = document.querySelector<HTMLInputElement>(
           "input[name='cohort']",
         )!;
-        return (
-          name.getAttribute("aria-invalid") === "true" &&
-          cohort.getAttribute("aria-invalid") === "true"
-        );
+        return name.getAttribute("aria-invalid") === "true" && cohort === null;
       }),
     ).toBe(true);
     const alignedInputs = async () =>
@@ -92,7 +89,6 @@ describe("QT Manager desktop flow", () => {
           Math.abs(name.height - cohort.height) < 1
         );
       });
-    expect(await alignedInputs()).toBe(true);
     await setInput("input[name='name']", applicant);
     await clickButtonByText("1년 구독 신청");
     await waitForText(
@@ -391,7 +387,7 @@ describe("QT Manager desktop flow", () => {
     );
     await setInput('[data-testid="management-search"]', existing);
     await waitForText('[data-testid="management-person"]', existing);
-    await waitForText('[data-testid="person-detail"]', "개별 구매 이력 1건");
+    await waitForText('[data-testid="person-detail"]', "구독 이력 2건");
     await waitForText('[data-testid="purchase-history"]', "구매·전달 1권");
 
     const newPerson = `가상구매신규${Date.now()}`;
@@ -432,7 +428,7 @@ describe("QT Manager desktop flow", () => {
           document.querySelectorAll('[data-testid="management-person"]').length,
       ),
     ).toBe(1);
-    await waitForText('[data-testid="person-detail"]', "개별 구매 이력 3건");
+    await waitForText('[data-testid="person-detail"]', "구독 이력 3건");
     await waitForText('[data-testid="purchase-history"]', "구매·전달 1권");
   });
 
@@ -459,6 +455,13 @@ describe("QT Manager desktop flow", () => {
       },
     });
 
+    // Direct fixture writes bypass both screens' normal mutation refresh. Load
+    // the management snapshot before opening detail, so its stale empty list
+    // cannot clear the freshly focused applicant while the test clicks Edit.
+    await refreshApp("만료 신청자 fixture를 관리 목록에 불러오지 못했습니다.");
+    await configureOperatorIfNeeded();
+    await waitForText('[data-testid="management-person"]', expiredName);
+    await setPersonFilterPreset("전체");
     await setInput('[data-testid="people-search"]', `00 ${expiredName}`);
     await waitForText('[data-testid="person-row"]', "구독 만료");
     expect(
@@ -595,6 +598,34 @@ describe("QT Manager desktop flow", () => {
       '[data-testid="person-row"]',
       `${selected.year}년 ${selected.startMonth}~${selected.startMonth + 1}월호까지`,
     );
+  });
+
+  it("automatically dismisses a guarded deletion error without deleting history", async () => {
+    const name = `가상알림${Date.now()}`;
+    await registerE2ePerson(name);
+    await refreshApp("알림 검사 fixture를 관리 목록에 불러오지 못했습니다.");
+    await configureOperatorIfNeeded();
+    await clickButtonByText("신청자 관리");
+    await setInput('[data-testid="management-search"]', name);
+    await waitForText('[data-testid="person-detail"]', name);
+    await browser.execute(() => {
+      const original = window.confirm;
+      try {
+        window.confirm = () => true;
+        document
+          .querySelector<HTMLButtonElement>('[data-testid="delete-person"]')!
+          .click();
+      } finally {
+        window.confirm = original;
+      }
+    });
+    await waitForText(".toast.error", "삭제할 수 없습니다");
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => document.querySelector(".toast.error") === null),
+      { timeout: 10000, timeoutMsg: "오류 알림이 자동으로 닫히지 않았습니다." },
+    );
+    await waitForText('[data-testid="person-detail"]', name);
   });
 
   it("keeps help layouts and shortcut wording readable", async () => {
@@ -784,10 +815,29 @@ describe("QT Manager desktop flow", () => {
       { timeoutMsg: "도움말 검색 결과가 목차에 반영되지 않았습니다." },
     );
     await setInput('[data-testid="help-search"]', "");
+    // Clearing the input restores sections immediately, but the filtered
+    // navigation is restored by the deferred search effect.
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const link = document.querySelector(
+            '[data-testid="help-nav-shortcuts"]',
+          );
+          const section = document.querySelector<HTMLElement>(
+            '[data-testid="help-shortcuts"]',
+          );
+          return Boolean(link && section && !section.hidden);
+        }),
+      {
+        timeoutMsg: "도움말 검색 초기화 후 단축키 목차가 복원되지 않았습니다.",
+      },
+    );
     await browser.execute(() => {
-      document
-        .querySelector<HTMLAnchorElement>('[data-testid="help-nav-shortcuts"]')
-        ?.click();
+      const link = document.querySelector<HTMLAnchorElement>(
+        '[data-testid="help-nav-shortcuts"]',
+      );
+      if (!link) throw new Error("복원된 단축키 목차를 찾지 못했습니다.");
+      link.click();
     });
     await browser.waitUntil(
       async () =>
@@ -4137,11 +4187,7 @@ describe("QT Manager desktop flow", () => {
         ?.click();
     });
     await waitForText("#help-title", "QT Manager 도움말");
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLElement>('[data-testid="help-backdrop"]')
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
+    await browser.$('[data-testid="help-dismiss-area"]').click();
     await browser.waitUntil(
       async () =>
         (await browser.execute(() => document.querySelector("#help-title"))) ===
@@ -4499,6 +4545,16 @@ describe("QT Manager desktop flow", () => {
     await refreshApp("군지체 fixture를 표시하지 못했습니다.");
     await configureOperatorIfNeeded();
     await waitForText('[data-testid="person-row"]', "군지체");
+    await waitForText(".table-title h2", "남은 신청자 0");
+    expect(await textOf(".table-title h2")).not.toContain("군지체");
+    expect(
+      await browser.execute(() => ({
+        remaining: document
+          .querySelector(".summary-grid")
+          ?.children[2]?.textContent?.replace(/\s/g, ""),
+        listed: document.querySelector(".table-title h2 b")?.textContent,
+      })),
+    ).toEqual({ remaining: "남음0명", listed: "0" });
     await clickButtonByText("권수 입력");
     await setInput("input[name='quantity']", "7");
     await clickButtonByText("배부 기록");

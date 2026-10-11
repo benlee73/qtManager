@@ -198,6 +198,14 @@ export function HelpPanel({
         if (event.target === event.currentTarget) closePanel();
       }}
     >
+      <button
+        className="help-dismiss-area"
+        data-testid="help-dismiss-area"
+        type="button"
+        aria-label="도움말 바깥 영역 닫기"
+        tabIndex={-1}
+        onClick={closePanel}
+      />
       <section
         className="help-panel"
         data-testid="help-panel"
@@ -564,7 +572,8 @@ export function HelpPanel({
                   <li>
                     찾는 사람이 없으면 자동으로 신규 등록 필드가 표시되어
                     이름으로 구매 전용 신청자를 만들 수 있습니다. 또래·연락처는
-                    선택이며, 구독 없이 이번 구매 이력만 연결됩니다.
+                    선택이며, 1달 구독은 신청자 상세의 구독 이력에 함께
+                    표시됩니다.
                   </li>
                   <li>
                     이름을 비워 두면 익명 구매로 기록할 수 있습니다. 호·수량은

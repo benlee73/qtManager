@@ -20,12 +20,10 @@ export function useNotifications() {
       setNotifications((current) =>
         [{ id, message, kind }, ...current].slice(0, 3),
       );
-      if (kind === "success") {
-        timers.current.set(
-          id,
-          window.setTimeout(() => dismiss(id), 4000),
-        );
-      }
+      timers.current.set(
+        id,
+        window.setTimeout(() => dismiss(id), kind === "error" ? 8000 : 4000),
+      );
     },
     [dismiss],
   );

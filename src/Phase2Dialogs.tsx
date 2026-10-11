@@ -141,11 +141,6 @@ export function Phase2DialogContent({
               });
           }}
         >
-          <p className="dialog-description">
-            {issue.year}년 {issue.startMonth}~{issue.startMonth + 1}월호 · 현재{" "}
-            {dialog.person.distributedQuantity}권 배부. 이번에 전달한 권수를
-            추가로 기록합니다.
-          </p>
           <DistributionMemoNotice memos={distributionMemos} />
           <Field label="이번에 배부한 권수">
             <input

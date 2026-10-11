@@ -143,6 +143,19 @@ describe("배부 확인", () => {
     );
 
     expect(markup).toContain('class="dialog partial-distribution-dialog"');
+    const group = renderToStaticMarkup(
+      <Phase2DialogContent
+        dialog={{ type: "group-distribution", person }}
+        issue={{ year: 2026, startMonth: 9 }}
+        busy={false}
+        onClose={vi.fn()}
+        mutate={vi.fn().mockResolvedValue(true)}
+        recordAction={vi.fn()}
+      />,
+    );
+    expect(group).toContain("이번에 배부한 권수");
+    expect(group).not.toContain("추가로 기록합니다");
+    expect(group).not.toContain("현재 0권 배부");
   });
 });
 
@@ -166,6 +179,9 @@ describe("현장 구독 메뉴 이름", () => {
       expect(markup).toContain(`<h2 id="dialog-title">${label}</h2>`);
       expect(markup).toContain('class="dialog purchase-dialog"');
       expect(markup).toContain("선택 메모");
+      expect(markup).not.toContain('name="cohort"');
+      expect(markup).not.toContain('name="phone"');
+      expect(markup).not.toContain('name="purchaseCohort"');
       expect(markup).toContain("2026년 9~10월호");
       if (type === "purchase") expect(markup).toContain("2026년 9~10월호");
     },

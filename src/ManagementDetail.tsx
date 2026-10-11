@@ -294,7 +294,9 @@ function PersonDetailContent({
         </div>
       </DetailSection>
 
-      <DetailSection title={`구독 이력 ${detail.subscriptions.length}건`}>
+      <DetailSection
+        title={`구독 이력 ${detail.subscriptions.length + (detail.isGroup ? 0 : (detail.purchases ?? []).length)}건`}
+      >
         <div className="history-list">
           {detail.subscriptions.map((subscription) => (
             <article
@@ -318,13 +320,6 @@ function PersonDetailContent({
               </div>
               <div className="subscription-quantity numeric">
                 {subscription.quantity}권
-                {subscription.paymentStatus && (
-                  <small>
-                    {subscription.paymentStatus === "pending"
-                      ? "입금 확인 전"
-                      : "입금 확인"}
-                  </small>
-                )}
               </div>
               <span className="subscription-state">
                 {subscriptionStateLabels[subscription.periodState]}
@@ -340,7 +335,13 @@ function PersonDetailContent({
                 )}
             </article>
           ))}
-          {detail.subscriptions.length === 0 && <p>등록된 구독이 없습니다.</p>}
+          {!detail.isGroup && (detail.purchases ?? []).length > 0 && (
+            <PurchaseHistory purchases={detail.purchases ?? []} />
+          )}
+          {detail.subscriptions.length === 0 &&
+            (detail.isGroup || (detail.purchases ?? []).length === 0) && (
+              <p>등록된 구독이 없습니다.</p>
+            )}
         </div>
       </DetailSection>
 
@@ -377,44 +378,13 @@ function PersonDetailContent({
         </div>
       </DetailSection>
 
-      <DetailSection
-        title={`${detail.isGroup ? "배부 권수 기록" : "개별 구매 이력"} ${(detail.purchases ?? []).length}건`}
-      >
-        <div className="purchase-history" data-testid="purchase-history">
-          {(detail.purchases ?? []).map((purchase, index) => (
-            <div
-              className="purchase-history-row"
-              key={`${purchase.issue}-${purchase.purchasedAt}-${index}`}
-            >
-              <strong title={purchase.issue}>{purchase.issue}</strong>
-              <span>
-                {purchase.reversed
-                  ? "취소"
-                  : purchase.isGroupDistribution
-                    ? "배부"
-                    : "구매·전달"}{" "}
-                {purchase.quantity}권
-                {purchase.paymentStatus && !purchase.reversed && (
-                  <small>
-                    {purchase.paymentStatus === "pending"
-                      ? "입금 확인 전"
-                      : "입금 확인"}
-                  </small>
-                )}
-              </span>
-              <time
-                dateTime={purchase.purchasedAt}
-                title={purchase.purchasedAt}
-              >
-                {displayDate(purchase.purchasedAt)}
-              </time>
-            </div>
-          ))}
-          {(detail.purchases ?? []).length === 0 && (
-            <p>개별 구매 이력이 없습니다.</p>
-          )}
-        </div>
-      </DetailSection>
+      {detail.isGroup && (
+        <DetailSection
+          title={`배부 권수 기록 ${(detail.purchases ?? []).length}건`}
+        >
+          <PurchaseHistory purchases={detail.purchases ?? []} />
+        </DetailSection>
+      )}
 
       <div
         className="person-detail-footer-actions"
@@ -509,5 +479,41 @@ function displayDate(value: string) {
 function isLegacyMigrationMemo(value: string) {
   return ["2026년 기존 배부현황 최초 이전", "현장 간이 등록"].includes(
     value.trim(),
+  );
+}
+
+function PurchaseHistory({
+  purchases,
+}: {
+  purchases: NonNullable<PersonDetail["purchases"]>;
+}) {
+  return (
+    <div className="purchase-history" data-testid="purchase-history">
+      {purchases.map((purchase, index) => (
+        <div
+          className="purchase-history-row"
+          key={`${purchase.issue}-${purchase.purchasedAt}-${index}`}
+        >
+          <strong title={purchase.issue}>{purchase.issue}</strong>
+          <span className="purchase-history-status">
+            {!purchase.isGroupDistribution && <strong>1달 구독</strong>}
+            <span>
+              {purchase.reversed
+                ? purchase.isGroupDistribution
+                  ? "배부 취소"
+                  : "구매·전달 취소"
+                : purchase.isGroupDistribution
+                  ? "배부"
+                  : "구매·전달"}{" "}
+              {purchase.quantity}권
+            </span>
+          </span>
+          <time dateTime={purchase.purchasedAt} title={purchase.purchasedAt}>
+            {displayDate(purchase.purchasedAt)}
+          </time>
+        </div>
+      ))}
+      {purchases.length === 0 && <p>배부 권수 기록이 없습니다.</p>}
+    </div>
   );
 }

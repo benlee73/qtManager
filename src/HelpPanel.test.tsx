@@ -23,6 +23,7 @@ describe("HelpPanel", () => {
       /data-testid="help-nav-payments"[^>]*aria-current="location"/,
     );
     expect(markup).toContain('data-testid="help-payments"');
+    expect(markup).toContain('data-testid="help-dismiss-area"');
     expect(markup).toContain("선택 입금 확인");
     expect(markup).toContain("확인 취소");
     expect(markup).toContain("기존 자료는 입금 확인 대상에 올리지 않습니다.");

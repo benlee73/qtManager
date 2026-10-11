@@ -111,6 +111,21 @@ export function filterLabel(filters: ReadonlySet<PersonFilter>) {
   return "필터 결과";
 }
 
+export function distributionListHeading(
+  people: DeskPerson[],
+  filters: ReadonlySet<PersonFilter>,
+  query: string,
+) {
+  const label = query ? "검색 결과" : filterLabel(filters);
+  const groupCount =
+    label === "남은 신청자"
+      ? people.filter((person) => person.isGroup).length
+      : 0;
+  // Group deliveries have no subscription target and are excluded from the
+  // remaining-person statistic, but must stay available in the desk list.
+  return { label, count: people.length - groupCount };
+}
+
 export function filterTriggerLabel(filters: ReadonlySet<PersonFilter>) {
   return `필터 · ${filters.size}개`;
 }
