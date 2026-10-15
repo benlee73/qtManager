@@ -4859,6 +4859,68 @@ describe("QT Manager desktop flow", () => {
   });
 
   it("exports, replaces, restores and rejects a damaged handover workbook", async () => {
+    // Use native WebDriver clicks: DOM .click() has detail=0 and missed the
+    // global IME handler cancelling radio/checkbox/label activation.
+    await browser.execute(() => {
+      const probe = document.createElement("div");
+      probe.dataset.testid = "native-control-probe";
+      probe.innerHTML = `<label data-testid="native-radio-label"><input type="radio" name="native-radio">교체 선택</label>
+        <label data-testid="native-checkbox-label"><input type="checkbox">선택</label>
+        <button type="button" data-testid="native-button"><span>실행</span></button>
+        <button type="button" disabled data-testid="native-disabled">비활성</button>`;
+      const button = probe.querySelector<HTMLButtonElement>(
+        '[data-testid="native-button"]',
+      )!;
+      button.dataset.count = "0";
+      button.addEventListener("click", () => {
+        button.dataset.count = String(Number(button.dataset.count) + 1);
+      });
+      Object.assign(probe.style, {
+        position: "fixed",
+        top: "80px",
+        left: "150px",
+        zIndex: "9999",
+        background: "white",
+        color: "black",
+        padding: "12px",
+      });
+      document.body.append(probe);
+    });
+    try {
+      await browser.$('[data-testid="native-radio-label"]').click();
+      expect(
+        await browser
+          .$('[data-testid="native-radio-label"] input')
+          .isSelected(),
+      ).toBe(true);
+      await browser.$('[data-testid="native-checkbox-label"]').click();
+      expect(
+        await browser
+          .$('[data-testid="native-checkbox-label"] input')
+          .isSelected(),
+      ).toBe(true);
+      await browser.$('[data-testid="native-checkbox-label"] input').click();
+      expect(
+        await browser
+          .$('[data-testid="native-checkbox-label"] input')
+          .isSelected(),
+      ).toBe(false);
+      await browser.$('[data-testid="native-button"] span').click();
+      expect(
+        await browser
+          .$('[data-testid="native-button"]')
+          .getAttribute("data-count"),
+      ).toBe("1");
+      expect(
+        await browser.$('[data-testid="native-disabled"]').isEnabled(),
+      ).toBe(false);
+    } finally {
+      await browser.execute(() =>
+        document
+          .querySelector('[data-testid="native-control-probe"]')
+          ?.remove(),
+      );
+    }
     await registerE2ePerson(`가상인수기준${Date.now()}`);
     await browser.execute(() => {
       document

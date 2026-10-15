@@ -96,6 +96,7 @@ export function installCompositionClicks(doc: Document): () => void {
   const click = (event: Event) => {
     if (
       !activating &&
+      pending !== null &&
       pending === buttonAt(event) &&
       (event as MouseEvent).detail > 0
     ) {

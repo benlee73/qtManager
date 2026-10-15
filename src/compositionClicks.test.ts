@@ -36,6 +36,83 @@ function fixture() {
   return { action, input, button, send, cleanup };
 }
 describe("한글 조합 중 버튼 클릭", () => {
+  it.each([false, true])(
+    "preserves native input clicks when composing=%s",
+    (composing) => {
+      const { action, input, send, cleanup } = fixture();
+      if (composing) send("compositionstart", input);
+      const target = { closest: () => null };
+      send("pointerdown", target, { button: 0 });
+      send("pointerup", target, { button: 0 });
+      expect(send("click", target, { detail: 1 }).defaultPrevented).toBe(false);
+      expect(action).not.toHaveBeenCalled();
+      cleanup();
+    },
+  );
+  it("preserves keyboard activation after a corrected pointer gesture", () => {
+    const { action, input, button, send, cleanup } = fixture();
+    send("compositionstart", input);
+    send("pointerdown", button, { button: 0 });
+    send("pointerup", button, { button: 0 });
+    vi.runAllTimers();
+    expect(send("click", button, { detail: 0 }).defaultPrevented).toBe(false);
+    expect(send("click", button, { detail: 1 }).defaultPrevented).toBe(true);
+    expect(action).toHaveBeenCalledTimes(1);
+    // A fresh press must clear suppression from the preceding gesture.
+    send("pointerdown", button, { button: 0 });
+    send("pointerup", button, { button: 0 });
+    expect(send("click", button, { detail: 1 }).defaultPrevented).toBe(false);
+    cleanup();
+  });
+  it("preserves clicks on other controls after a corrected button click", () => {
+    const { input, button, send, cleanup } = fixture();
+    send("compositionstart", input);
+    send("pointerdown", button, { button: 0 });
+    send("pointerup", button, { button: 0 });
+    vi.runAllTimers();
+    expect(
+      send("click", { closest: () => null }, { detail: 1 }).defaultPrevented,
+    ).toBe(false);
+    cleanup();
+  });
+  it.each([1, 2])(
+    "does not synthesize an action for mouse button %s",
+    (mouseButton) => {
+      const { action, input, button, send, cleanup } = fixture();
+      send("compositionstart", input);
+      expect(
+        send("pointerdown", button, { button: mouseButton }).defaultPrevented,
+      ).toBe(false);
+      send("pointerup", button, { button: mouseButton });
+      vi.runAllTimers();
+      expect(action).not.toHaveBeenCalled();
+      cleanup();
+    },
+  );
+  it("cancels an IME action when the pointer is cancelled", () => {
+    const { action, input, button, send, cleanup } = fixture();
+    send("compositionstart", input);
+    send("pointerdown", button, { button: 0 });
+    send("pointerup", button, { button: 0 });
+    send("pointercancel", button);
+    vi.runAllTimers();
+    expect(action).not.toHaveBeenCalled();
+    cleanup();
+  });
+  it.each(["disabled", "removed"])(
+    "does not activate a button %s before the queued action",
+    (state) => {
+      const { action, input, button, send, cleanup } = fixture();
+      send("compositionstart", input);
+      send("pointerdown", button, { button: 0 });
+      send("pointerup", button, { button: 0 });
+      if (state === "disabled") button.disabled = true;
+      else button.isConnected = false;
+      vi.runAllTimers();
+      expect(action).not.toHaveBeenCalled();
+      cleanup();
+    },
+  );
   it("handles an IME-consumed press followed by only a mouse release, once", () => {
     const { action, input, button, send, cleanup } = fixture();
     send("compositionstart", input);
