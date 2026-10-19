@@ -169,6 +169,7 @@ impl Phase1Fixture {
     fn new() -> Self {
         let now = "2026-07-24T10:00:00+09:00";
         let person = Person {
+            cohort_not_applicable: false,
             is_group: false,
             id: "00000000-0000-4000-8000-000000000101".into(),
             name: "가상신청자".into(),

@@ -1,23 +1,22 @@
+mod operation_commands;
 use std::{fs, path::PathBuf, process::Command};
 
 use qt_application::{
-    AppLogger, ApplicationsPreview, ApplyStateImportRequest, Clock, CreateCheckItemRequest,
-    CreateDraftRequest, CreateMemoRequest, CreatePinnedNoteRequest, DistributionDesk,
-    DuplicateCandidate, IdGenerator, ImportApplicationsRequest, ImportApplicationsResult,
-    ImportMode, ImportPreview, MergePersonResolution, PeopleManagement, PersonDetail, Phase0Report,
-    Phase1Report, PreviewApplicationsRequest, RecordDistributionRequest,
-    RecordPurchasePersonRequest, RecordPurchaseRequest, RegisterPersonRequest,
-    RenewSubscriptionRequest, RestorePointView, RunPhase0Probe, RunPhase1Probe, RuntimeServices,
-    StateCounts, UndoDistributionRequest, UndoDistributionResult, UpdateCheckItemRequest,
-    UpdateCheckItemStatusRequest, UpdateMemoRequest, UpdateMemoStatusRequest, UpdatePersonRequest,
-    UpdatePinnedNoteRequest, apply_state_import, cancel_latest_purchase, create_check_item,
-    create_draft, create_memo, create_pinned_note, delete_check_item, delete_memo, delete_person,
-    delete_pinned_note, export_state, import_applications, issue_containing_date,
+    AppLogger, ApplicationsPreview, ApplyStateImportRequest, Clock, CreateDraftRequest,
+    CreateMemoRequest, DistributionDesk, DuplicateCandidate, IdGenerator,
+    ImportApplicationsRequest, ImportApplicationsResult, ImportMode, ImportPreview,
+    MergePersonResolution, PeopleManagement, PersonDetail, Phase0Report, Phase1Report,
+    PreviewApplicationsRequest, RecordDistributionRequest, RecordPurchasePersonRequest,
+    RecordPurchaseRequest, RegisterPersonRequest, RenewSubscriptionRequest, RestorePointView,
+    RunPhase0Probe, RunPhase1Probe, RuntimeServices, StateCounts, UndoDistributionRequest,
+    UndoDistributionResult, UpdateMemoRequest, UpdateMemoStatusRequest, UpdatePersonRequest,
+    apply_state_import, cancel_latest_purchase, create_draft, create_memo, delete_memo,
+    delete_person, export_state, import_applications, issue_containing_date,
     load_distribution_desk, load_people_management, load_person_detail, preview_applications,
     preview_duplicates, preview_state_import, record_distribution, record_purchase,
     record_purchase_for_new_person, register_person, renew_subscription, save_operator,
-    set_person_archived, undo_last_distribution, undo_state_import, update_check_item,
-    update_check_item_status, update_memo, update_memo_status, update_person, update_pinned_note,
+    set_person_archived, undo_last_distribution, undo_state_import, update_memo,
+    update_memo_status, update_person,
 };
 use qt_domain::Issue;
 use qt_infrastructure::{
@@ -224,6 +223,7 @@ fn seed_e2e_group_command(app: tauri::AppHandle) -> Result<String, String> {
         let runtime = SystemRuntime;
         let now = runtime.now();
         let person = qt_domain::Person {
+            cohort_not_applicable: false,
             id: runtime.next_id(),
             name: "군지체".into(),
             is_group: true,
@@ -287,6 +287,14 @@ fn reset_e2e_state_command(app: tauri::AppHandle) -> Result<(), String> {
                 }
             }
         }
+        // WebKit may suspend compositor animations while the test window is
+        // occluded. Each scenario starts in the same foreground state as usage.
+        let window = app
+            .get_webview_window("main")
+            .ok_or_else(|| "E2E 창을 찾지 못했습니다.".to_owned())?;
+        window.unminimize().map_err(|error| error.to_string())?;
+        window.show().map_err(|error| error.to_string())?;
+        window.set_focus().map_err(|error| error.to_string())?;
         Ok(())
     }
 }
@@ -386,32 +394,6 @@ fn create_draft_command(app: tauri::AppHandle, request: CreateDraftRequest) -> R
 }
 
 #[tauri::command]
-fn create_check_item_command(
-    app: tauri::AppHandle,
-    request: CreateCheckItemRequest,
-) -> Result<String, String> {
-    let mut repository = open_operational_repository(&app)?;
-    let runtime = SystemRuntime;
-    let logger = event_logger(&app);
-    logger.info("check_item_create_started");
-    let result = create_check_item(
-        &mut repository,
-        &RuntimeServices {
-            clock: &runtime,
-            ids: &runtime,
-        },
-        request,
-    )
-    .map_err(|error| error.to_string());
-    if result.is_ok() {
-        logger.info("check_item_create_completed");
-    } else {
-        logger.error("check_item_create_failed");
-    }
-    result
-}
-
-#[tauri::command]
 fn create_memo_command(
     app: tauri::AppHandle,
     request: CreateMemoRequest,
@@ -505,156 +487,6 @@ fn delete_memo_command(app: tauri::AppHandle, id: String) -> Result<(), String> 
         logger.info("memo_delete_completed");
     } else {
         logger.error("memo_delete_failed");
-    }
-    result
-}
-
-#[tauri::command]
-fn update_check_item_status_command(
-    app: tauri::AppHandle,
-    request: UpdateCheckItemStatusRequest,
-) -> Result<(), String> {
-    let mut repository = open_operational_repository(&app)?;
-    let runtime = SystemRuntime;
-    let logger = event_logger(&app);
-    logger.info("check_item_status_update_started");
-    let result = update_check_item_status(
-        &mut repository,
-        &RuntimeServices {
-            clock: &runtime,
-            ids: &runtime,
-        },
-        request,
-    )
-    .map_err(|error| error.to_string());
-    if result.is_ok() {
-        logger.info("check_item_status_update_completed");
-    } else {
-        logger.error("check_item_status_update_failed");
-    }
-    result
-}
-
-#[tauri::command]
-fn update_check_item_command(
-    app: tauri::AppHandle,
-    request: UpdateCheckItemRequest,
-) -> Result<(), String> {
-    let mut repository = open_operational_repository(&app)?;
-    let runtime = SystemRuntime;
-    let logger = event_logger(&app);
-    logger.info("check_item_update_started");
-    let result = update_check_item(
-        &mut repository,
-        &RuntimeServices {
-            clock: &runtime,
-            ids: &runtime,
-        },
-        request,
-    )
-    .map_err(|error| error.to_string());
-    if result.is_ok() {
-        logger.info("check_item_update_completed");
-    } else {
-        logger.error("check_item_update_failed");
-    }
-    result
-}
-
-#[tauri::command]
-fn delete_check_item_command(app: tauri::AppHandle, id: String) -> Result<(), String> {
-    let mut repository = open_operational_repository(&app)?;
-    let runtime = SystemRuntime;
-    let logger = event_logger(&app);
-    logger.info("check_item_delete_started");
-    let result = delete_check_item(
-        &mut repository,
-        &RuntimeServices {
-            clock: &runtime,
-            ids: &runtime,
-        },
-        &id,
-    )
-    .map_err(|error| error.to_string());
-    if result.is_ok() {
-        logger.info("check_item_delete_completed");
-    } else {
-        logger.error("check_item_delete_failed");
-    }
-    result
-}
-
-#[tauri::command]
-fn create_pinned_note_command(
-    app: tauri::AppHandle,
-    request: CreatePinnedNoteRequest,
-) -> Result<String, String> {
-    let mut repository = open_operational_repository(&app)?;
-    let runtime = SystemRuntime;
-    let logger = event_logger(&app);
-    logger.info("pinned_note_create_started");
-    let result = create_pinned_note(
-        &mut repository,
-        &RuntimeServices {
-            clock: &runtime,
-            ids: &runtime,
-        },
-        request,
-    )
-    .map_err(|error| error.to_string());
-    if result.is_ok() {
-        logger.info("pinned_note_create_completed");
-    } else {
-        logger.error("pinned_note_create_failed");
-    }
-    result
-}
-
-#[tauri::command]
-fn update_pinned_note_command(
-    app: tauri::AppHandle,
-    request: UpdatePinnedNoteRequest,
-) -> Result<(), String> {
-    let mut repository = open_operational_repository(&app)?;
-    let runtime = SystemRuntime;
-    let logger = event_logger(&app);
-    logger.info("pinned_note_update_started");
-    let result = update_pinned_note(
-        &mut repository,
-        &RuntimeServices {
-            clock: &runtime,
-            ids: &runtime,
-        },
-        request,
-    )
-    .map_err(|error| error.to_string());
-    if result.is_ok() {
-        logger.info("pinned_note_update_completed");
-    } else {
-        logger.error("pinned_note_update_failed");
-    }
-    result
-}
-
-#[tauri::command]
-fn delete_pinned_note_command(app: tauri::AppHandle, id: String) -> Result<(), String> {
-    let mut repository = open_operational_repository(&app)?;
-    let runtime = SystemRuntime;
-    let logger = event_logger(&app);
-    logger.info("pinned_note_delete_started");
-    let result = delete_pinned_note(
-        &mut repository,
-        &RuntimeServices {
-            clock: &runtime,
-            ids: &runtime,
-        },
-        &id,
-    )
-    .map_err(|error| error.to_string());
-    if result.is_ok() {
-        logger.info("pinned_note_delete_completed");
-    } else {
-        logger.error("pinned_note_delete_failed");
     }
     result
 }
@@ -1177,7 +1009,7 @@ pub fn run() {
                     .map_err(|error| error.to_string())
             }) {
                 Ok(()) => {
-                    logger.info("database_schema_version_6");
+                    logger.info("database_schema_version_7");
                     logger.info("database_migration_completed");
                 }
                 Err(error) => {
@@ -1188,6 +1020,10 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            operation_commands::annual_intake_command,
+            operation_commands::preview_subscription_correction_command,
+            operation_commands::correct_subscription_command,
+            operation_commands::correct_purchase_command,
             run_phase0_probe,
             run_phase1_probe,
             main_window_contract_command,
@@ -1199,17 +1035,10 @@ pub fn run() {
             record_distribution_command,
             undo_distribution_command,
             create_draft_command,
-            create_check_item_command,
             create_memo_command,
             update_memo_command,
             update_memo_status_command,
             delete_memo_command,
-            update_check_item_status_command,
-            update_check_item_command,
-            delete_check_item_command,
-            create_pinned_note_command,
-            update_pinned_note_command,
-            delete_pinned_note_command,
             record_purchase_command,
             record_purchase_for_new_person_command,
             cancel_latest_purchase_command,

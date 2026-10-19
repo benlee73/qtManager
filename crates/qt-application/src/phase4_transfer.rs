@@ -36,6 +36,9 @@ pub struct StatePinnedNote {
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StateSnapshot {
+    /// None is an old in-memory snapshot; Some(empty) is an intentionally empty memo table.
+    #[serde(default)]
+    pub memos: Option<Vec<qt_domain::Memo>>,
     pub settings: Vec<StateSetting>,
     pub people: Vec<Person>,
     pub subscriptions: Vec<Subscription>,
@@ -65,8 +68,8 @@ impl StateSnapshot {
             subscriptions: self.subscriptions.len(),
             distributions: self.distributions.len(),
             purchases: self.purchases.len(),
-            check_items: self.check_items.len(),
-            pinned_notes: self.pinned_notes.len(),
+            check_items: self.memos.as_ref().map_or(self.check_items.len(),Vec::len),
+            pinned_notes: if self.memos.is_some(){0}else{self.pinned_notes.len()},
             changes: self.changes.len(),
         }
     }
@@ -414,20 +417,7 @@ fn compare_snapshots(current: &StateSnapshot, incoming: &StateSnapshot) -> (usiz
         |value| &value.updated_at,
         &mut totals,
     );
-    compare_records(
-        &current.check_items,
-        &incoming.check_items,
-        |value| &value.id,
-        |value| &value.updated_at,
-        &mut totals,
-    );
-    compare_records(
-        &current.pinned_notes,
-        &incoming.pinned_notes,
-        |value| &value.id,
-        |value| &value.updated_at,
-        &mut totals,
-    );
+    compare_records(&crate::snapshot_memos(current),&crate::snapshot_memos(incoming),|memo|&memo.id,|memo|&memo.updated_at,&mut totals);
     totals
 }
 

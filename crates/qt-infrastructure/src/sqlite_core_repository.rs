@@ -96,7 +96,7 @@ impl CoreRepository for SqliteCoreRepository {
             .query_row(
                 "
                 SELECT id, name, cohort, phone, normalized_phone, status, person_note,
-                       created_at, updated_at, is_group
+                       created_at, updated_at, is_group, cohort_not_applicable
                 FROM people
                 WHERE id = ?1
                 ",
@@ -179,9 +179,9 @@ pub(crate) fn upsert_person(
             "
             INSERT INTO people(
                 id, name, cohort, phone, normalized_phone, status, person_note,
-                created_at, updated_at, is_group
+                created_at, updated_at, is_group, cohort_not_applicable
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
             ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name,
                 cohort = excluded.cohort,
@@ -190,7 +190,8 @@ pub(crate) fn upsert_person(
                 status = excluded.status,
                 person_note = excluded.person_note,
                 updated_at = excluded.updated_at,
-                is_group = excluded.is_group
+                is_group = excluded.is_group,
+                cohort_not_applicable = excluded.cohort_not_applicable
             ",
             params![
                 person.id,
@@ -202,7 +203,8 @@ pub(crate) fn upsert_person(
                 person.person_note,
                 person.created_at,
                 person.updated_at,
-                person.is_group
+                person.is_group,
+                person.cohort_not_applicable
             ],
         )
         .map_err(port_error)?;
@@ -335,6 +337,7 @@ pub(crate) fn upsert_change(
 
 pub(crate) fn person_from_row(row: &Row<'_>) -> rusqlite::Result<Person> {
     Ok(Person {
+        cohort_not_applicable: row.get(10)?,
         is_group: row.get(9)?,
         id: row.get(0)?,
         name: row.get(1)?,

@@ -1,3 +1,5 @@
+mod search;
+pub use search::matches_korean;
 mod distribution;
 mod issue;
 mod payment;
@@ -22,8 +24,8 @@ pub use subscription::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const STATE_XLSX_FORMAT_VERSION: u16 = 3;
-pub const DATABASE_SCHEMA_VERSION: u16 = 6;
+pub const STATE_XLSX_FORMAT_VERSION: u16 = 4;
+pub const DATABASE_SCHEMA_VERSION: u16 = 7;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

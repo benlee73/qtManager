@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { ReversibleAction } from "./actionHistory";
 import { AnnualSubscriptionForm } from "./AnnualSubscriptionForm";
+import { CohortField } from "./CohortField";
 import { handlePhoneInput } from "./phone";
 import { filterPurchasePeople } from "./purchasePeople";
 import { PurchasePersonPicker } from "./PurchasePersonPicker";
@@ -192,7 +193,12 @@ export function Phase2DialogContent({
         className="purchase-dialog"
         onClose={onClose}
       >
-        <AnnualSubscriptionForm issue={issue} busy={busy} mutate={mutate} />
+        <AnnualSubscriptionForm
+          issue={issue}
+          busy={busy}
+          mutate={mutate}
+          recordAction={recordAction}
+        />
       </FormDialog>
     );
   }
@@ -264,6 +270,7 @@ export function Phase2DialogContent({
             const newPersonInput = {
               name: buyerName,
               cohort: String(data.get("purchaseCohort") ?? ""),
+              cohortNotApplicable: data.get("cohortNotApplicable") === "on",
               phone: String(data.get("purchasePhone") ?? ""),
               quantity,
               note,
@@ -347,28 +354,9 @@ export function Phase2DialogContent({
             {addNewPerson && !selectedPurchasePerson && (
               <div className="purchase-new-person-fields">
                 <div className="field-grid">
-                  <Field label="또래 (선택)">
-                    <input
-                      name="purchaseCohort"
-                      aria-invalid={Boolean(purchaseErrors.purchaseCohort)}
-                      aria-describedby={
-                        purchaseErrors.purchaseCohort
-                          ? "purchase-cohort-error"
-                          : undefined
-                      }
-                      inputMode="numeric"
-                      pattern="[0-9]{2}"
-                      maxLength={2}
-                      placeholder="94"
-                      onInput={(event) => {
-                        const input = event.currentTarget;
-                        const digits = input.value
-                          .replace(/[^0-9]/g, "")
-                          .slice(0, 2);
-                        if (digits !== input.value) input.value = digits;
-                        clearPurchaseError("purchaseCohort");
-                      }}
-                    />
+                  <div className="field">
+                    <span>또래 (선택)</span>
+                    <CohortField name="purchaseCohort" />
                     {purchaseErrors.purchaseCohort && (
                       <span
                         className="form-error"
@@ -378,7 +366,7 @@ export function Phase2DialogContent({
                         {purchaseErrors.purchaseCohort}
                       </span>
                     )}
-                  </Field>
+                  </div>
                   <Field label="연락처 (선택)">
                     <input
                       name="purchasePhone"

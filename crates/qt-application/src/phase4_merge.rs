@@ -17,6 +17,7 @@ pub fn merge_snapshots(
             {
                 person.id = existing_person_id.clone();
             }
+            if let Some(memos)=&mut incoming.memos{ for memo in memos {if memo.person_id.as_deref()==Some(incoming_person_id){memo.person_id=Some(existing_person_id.clone());}} }
             for subscription in &mut incoming.subscriptions {
                 if subscription.person_id == *incoming_person_id {
                     subscription.person_id = existing_person_id.clone();
@@ -36,6 +37,7 @@ pub fn merge_snapshots(
     }
 
     StateSnapshot {
+        memos: Some(merge_by_updated(&crate::snapshot_memos(current),&crate::snapshot_memos(&incoming),|m|&m.id,|m|&m.updated_at)),
         settings: merge_by_updated(
             &current.settings,
             &incoming.settings,
@@ -132,6 +134,7 @@ mod tests {
 
     fn person(id: &str, updated_at: &str) -> Person {
         Person {
+            cohort_not_applicable: false,
             is_group: false,
             id: id.into(),
             name: "가상 신청자".into(),
@@ -166,12 +169,14 @@ mod tests {
     #[test]
     fn merge_keeps_unique_people_and_uses_latest_same_id_record() {
         let current = StateSnapshot {
+            memos: None,
             people: vec![person("same", "2026-01-01T00:00:00+09:00")],
             ..StateSnapshot::default()
         };
         let mut latest = person("same", "2026-01-03T00:00:00+09:00");
         latest.name = "가상 신청자 수정".into();
         let incoming = StateSnapshot {
+            memos: None,
             people: vec![latest, person("unique", "2026-01-02T00:00:00+09:00")],
             ..StateSnapshot::default()
         };
@@ -185,11 +190,13 @@ mod tests {
     #[test]
     fn explicit_person_link_remaps_related_records_without_losing_history() {
         let current = StateSnapshot {
+            memos: None,
             people: vec![person("existing", "2026-01-01T00:00:00+09:00")],
             ..StateSnapshot::default()
         };
         let incoming_person = person("incoming", "2026-01-02T00:00:00+09:00");
         let incoming = StateSnapshot {
+            memos: None,
             people: vec![incoming_person],
             subscriptions: vec![qt_domain::Subscription {
                 payment_status: None,

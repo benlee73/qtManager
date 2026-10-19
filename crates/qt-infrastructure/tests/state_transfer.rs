@@ -59,7 +59,8 @@ fn full_state_round_trip_replace_merge_and_restart_safe_undo() {
         )
         .unwrap();
         assert_eq!(preview.counts.people, 1);
-        assert_eq!(preview.add_count, 8);
+        // 신청자 1 + 구독 1 + 배부 2 + 구매 2 + 메모 3(옛 개인 메모 포함).
+        assert_eq!(preview.add_count, 9);
 
         apply_state_import(
             &mut target,
@@ -81,8 +82,10 @@ fn full_state_round_trip_replace_merge_and_restart_safe_undo() {
         assert_eq!(restored.subscriptions, initial.subscriptions);
         assert_eq!(restored.distributions, initial.distributions);
         assert_eq!(restored.purchases, initial.purchases);
-        assert_eq!(restored.check_items, initial.check_items);
-        assert_eq!(restored.pinned_notes, initial.pinned_notes);
+        assert_eq!(
+            restored.memos,
+            Some(qt_application::snapshot_memos(&initial))
+        );
         std::fs::write(&corrupt_path, b"damaged workbook").unwrap();
         let before_failure = target.load_state().unwrap();
         let error = apply_state_import(
@@ -161,6 +164,7 @@ fn full_state_round_trip_replace_merge_and_restart_safe_undo() {
 
 fn fixture_state(now: &str) -> StateSnapshot {
     let person = Person {
+        cohort_not_applicable: false,
         is_group: false,
         id: "person-anonymous".into(),
         name: "가상 신청자".into(),
@@ -188,6 +192,7 @@ fn fixture_state(now: &str) -> StateSnapshot {
         archived_at: None,
     };
     StateSnapshot {
+        memos: None,
         settings: vec![StateSetting {
             key: "current_operator_name".into(),
             value: "가상 담당자".into(),
@@ -223,6 +228,7 @@ fn fixture_state(now: &str) -> StateSnapshot {
         ],
         purchases: vec![
             OneTimePurchase {
+                correction_of: None,
                 payment_status: None,
                 is_group_distribution: false,
                 id: "aaa-purchase-reversal".into(),
@@ -237,6 +243,7 @@ fn fixture_state(now: &str) -> StateSnapshot {
                 updated_at: now.into(),
             },
             OneTimePurchase {
+                correction_of: None,
                 payment_status: None,
                 is_group_distribution: false,
                 id: "purchase-anonymous".into(),

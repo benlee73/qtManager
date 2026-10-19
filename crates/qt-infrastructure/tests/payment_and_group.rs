@@ -45,6 +45,7 @@ fn new_intakes_are_pending_and_confirmation_is_independent_of_distribution_and_c
         &mut repo,
         &services,
         CreateDraftRequest {
+            cohort_not_applicable: false,
             name: "가상연간".into(),
             cohort: Some("00".into()),
             phone: None,
@@ -59,6 +60,7 @@ fn new_intakes_are_pending_and_confirmation_is_independent_of_distribution_and_c
         &mut repo,
         &services,
         RecordPurchasePersonRequest {
+            cohort_not_applicable: false,
             name: "가상구매".into(),
             cohort: None,
             phone: Some("01000000000".into()),
@@ -174,6 +176,7 @@ fn groups_record_variable_quantities_without_subscription_targets_or_payments_an
     save_operator(&mut repo, &runtime, "가상담당자").unwrap();
     let now = runtime.now();
     let group = Person {
+        cohort_not_applicable: false,
         id: "group".into(),
         name: "군지체".into(),
         is_group: true,
@@ -242,7 +245,7 @@ fn groups_record_variable_quantities_without_subscription_targets_or_payments_an
         .write_state(&path, &snapshot, "0.1.0", &now)
         .unwrap();
     let (metadata, restored) = XlsxStateWorkbook.read_state(&path).unwrap();
-    assert_eq!(metadata.format_version, 3);
+    assert_eq!(metadata.format_version, 4);
     assert_eq!(restored.people, snapshot.people);
     assert_eq!(restored.purchases, snapshot.purchases);
     assert_eq!(restored.subscriptions, snapshot.subscriptions);

@@ -31,6 +31,10 @@ fn main() {
     let current = SqliteStateTransfer::new(&mut repository)
         .load_state()
         .expect("현재 앱 상태를 읽을 수 없습니다.");
+    assert!(
+        !should_apply || current.memos.is_none(),
+        "이 도구는 이전 형식 자료 전용입니다. 현재 메모를 직접 보존하는 0.2.0 상태에는 적용할 수 없습니다."
+    );
     let operator = current
         .settings
         .iter()
@@ -120,7 +124,9 @@ fn parse_plan(
             assert_eq!(fields.len(), 8, "현장 신청 교정 필드 수가 다릅니다.");
             let canonical = (fields[1] != "-").then(|| fields[1].to_owned());
             let expected = expectation(&fields, current, evidence, canonical.as_deref());
-            let quantity = fields[6].parse().expect("확정 수량이 숫자가 아닙니다.");
+            let quantity = fields[6]
+                .parse::<u32>()
+                .expect("확정 수량이 숫자가 아닙니다.");
             match fields[0] {
                 "A" => ConfirmedLegacyIntakeCorrection::Annual(ConfirmedAnnualIntake {
                     subscription: expected,
@@ -161,7 +167,9 @@ fn expectation(
     );
     assert_eq!(
         row.quantity,
-        fields[6].parse().expect("확정 수량이 숫자가 아닙니다."),
+        fields[6]
+            .parse::<u32>()
+            .expect("확정 수량이 숫자가 아닙니다."),
         "원본 행과 확정 수량이 다릅니다."
     );
     if let Some(canonical_id) = canonical_id {

@@ -182,8 +182,32 @@ describe("현장 구독 메뉴 이름", () => {
       expect(markup).not.toContain('name="cohort"');
       expect(markup).not.toContain('name="phone"');
       expect(markup).not.toContain('name="purchaseCohort"');
-      expect(markup).toContain("2026년 9~10월호");
+      if (type === "draft") {
+        expect(markup).toContain("annual-start-year");
+        expect(markup).toContain("신청 + 배부");
+        expect(markup).toContain("신청만 저장");
+      }
       if (type === "purchase") expect(markup).toContain("2026년 9~10월호");
     },
   );
+});
+
+it("distinguishes an exempt cohort from a missing cohort without relaxing name or quantity", () => {
+  const input = {
+    name: "가상모임",
+    cohort: "",
+    cohortNotApplicable: true,
+    phone: "",
+    quantity: 1,
+  };
+  expect(validateDraftFields(input)).toEqual({});
+  expect(
+    validateDraftFields({ ...input, cohortNotApplicable: false }),
+  ).toHaveProperty("cohort");
+  expect(
+    validateDraftFields({ ...input, name: "", quantity: 0 }),
+  ).toMatchObject({
+    name: "이름을 입력하세요.",
+    quantity: "수량은 1권 이상 입력하세요.",
+  });
 });

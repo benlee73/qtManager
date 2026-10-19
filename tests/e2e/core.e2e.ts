@@ -32,6 +32,7 @@ describe("QT Manager desktop flow", () => {
     // Wait for either the operator dialog or an already persisted operator so
     // the first test action cannot race the initial database load.
     await configureOperatorIfNeeded();
+    await setPersonFilterPreset("남은 배부");
   });
 
   it("registers an on-site applicant, partially distributes, completes and undoes", async () => {
@@ -63,7 +64,11 @@ describe("QT Manager desktop flow", () => {
     await browser.execute(() => {
       document
         .querySelector<HTMLFormElement>('[data-testid="draft-form"]')
-        ?.requestSubmit();
+        ?.requestSubmit(
+          document.querySelector<HTMLButtonElement>(
+            '[data-testid="annual-submit-save"]',
+          )!,
+        );
     });
     await waitForText('[data-testid="draft-form-error"]', "이름을 입력하세요.");
     expect(
@@ -90,7 +95,7 @@ describe("QT Manager desktop flow", () => {
         );
       });
     await setInput("input[name='name']", applicant);
-    await clickButtonByText("1년 구독 신청");
+    await clickButtonByText("신청만 저장");
     await waitForText(
       '[data-testid="draft-cohort-error"]',
       "또래를 입력하세요.",
@@ -102,9 +107,13 @@ describe("QT Manager desktop flow", () => {
     await browser.execute(() => {
       document
         .querySelector<HTMLFormElement>('[data-testid="draft-form"]')
-        ?.requestSubmit();
+        ?.requestSubmit(
+          document.querySelector<HTMLButtonElement>(
+            '[data-testid="annual-submit-save"]',
+          )!,
+        );
     });
-    await waitForText(".toast", "현장 신청자를 추가했습니다");
+    await waitForText(".toast", "1년 구독 신청을 저장했습니다");
 
     await setInput('[data-testid="people-search"]', applicant);
     await browser.waitUntil(
@@ -276,14 +285,14 @@ describe("QT Manager desktop flow", () => {
       ),
     ).toBe(true);
     await setInput("input[name='quantity']", "2");
-    await clickButtonByText("1년 구독 신청");
+    await clickButtonByText("신청만 저장");
     await waitForText(
       ".duplicate-warning",
       "기존 구독과 기간이 겹칠 수 있습니다.",
     );
     await browser.$('.duplicate-warning input[type="checkbox"]').click();
-    await clickButtonByText("1년 구독 신청");
-    await waitForText(".toast", "기존 신청자에 1년 구독을 추가했습니다.");
+    await clickButtonByText("신청만 저장");
+    await waitForText(".toast", "1년 구독 신청을 저장했습니다.");
     const detail = await invokeTauri<{
       cohort: string;
       subscriptions: { quantity: number; paymentStatus: string }[];
@@ -474,7 +483,7 @@ describe("QT Manager desktop flow", () => {
           label: button?.textContent?.trim() ?? "",
         };
       }),
-    ).toEqual({ disabled: false, label: "구독 갱신" });
+    ).toEqual({ disabled: false, label: "구독 추가" });
 
     await setInput(
       '[data-testid="people-search"]',
@@ -536,7 +545,7 @@ describe("QT Manager desktop flow", () => {
       { timeoutMsg: "Escape로 신청자 수정 창이 닫히지 않았습니다." },
     );
     await clickButtonByText("현장 배부");
-    await clickButtonByText("구독 갱신");
+    await clickButtonByText("구독 추가");
     await waitForText("#management-dialog-title", `${expiredName} · 구독 추가`);
     await browser.execute(() =>
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
@@ -636,6 +645,7 @@ describe("QT Manager desktop flow", () => {
         ?.click();
     });
     await waitForText("#help-title", "QT Manager 도움말");
+    await browser.$('[data-testid="help-detailed-toggle"]').click();
     await browser.waitUntil(
       async () =>
         await browser.execute(() =>
@@ -892,7 +902,7 @@ describe("QT Manager desktop flow", () => {
         )) === "location",
       { timeoutMsg: "도움말 앱 정보 섹션으로 이동하지 않았습니다." },
     );
-    await waitForText('[data-testid="support-info"]', "0.1.0");
+    await waitForText('[data-testid="support-info"]', "0.2.0");
     expect(
       await browser.execute(() => {
         const supportLabel = document.querySelector<HTMLElement>(
@@ -949,281 +959,6 @@ describe("QT Manager desktop flow", () => {
 
   // 이전 기록 타입의 UI 회귀 시나리오는 새 메모 화면으로 대체했다. 구버전
   // check_items/pinned_notes 어댑터는 Rust 통합 테스트에서 계속 검증한다.
-  it.skip("creates linked and general check items, transitions all states, and keeps pinned notes periodless", async () => {
-    await registerE2ePerson(`가상확인대상${Date.now()}`);
-    await setPersonFilterPreset("전체");
-    const unique = String(Date.now());
-    const generalItem = `가상 일반 확인 ${unique}`;
-    const linkedItem = `가상 신청자 연결 확인 ${unique}`;
-    const pinnedTitle = `가상 보관 위치 ${unique}`;
-    await setInput("#quick-item", generalItem);
-    await waitForEnabled('[data-testid="add-general-check-item"]');
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLButtonElement>(
-          '[data-testid="add-general-check-item"]',
-        )
-        ?.click();
-    });
-    await waitForText(".toast", "일반 확인할 일을 추가했습니다");
-    await waitForText(".check-item-list", generalItem);
-    await waitForText(".check-item-list", "일반");
-    await clickButtonByText("", "마지막 동작 되돌리기");
-    await browser.waitUntil(
-      async () => !(await textOf(".check-item-list")).includes(generalItem),
-      { timeoutMsg: "확인할 일 추가 되돌리기가 반영되지 않았습니다." },
-    );
-    await clickButtonByText("", "되돌린 동작 다시 실행");
-    await waitForText(".check-item-list", generalItem);
-
-    const linkedPersonName = await browser.execute(
-      () =>
-        document
-          .querySelector('[data-testid="person-row"] .person-name b')
-          ?.textContent?.trim() ?? "",
-    );
-    await browser.execute(() => {
-      document
-        .querySelector('[data-testid="person-row"]')
-        ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
-    });
-    await waitForText(".menu-popover", "메모 추가");
-    await clickButtonByText("확인할 일 추가");
-    await waitForText("#dialog-title", "확인할 일 추가");
-    await setInput("textarea[name='content']", linkedItem);
-    await clickButtonByText("확인할 일 저장");
-    await waitForText(".check-item-list", linkedItem);
-    await browser.execute((content) => {
-      const item = [
-        ...document.querySelectorAll<HTMLElement>(".check-item"),
-      ].find((candidate) => candidate.textContent?.includes(content));
-      item
-        ?.querySelector<HTMLButtonElement>(
-          '[data-testid="open-check-item-detail"]',
-        )
-        ?.click();
-    }, linkedItem);
-    await waitForText(".check-item-detail", linkedItem);
-    await browser.execute(() =>
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
-    );
-    await browser.waitUntil(
-      async () =>
-        (await browser.execute(() =>
-          document.querySelector(".check-item-detail"),
-        )) === null,
-      { timeoutMsg: "확인할 일 전문 창이 Escape로 닫히지 않았습니다." },
-    );
-    expect(
-      await browser.execute((content) => {
-        const item = [
-          ...document.querySelectorAll<HTMLElement>(".check-item"),
-        ].find((candidate) => candidate.textContent?.includes(content));
-        return item?.querySelector("small b")?.textContent?.trim() ?? "";
-      }, linkedItem),
-    ).toBe(linkedPersonName);
-    expect(
-      await browser.execute(
-        () =>
-          document.querySelector(".person-check-indicator") !== null &&
-          document.querySelector(".person-name small") === null,
-      ),
-    ).toBe(true);
-
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLElement>('[data-testid="person-row"]')
-        ?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
-    });
-    await waitForText(".linked-check-items", linkedItem);
-    await waitForText(".linked-check-items", "확인 필요");
-    await browser.execute((content) => {
-      const item = [
-        ...document.querySelectorAll<HTMLElement>(
-          ".linked-check-items .linked-check-item",
-        ),
-      ].find((candidate) => candidate.textContent?.includes(content));
-      item
-        ?.querySelector<HTMLButtonElement>(
-          '[aria-label="연결된 확인할 일 수정"]',
-        )
-        ?.click();
-    }, linkedItem);
-    await setInput('[data-testid="edit-linked-check-item"]', linkedItem);
-    await clickButtonByText("저장");
-    await waitForText(".toast", "연결된 확인할 일을 수정했습니다");
-    await browser.execute(() =>
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
-    );
-    await browser.waitUntil(
-      async () =>
-        browser.execute(
-          () => document.querySelector(".linked-check-items") === null,
-        ),
-      { timeoutMsg: "연결 확인 정보를 본 수정창이 닫히지 않았습니다." },
-    );
-    const mouseFocus = await browser.execute(() => {
-      const row = document.querySelector<HTMLElement>(
-        '[data-testid="person-row"]',
-      );
-      const style = row ? getComputedStyle(row) : null;
-      return {
-        focusVisible: row?.matches(":focus-visible") ?? false,
-        thickFocusLine:
-          style?.outlineStyle !== "none" &&
-          parseFloat(style?.outlineWidth ?? "0") > 1,
-      };
-    });
-    expect(mouseFocus).toEqual({ focusVisible: false, thickFocusLine: false });
-
-    if (nativeVisualEnabled) {
-      expect(await activateMacOsQtManager()).toBe("qt-manager");
-      expect(await focusPreviousElementBeforePersonRow()).toBe(true);
-      await sendMacOsOptionTab();
-      await browser.waitUntil(
-        async () => (await personRowFocusContract()).active,
-        { timeoutMsg: "macOS Option+Tab이 신청자 행으로 이동하지 않았습니다." },
-      );
-      const keyboardFocus = await personRowFocusContract();
-      expect(keyboardFocus).toEqual({
-        active: true,
-        focusVisible: true,
-        width: "1px",
-        offset: "-1px",
-        style: "solid",
-        colorMatchesAccent: true,
-      });
-    } else {
-      expect(await personRowFocusRule()).toEqual({
-        outline: "1px solid var(--accent)",
-        offset: "-1px",
-      });
-    }
-
-    const linkedCheckbox = `input[aria-label="${linkedItem} 확인 완료"]`;
-    await browser.execute((selector) => {
-      document.querySelector<HTMLInputElement>(selector)?.click();
-    }, linkedCheckbox);
-    await browser.waitUntil(
-      async () =>
-        browser.execute(
-          (selector) =>
-            document.querySelector<HTMLInputElement>(selector)?.checked ===
-            true,
-          linkedCheckbox,
-        ),
-      { timeoutMsg: "확인할 일 체크 완료가 반영되지 않았습니다." },
-    );
-    await browser.execute((selector) => {
-      document.querySelector<HTMLInputElement>(selector)?.click();
-    }, linkedCheckbox);
-    await waitForText(".toast", "다시 확인하도록");
-    expect(
-      await browser.execute(
-        () => document.querySelector(".toast span")?.textContent ?? "",
-      ),
-    ).toContain("다시 확인하도록");
-    await browser.pause(4_200);
-    expect(await textOf(".toast")).not.toContain("다시 확인하도록");
-    await browser.execute((content) => {
-      const item = [
-        ...document.querySelectorAll<HTMLElement>(".check-item"),
-      ].find((candidate) => candidate.textContent?.includes(content));
-      [...(item?.querySelectorAll<HTMLButtonElement>("button") ?? [])]
-        .find((button) => button.textContent?.trim() === "보관")
-        ?.click();
-    }, linkedItem);
-    await clickButtonByText("보관함");
-    await waitForText(".archive-dialog", linkedItem);
-    await clickButtonByText("복원");
-    await clickButtonByText("", "닫기");
-    await waitForText(".check-item-list", linkedItem);
-    const deletedCheckItemId = await browser.execute((content) => {
-      const item = [
-        ...document.querySelectorAll<HTMLElement>(".check-item"),
-      ].find((candidate) => candidate.textContent?.includes(content));
-      item
-        ?.querySelector<HTMLButtonElement>(
-          'button[aria-label="확인할 일 삭제"]',
-        )
-        ?.click();
-      return item?.dataset.itemId ?? "";
-    }, linkedItem);
-    expect(deletedCheckItemId).not.toBe("");
-    await waitForText(".delete-confirm-dialog", "영구 삭제");
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLButtonElement>(
-          ".delete-confirm-dialog .danger-button",
-        )
-        ?.click();
-    });
-    await browser.waitUntil(
-      async () =>
-        !(await browser.execute(
-          (id) =>
-            [...document.querySelectorAll<HTMLElement>(".check-item")].some(
-              (item) => item.dataset.itemId === id,
-            ),
-          deletedCheckItemId,
-        )),
-      { timeoutMsg: "확인할 일 삭제가 반영되지 않았습니다." },
-    );
-
-    await clickButtonByText("", "고정 메모 추가");
-    await setInput("input[name='title']", pinnedTitle);
-    await setInput("textarea[name='content']", "가상 예배당 뒤편");
-    expect(
-      await browser.execute(
-        () => document.querySelector("input[name='activeUntil']") === null,
-      ),
-    ).toBe(true);
-    await clickButtonByText("고정 메모 저장");
-    await waitForText(".pinned-list", pinnedTitle);
-    const deletedPinnedNoteId = await browser.execute((title) => {
-      const note = [
-        ...document.querySelectorAll<HTMLElement>(".pinned-note"),
-      ].find((candidate) => candidate.textContent?.includes(title));
-      return note?.dataset.noteId ?? "";
-    }, pinnedTitle);
-    expect(deletedPinnedNoteId).not.toBe("");
-    await clickPinnedNoteMenu(deletedPinnedNoteId);
-    await clickButtonByText("고정 해제");
-    expect(await textOf(".pinned-list")).not.toContain("고정 해제됨");
-    await clickPinnedNoteMenu(deletedPinnedNoteId);
-    await browser.execute(() => {
-      [...document.querySelectorAll<HTMLButtonElement>(".menu-popover button")]
-        .find((button) => button.textContent?.trim() === "삭제")
-        ?.click();
-    });
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLButtonElement>(
-          ".delete-confirm-dialog .danger-button",
-        )
-        ?.click();
-    });
-    await browser.waitUntil(
-      async () =>
-        !(await browser.execute(
-          (id) =>
-            [...document.querySelectorAll<HTMLElement>(".pinned-note")].some(
-              (note) => note.dataset.noteId === id,
-            ),
-          deletedPinnedNoteId,
-        )),
-      { timeoutMsg: "고정 메모 삭제가 반영되지 않았습니다." },
-    );
-
-    await clickButtonByText("+ 1달 구독");
-    await setInput("input[name='buyerName']", "가상 구매자");
-    await setInput("input[name='quantity']", "1");
-    await clickButtonByText("구매·전달 기록");
-    await waitForText(".toast", "개별 구매와 전달을 기록했습니다");
-    await clickButtonByText("", "마지막 동작 되돌리기");
-    await waitForText(".toast", "1달 구독: 되돌렸습니다.");
-  });
-
   it("requires active linked memo confirmation before distribution and cancels without recording", async () => {
     const name = `가상배부확인${Date.now()}`;
     const personId = await registerE2ePerson(name);
@@ -1961,6 +1696,7 @@ describe("QT Manager desktop flow", () => {
     await browser.keys("Escape");
     await clickButtonByText("도움말");
     await waitForText("#help-title", "QT Manager 도움말");
+    await browser.$('[data-testid="help-detailed-toggle"]').click();
     await dispatchShortcut("3");
     expect(
       await browser.execute(
@@ -2914,12 +2650,12 @@ describe("QT Manager desktop flow", () => {
     expect(layout.numericStyle).toContain("tabular-nums");
     expect(layout.rail).toEqual({
       left: 0,
-      width: 76,
+      width: 88,
       height: layout.rail.viewportHeight,
       viewportHeight: layout.rail.viewportHeight,
       activeCount: 1,
     });
-    expect(layout.deskLeft).toBe(76);
+    expect(layout.deskLeft).toBe(88);
     expect(layout.stickyInputHeight).toBeLessThanOrEqual(94);
     expect(layout.fontMedium).toBe("15px");
     expect(layout.fontSmall).toBe("14px");
@@ -3193,1021 +2929,6 @@ describe("QT Manager desktop flow", () => {
     ]);
   });
 
-  // 새 메모 화면으로 대체된 이전 신청자 관리 기록 시나리오다.
-  it.skip("registers, edits, renews and archives a person from management", async () => {
-    const unique = String(Date.now()).slice(-8);
-    const applicant = `가상관리${unique}`;
-    const edited = `${applicant}수정`;
-    const registrationPhone = `010-${unique.slice(0, 4)}-${unique.slice(4)}`;
-    const editedPhone = `011-${unique.slice(0, 4)}-${unique.slice(4)}`;
-    const renewalIssue = shiftIssue(await selectedIssue(), 6);
-    const currentIssue = currentCalendarIssue();
-    const pastIssue = shiftIssue(currentIssue, -6);
-    const detailPrefix = `가상상세${unique}`;
-    const detailApplicant = `${detailPrefix}현재`;
-    const comparisonApplicant = `${detailPrefix}비교`;
-    const detailPhone = `012-${unique.slice(0, 4)}-${unique.slice(4)}`;
-    const comparisonPhone = `013-${unique.slice(0, 4)}-${unique.slice(4)}`;
-    const personNote = `가상 신청자 메모 ${unique}`;
-    const linkedCheck = `가상 연결 확인 ${unique}`;
-
-    const detailPersonId = await invokeTauri<string>(
-      "register_person_command",
-      {
-        request: {
-          name: detailApplicant,
-          cohort: "00",
-          phone: detailPhone,
-          personNote,
-          issueYear: currentIssue.year,
-          issueMonth: currentIssue.startMonth,
-          quantity: 1,
-          appliedAt: null,
-          memo: "현재 구독 fixture",
-          confirmDuplicate: true,
-        },
-      },
-    );
-    await invokeTauri("renew_subscription_command", {
-      request: {
-        personId: detailPersonId,
-        issueYear: pastIssue.year,
-        issueMonth: pastIssue.startMonth,
-        quantity: 1,
-        appliedAt: null,
-        memo: "지난 구독 fixture",
-        confirmOverlap: false,
-      },
-    });
-    const detailFixture = await invokeTauri<{
-      subscriptions: { id: string; periodState: string }[];
-    }>("load_person_detail_command", { personId: detailPersonId });
-    const currentSubscriptionId = detailFixture.subscriptions.find(
-      (subscription) => subscription.periodState === "current",
-    )?.id;
-    if (!currentSubscriptionId) {
-      throw new Error("관리 상세 배부 fixture의 현재 구독을 찾지 못했습니다.");
-    }
-    await invokeTauri("record_distribution_command", {
-      request: {
-        issueYear: currentIssue.year,
-        issueMonth: currentIssue.startMonth,
-        subscriptionId: currentSubscriptionId,
-        quantity: 1,
-        note: null,
-      },
-    });
-    await invokeTauri("create_check_item_command", {
-      request: { personId: detailPersonId, content: linkedCheck },
-    });
-    for (let index = 1; index <= 5; index += 1) {
-      await invokeTauri("create_check_item_command", {
-        request: {
-          personId: detailPersonId,
-          content: `${detailPrefix} 상세 확인 ${index}`,
-        },
-      });
-    }
-    await invokeTauri<string>("register_person_command", {
-      request: {
-        name: comparisonApplicant,
-        cohort: "01",
-        phone: comparisonPhone,
-        personNote: null,
-        issueYear: currentIssue.year,
-        issueMonth: currentIssue.startMonth,
-        quantity: 1,
-        appliedAt: null,
-        memo: null,
-        confirmDuplicate: true,
-      },
-    });
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
-        ?.click();
-    });
-    expect(
-      await browser.execute(
-        () =>
-          document
-            .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
-            ?.getAttribute("aria-current") ?? null,
-      ),
-    ).toBe("page");
-    await waitForText("h2", "신청자 관리");
-    await setInput('[data-testid="management-search"]', detailPrefix);
-    await browser.waitUntil(
-      async () =>
-        browser.execute(
-          () =>
-            document.querySelectorAll('[data-testid="management-person"]')
-              .length === 2,
-        ),
-      { timeoutMsg: "관리 상세 검증용 신청자 2명을 찾지 못했습니다." },
-    );
-    await browser.execute((name) => {
-      const row = [
-        ...document.querySelectorAll<HTMLButtonElement>(
-          '[data-testid="management-person"]',
-        ),
-      ].find((candidate) => candidate.textContent?.includes(name));
-      if (!row) throw new Error(`관리 상세 검증 행을 찾지 못했습니다: ${name}`);
-      row.click();
-    }, detailApplicant);
-    await waitForText('[data-testid="person-detail"]', detailPhone);
-
-    await browser.execute(() => {
-      const tip = document.querySelector<HTMLElement>(
-        '[data-testid="management-heading-help"] [role="tooltip"]',
-      );
-      if (!tip) throw new Error("신청자 관리 안내 툴팁을 찾지 못했습니다.");
-      // WebKit embedded driver does not expose CSS :hover/:focus state after
-      // a programmatic pointer move. Open it explicitly to verify the real
-      // rendered bounds and clipping policy.
-      tip.style.display = "block";
-    });
-    const headingTooltip = await browser.execute(() => {
-      const tip = document.querySelector<HTMLElement>(
-        '[data-testid="management-heading-help"] [role="tooltip"]',
-      );
-      const rect = tip?.getBoundingClientRect();
-      return {
-        display: tip ? getComputedStyle(tip).display : "missing",
-        left: rect?.left ?? -1,
-        right: rect?.right ?? -1,
-        top: rect?.top ?? -1,
-        width: rect?.width ?? 0,
-        windowWidth: window.innerWidth,
-      };
-    });
-    expect(headingTooltip.display).toBe("block");
-    expect(headingTooltip.left).toBeGreaterThanOrEqual(0);
-    expect(headingTooltip.right).toBeLessThanOrEqual(
-      headingTooltip.windowWidth,
-    );
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLElement>(
-          '[data-testid="management-heading-help"] [role="tooltip"]',
-        )
-        ?.style.removeProperty("display");
-    });
-
-    const inlinePersonNote = `${detailPrefix} 즉시 메모`;
-    const inlineCheck = `${detailPrefix} 즉시 확인할 일`;
-    await setInput('[data-testid="person-check-item-input"]', inlineCheck);
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLFormElement>(
-          '[data-testid="person-check-item-form"]',
-        )
-        ?.requestSubmit();
-    });
-    await waitForText(".toast", "신청자 확인할 일을 저장했습니다.");
-    await waitForText('[data-testid="person-detail"]', inlineCheck);
-    await clickButtonByText("현장 배부");
-    await waitForText('[data-testid="selected-issue"]', "월호");
-    await clickButtonByText("", "마지막 동작 되돌리기");
-    await browser.waitUntil(
-      async () => !(await textOf(".check-item-list")).includes(inlineCheck),
-      { timeoutMsg: "신청자 연결 확인할 일 되돌리기가 반영되지 않았습니다." },
-    );
-    await clickButtonByText("", "되돌린 동작 다시 실행");
-    await waitForText(".check-item-list", inlineCheck);
-    await clickButtonByText("신청자 관리");
-    await waitForText("h2", "신청자 관리");
-    const managementFixture = await invokeTauri<{
-      people: { name: string }[];
-    }>("load_people_management_command", {
-      query: detailPrefix,
-      includeArchived: false,
-    });
-    expect(
-      managementFixture.people.some(
-        (person) => person.name === detailApplicant,
-      ),
-    ).toBe(true);
-    await selectManagementPerson(detailApplicant);
-    await waitForText('[data-testid="person-detail"]', inlineCheck);
-    await browser.execute((content) => {
-      const item = [
-        ...document.querySelectorAll<HTMLElement>(
-          '[data-testid="linked-check-items"] .linked-check-item',
-        ),
-      ].find((candidate) => candidate.textContent?.includes(content));
-      item
-        ?.querySelector<HTMLButtonElement>(
-          '[aria-label="연결된 확인할 일 수정"]',
-        )
-        ?.click();
-    }, inlineCheck);
-    await setInput('[data-testid="edit-linked-check-item"]', inlineCheck);
-    await clickButtonByText("저장");
-    await waitForText(".toast", "신청자 연결 확인할 일을 수정했습니다");
-    await browser.execute((content) => {
-      const item = [
-        ...document.querySelectorAll<HTMLElement>(
-          '[data-testid="linked-check-items"] .linked-check-item',
-        ),
-      ].find((candidate) => candidate.textContent?.includes(content));
-      item?.querySelector<HTMLInputElement>("input[type='checkbox']")?.click();
-    }, inlineCheck);
-    await waitForText(".toast", "신청자 연결 확인할 일을 완료했습니다");
-    await browser.execute((content) => {
-      const item = [
-        ...document.querySelectorAll<HTMLElement>(
-          '[data-testid="linked-check-items"] .linked-check-item',
-        ),
-      ].find((candidate) => candidate.textContent?.includes(content));
-      item
-        ?.querySelector<HTMLButtonElement>(
-          '[aria-label="연결된 확인할 일 보관"]',
-        )
-        ?.click();
-    }, inlineCheck);
-    await waitForText(".toast", "신청자 연결 확인할 일을 보관했습니다");
-    const deletedManagementCheck = `${detailPrefix} 상세 확인 1`;
-    await browser.execute((content) => {
-      const item = [
-        ...document.querySelectorAll<HTMLElement>(
-          '[data-testid="linked-check-items"] .linked-check-item',
-        ),
-      ].find((candidate) => candidate.textContent?.includes(content));
-      item
-        ?.querySelector<HTMLButtonElement>(
-          '[aria-label="연결된 확인할 일 삭제"]',
-        )
-        ?.click();
-    }, deletedManagementCheck);
-    await waitForText('[data-testid="linked-check-items"]', "삭제할까요?");
-    await browser.execute((content) => {
-      const item = [
-        ...document.querySelectorAll<HTMLElement>(
-          '[data-testid="linked-check-items"] .linked-check-item',
-        ),
-      ].find((candidate) => candidate.textContent?.includes(content));
-      item
-        ?.querySelector<HTMLButtonElement>(
-          ".linked-check-item-delete-confirm .danger-button",
-        )
-        ?.click();
-    }, deletedManagementCheck);
-    await waitForText(".toast", "신청자 연결 확인할 일을 삭제했습니다");
-    await browser.waitUntil(
-      async () =>
-        !(await textOf('[data-testid="person-detail"]')).includes(
-          deletedManagementCheck,
-        ),
-      { timeoutMsg: "신청자 상세 확인할 일 삭제가 반영되지 않았습니다." },
-    );
-    await setInput('[data-testid="person-note-input"]', inlinePersonNote);
-    await clickButtonByText("메모 저장");
-    await waitForText(".toast", "신청자 메모를 저장했습니다.");
-    await waitForText('[data-testid="person-detail"]', inlinePersonNote);
-
-    const detailBeforeArchiveToggle = await textOf(
-      '[data-testid="person-detail"]',
-    );
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLInputElement>(".archived-toggle input")
-        ?.click();
-    });
-    expect(await textOf('[data-testid="person-detail"]')).toContain(
-      detailPhone,
-    );
-    expect(detailBeforeArchiveToggle).toContain(detailPhone);
-    await browser.waitUntil(
-      async () =>
-        await browser.execute(
-          () =>
-            document.querySelector<HTMLInputElement>(".archived-toggle input")
-              ?.checked === true,
-        ),
-      { timeoutMsg: "보관된 신청자 보기 전환이 반영되지 않았습니다." },
-    );
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLInputElement>(".archived-toggle input")
-        ?.click();
-    });
-    await browser.waitUntil(
-      async () =>
-        await browser.execute(
-          () =>
-            document.querySelector<HTMLInputElement>(".archived-toggle input")
-              ?.checked === false,
-        ),
-      { timeoutMsg: "보관된 신청자 보기 해제가 반영되지 않았습니다." },
-    );
-
-    await clickButtonByText("정보 수정");
-    const editDialogCheck = `${detailPrefix} 상세 확인 2`;
-    await browser.execute((content) => {
-      const item = [
-        ...document.querySelectorAll<HTMLElement>(
-          ".management-edit-dialog .linked-check-item",
-        ),
-      ].find((candidate) => candidate.textContent?.includes(content));
-      item
-        ?.querySelector<HTMLButtonElement>(
-          '[aria-label="연결된 확인할 일 수정"]',
-        )
-        ?.click();
-    }, editDialogCheck);
-    await setInput('[data-testid="edit-linked-check-item"]', editDialogCheck);
-    await browser.execute((content) => {
-      const item = [
-        ...document.querySelectorAll<HTMLElement>(
-          ".management-edit-dialog .linked-check-item",
-        ),
-      ].find((candidate) => candidate.textContent?.includes(content));
-      const button = item?.querySelector<HTMLButtonElement>(
-        ".linked-check-item-actions button",
-      );
-      if (!button) throw new Error("관리 편집 저장 버튼을 찾지 못했습니다.");
-      button.click();
-    }, editDialogCheck);
-    await waitForText(".toast", "신청자 연결 확인할 일을 수정했습니다");
-    expect(
-      await browser.execute(
-        () => document.querySelector(".management-edit-dialog") !== null,
-      ),
-    ).toBe(true);
-    const editDialogContract = await browser.execute(() => {
-      const dialog = document.querySelector<HTMLElement>(
-        ".management-edit-dialog",
-      );
-      const name =
-        dialog?.querySelector<HTMLInputElement>("input[name='name']");
-      const cohort = dialog?.querySelector<HTMLInputElement>(
-        "input[name='cohort']",
-      );
-      return {
-        width: dialog?.getBoundingClientRect().width ?? 0,
-        nameWidth: name?.getBoundingClientRect().width ?? 0,
-        cohortWidth: cohort?.getBoundingClientRect().width ?? 0,
-      };
-    });
-    expect(editDialogContract.width).toBeGreaterThan(400);
-    expect(editDialogContract.width).toBeLessThanOrEqual(560);
-    expect(editDialogContract.nameWidth).toBeLessThanOrEqual(470);
-    expect(editDialogContract.cohortWidth).toBeLessThanOrEqual(300);
-    await browser.execute(() => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-    });
-    await browser.waitUntil(
-      async () =>
-        (await browser.execute(() =>
-          document.querySelector('[data-testid="edit-person-form"]'),
-        )) === null,
-      { timeoutMsg: "신청자 정보 수정창이 Escape로 닫히지 않았습니다." },
-    );
-
-    // Retina 물리 픽셀 1800×1280은 지원 최소 논리 크기 900×640에 해당한다.
-    await browser.setWindowSize(1800, 1280);
-    const managementContract = await browser.execute(
-      (fixturePhones) => {
-        const list = document.querySelector<HTMLElement>(
-          ".management-person-list",
-        )!;
-        const detail = document.querySelector<HTMLElement>(
-          '[data-testid="person-detail"]',
-        )!;
-        const rows = [
-          ...document.querySelectorAll<HTMLElement>(
-            '[data-testid="management-person"]',
-          ),
-        ];
-        const listRect = list.getBoundingClientRect();
-        const rowRects = rows.map((row) => row.getBoundingClientRect());
-        const maxRowHeight = Math.max(...rowRects.map((row) => row.height));
-        const lastRowBottom = Math.max(...rowRects.map((row) => row.bottom));
-        const actionContracts = [
-          ["open-handover", "secondary-button"],
-          ["open-application-import", "secondary-button"],
-          ["open-register-person", "primary-button"],
-        ].map(([testId, expectedClass]) => {
-          const button = document.querySelector<HTMLButtonElement>(
-            `[data-testid="${testId}"]`,
-          )!;
-          const rect = button.getBoundingClientRect();
-          const style = getComputedStyle(button);
-          return {
-            testId,
-            expectedClass,
-            hasExpectedClass: button.classList.contains(expectedClass),
-            hasOppositeClass: button.classList.contains(
-              expectedClass === "primary-button"
-                ? "secondary-button"
-                : "primary-button",
-            ),
-            visible:
-              rect.width > 0 &&
-              rect.height > 0 &&
-              rect.left >= 0 &&
-              rect.right <= window.innerWidth &&
-              rect.top >= 0 &&
-              rect.bottom <= window.innerHeight &&
-              style.display !== "none" &&
-              style.visibility !== "hidden",
-            fontWeight: style.fontWeight,
-          };
-        });
-        const panelLine = getComputedStyle(
-          document.querySelector<HTMLElement>(".management-grid")!,
-        ).borderTopColor;
-        const distributionRows = [
-          ...detail.querySelectorAll<HTMLElement>(".distribution-history-row"),
-        ];
-        const firstSubscription =
-          detail.querySelector<HTMLElement>(".subscription-card");
-        const quantity = firstSubscription?.querySelector<HTMLElement>(
-          ".subscription-quantity",
-        );
-        const state = firstSubscription?.querySelector<HTMLElement>(
-          ".subscription-state",
-        );
-        const quantityRect = quantity?.getBoundingClientRect();
-        const stateRect = state?.getBoundingClientRect();
-        return {
-          rowCount: rows.length,
-          rowHeights: rowRects.map((row) => Math.round(row.height)),
-          maxRowHeight,
-          unusedListHeight: listRect.bottom - lastRowBottom,
-          listHasVisibleMetadata: rows.some((row) =>
-            row.querySelector(
-              '[data-testid="management-person-meta"], [data-testid="management-person-period"]',
-            ),
-          ),
-          listRowsHaveAccessibleContext: rows.every((row) =>
-            row.getAttribute("aria-label")?.includes("구독"),
-          ),
-          listHasFixturePhone: fixturePhones.some((phone) =>
-            list.textContent?.includes(phone),
-          ),
-          detailText: detail.textContent ?? "",
-          currentStateCount: detail.querySelectorAll(
-            '[data-testid="subscription-current"]',
-          ).length,
-          pastStateCount: detail.querySelectorAll(
-            '[data-testid="subscription-past"]',
-          ).length,
-          distributionHeaders: [
-            ...detail.querySelectorAll<HTMLElement>(
-              '[data-testid="distribution-history-header"] strong',
-            ),
-          ].map((header) => header.textContent?.trim() ?? ""),
-          distributionRowCount: distributionRows.length,
-          distributionRowLineMatchesPanel: distributionRows.every(
-            (row) => getComputedStyle(row).borderBottomColor === panelLine,
-          ),
-          distributionLineMatchesPanel: [
-            ...detail.querySelectorAll<HTMLElement>(
-              ".distribution-history-header, .distribution-history-row",
-            ),
-          ].every(
-            (row) => getComputedStyle(row).borderBottomColor === panelLine,
-          ),
-          historyVerticalCenterDelta:
-            quantityRect && stateRect
-              ? Math.abs(
-                  quantityRect.top +
-                    quantityRect.height / 2 -
-                    (stateRect.top + stateRect.height / 2),
-                )
-              : null,
-          actionContracts,
-          listOverflow: getComputedStyle(list).overflowY,
-          detailOverflow: getComputedStyle(detail).overflowY,
-          listActuallyOverflows: list.scrollHeight > list.clientHeight,
-          detailActuallyOverflows: detail.scrollHeight > detail.clientHeight,
-          horizontalPageScroll:
-            document.documentElement.scrollWidth > window.innerWidth ||
-            document.body.scrollWidth > window.innerWidth,
-        };
-      },
-      [detailPhone, comparisonPhone],
-    );
-    expect(managementContract.rowCount).toBe(2);
-    expect(managementContract.rowHeights).toHaveLength(2);
-    expect(managementContract.maxRowHeight).toBeLessThanOrEqual(72);
-    expect(managementContract.unusedListHeight).toBeGreaterThan(
-      managementContract.maxRowHeight,
-    );
-    expect(managementContract.listHasVisibleMetadata).toBe(false);
-    expect(managementContract.listRowsHaveAccessibleContext).toBe(true);
-    expect(managementContract.listHasFixturePhone).toBe(false);
-    expect(managementContract.detailText).toContain(detailPhone);
-    expect(managementContract.detailText).toContain(inlinePersonNote);
-    expect(managementContract.detailText).toContain(linkedCheck);
-    expect(managementContract.detailText).toContain("시작");
-    expect(managementContract.detailText).toContain("끝");
-    expect(managementContract.detailText).not.toContain("→");
-    expect(managementContract.detailText).not.toContain("기존 XLSX");
-    expect(managementContract.currentStateCount).toBe(1);
-    expect(managementContract.pastStateCount).toBe(1);
-    expect(managementContract.distributionHeaders).toEqual([
-      "배부 호",
-      "처리",
-      "처리 시각",
-    ]);
-    expect(managementContract.distributionRowCount).toBe(1);
-    expect(managementContract.distributionRowLineMatchesPanel).toBe(true);
-    expect(managementContract.distributionLineMatchesPanel).toBe(true);
-    expect(managementContract.historyVerticalCenterDelta).not.toBeNull();
-    expect(managementContract.historyVerticalCenterDelta).toBeLessThanOrEqual(
-      1,
-    );
-    expect(managementContract.actionContracts).toEqual([
-      {
-        testId: "open-handover",
-        expectedClass: "secondary-button",
-        hasExpectedClass: true,
-        hasOppositeClass: false,
-        visible: true,
-        fontWeight: "400",
-      },
-      {
-        testId: "open-application-import",
-        expectedClass: "secondary-button",
-        hasExpectedClass: true,
-        hasOppositeClass: false,
-        visible: true,
-        fontWeight: "400",
-      },
-      {
-        testId: "open-register-person",
-        expectedClass: "primary-button",
-        hasExpectedClass: true,
-        hasOppositeClass: false,
-        visible: true,
-        fontWeight: "400",
-      },
-    ]);
-    expect(managementContract.listOverflow).toBe("auto");
-    expect(managementContract.detailOverflow).toBe("auto");
-    expect(managementContract.listActuallyOverflows).toBe(false);
-    expect(managementContract.detailActuallyOverflows).toBe(true);
-    expect(managementContract.horizontalPageScroll).toBe(false);
-
-    await selectManagementPerson(detailApplicant);
-    await waitForText('[data-testid="person-detail"]', detailPhone);
-    expect(await managementScrollContract()).toEqual({
-      anonymousFixtureCount: 2,
-      listActuallyOverflows: true,
-      detailActuallyOverflows: true,
-      listMoved: true,
-      detailStayedWhileListMoved: true,
-      detailMoved: true,
-      listStayedWhileDetailMoved: true,
-      documentStayedStill: true,
-      documentFits: true,
-      panelOverflow: ["auto", "auto"],
-      listPanelMinHeight: "0px",
-      detailPanelMinHeight: "0px",
-      listScrollbarGutter: "stable",
-      detailScrollbarGutter: "stable",
-    });
-
-    await browser.setWindowSize(2200, 1440);
-    expect(await managementScrollContract()).toEqual({
-      anonymousFixtureCount: 2,
-      listActuallyOverflows: true,
-      detailActuallyOverflows: true,
-      listMoved: true,
-      detailStayedWhileListMoved: true,
-      detailMoved: true,
-      listStayedWhileDetailMoved: true,
-      documentStayedStill: true,
-      documentFits: true,
-      panelOverflow: ["auto", "auto"],
-      listPanelMinHeight: "0px",
-      detailPanelMinHeight: "0px",
-      listScrollbarGutter: "stable",
-      detailScrollbarGutter: "stable",
-    });
-
-    expect(
-      await browser.execute(() => {
-        const cohort = document.querySelector<HTMLElement>(
-          '[data-testid="person-cohort"]',
-        )!;
-        const name = document.querySelector<HTMLElement>(
-          '[data-testid="person-name"]',
-        )!;
-        const cohortRect = cohort.getBoundingClientRect();
-        const nameRect = name.getBoundingClientRect();
-        return {
-          nameIsBesideCohort: nameRect.left > cohortRect.right,
-          identityLineDelta: Math.abs(nameRect.top - cohortRect.top),
-        };
-      }),
-    ).toEqual({ nameIsBesideCohort: true, identityLineDelta: 0 });
-
-    const expectedCaptureContract = {
-      fontsStatus: "loaded",
-      headingActionContracts: [
-        {
-          text: "데이터 백업·복원",
-          expectedClass: "secondary-button",
-          hasExpectedClass: true,
-          hasOppositeClass: false,
-          height: 32,
-          insideViewport: true,
-        },
-        {
-          text: "스프레드시트 붙여넣기",
-          expectedClass: "secondary-button",
-          hasExpectedClass: true,
-          hasOppositeClass: false,
-          height: 32,
-          insideViewport: true,
-        },
-        {
-          text: "+ 신청자 등록",
-          expectedClass: "primary-button",
-          hasExpectedClass: true,
-          hasOppositeClass: false,
-          height: 32,
-          insideViewport: true,
-        },
-      ],
-      detailActionContracts: [
-        {
-          text: "정보 수정",
-          expectedClass: "secondary-button",
-          hasExpectedClass: true,
-          hasOppositeClass: false,
-          height: 38,
-          insideViewport: true,
-        },
-        {
-          text: "구독 추가",
-          expectedClass: "primary-button",
-          hasExpectedClass: true,
-          hasOppositeClass: false,
-          height: 38,
-          insideViewport: true,
-        },
-      ],
-      currentStateCount: 1,
-      pastStateCount: 1,
-      selectedRowCount: 1,
-      selectedApplicant: true,
-      personNoteVisible: true,
-      linkedCheckVisible: true,
-      distributionHeaders: ["배부 호", "처리", "처리 시각"],
-      distributionRowCount: 1,
-      distributionRowLineMatchesPanel: true,
-      listHasFixturePhone: false,
-      detailHasFixturePhone: true,
-      distributionLineMatchesPanel: true,
-      documentFits: true,
-    };
-    expect(
-      await prepareManagementCapture(
-        "light",
-        detailPrefix,
-        detailApplicant,
-        detailPhone,
-        comparisonPhone,
-        inlinePersonNote,
-        linkedCheck,
-      ),
-    ).toEqual({ theme: "light", ...expectedCaptureContract });
-    mkdirSync("test-results", { recursive: true });
-    await browser.saveScreenshot("test-results/ui-management-light.png");
-    if (nativeVisualEnabled) {
-      await captureMacOsCompositor(
-        "test-results/ui-management-light-compositor.png",
-      );
-    }
-    expect(
-      await prepareManagementCapture(
-        "dark",
-        detailPrefix,
-        detailApplicant,
-        detailPhone,
-        comparisonPhone,
-        inlinePersonNote,
-        linkedCheck,
-      ),
-    ).toEqual({ theme: "dark", ...expectedCaptureContract });
-    await browser.saveScreenshot("test-results/ui-management-dark.png");
-    if (nativeVisualEnabled) {
-      await captureMacOsCompositor(
-        "test-results/ui-management-dark-compositor.png",
-      );
-    }
-
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLButtonElement>(
-          '[data-testid="open-register-person"]',
-        )
-        ?.click();
-    });
-    await setInput("input[name='name']", applicant);
-    await setInput("input[name='cohort']", "00");
-    await setInput("input[name='phone']", registrationPhone);
-    await setInput("textarea[name='personNote']", "가상 신청자 메모");
-    await setInput("input[name='quantity']", "2");
-    const registrationForm = await browser.execute(() => {
-      const form = document.querySelector<HTMLFormElement>(
-        '[data-testid="register-person-form"]',
-      );
-      return {
-        exists: Boolean(form),
-        valid: form?.checkValidity() ?? false,
-        name:
-          form?.querySelector<HTMLInputElement>("input[name='name']")?.value ??
-          "",
-      };
-    });
-    expect(registrationForm).toEqual({
-      exists: true,
-      valid: true,
-      name: applicant,
-    });
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLFormElement>('[data-testid="register-person-form"]')!
-        .requestSubmit();
-    });
-    await browser.waitUntil(async () => (await textOf(".toast")).length > 0, {
-      timeoutMsg: "신청자 등록 결과 알림이 나타나지 않았습니다.",
-    });
-    expect(await textOf(".toast")).toContain("연간 구독을 등록했습니다");
-
-    await setInput('[data-testid="management-search"]', applicant);
-    await waitForText('[data-testid="management-person"]', applicant);
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLButtonElement>('[data-testid="management-person"]')
-        ?.click();
-    });
-    await waitForText('[data-testid="person-detail"]', "가상 신청자 메모");
-    await waitForText('[data-testid="person-detail"]', "구독 이력 1건");
-
-    await clickButtonByText("정보 수정");
-    await setInput("input[name='name']", edited);
-    await setInput("input[name='phone']", editedPhone);
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLFormElement>('[data-testid="edit-person-form"]')
-        ?.requestSubmit();
-    });
-    await waitForText(".toast", "신청자 정보를 수정했습니다");
-    await waitForText('[data-testid="person-detail"]', edited);
-
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLButtonElement>('[data-testid="open-renew"]')
-        ?.click();
-    });
-    await setInput("input[name='issueYear']", String(renewalIssue.year));
-    await setSelect(
-      "select[name='issueMonth']",
-      String(renewalIssue.startMonth),
-    );
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLFormElement>('[data-testid="renew-form"]')
-        ?.requestSubmit();
-    });
-    await waitForText(".toast", "새 연간 구독을 추가했습니다");
-    await waitForText('[data-testid="person-detail"]', "구독 이력 2건");
-
-    await clickButtonByText("신청자 보관");
-    await waitForText(".toast", "신청자를 보관했습니다");
-
-    await browser.execute(() => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }));
-    });
-    await browser.waitUntil(
-      async () =>
-        (await browser.execute(() =>
-          Boolean(document.querySelector("#help-title")),
-        )) === false,
-      { timeoutMsg: "제거된 도움말 단축키가 도움말을 다시 열었습니다." },
-    );
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLButtonElement>('[data-testid="open-help"]')
-        ?.click();
-    });
-    await waitForText("#help-title", "QT Manager 도움말");
-    await waitForText(
-      '[data-testid="help-people"]',
-      "과거 구독을 수정하지 않고",
-    );
-    await browser.saveScreenshot("test-results/ui-help-management-dark.png");
-    await browser.execute(() => {
-      document.documentElement.dataset.theme = "light";
-    });
-    await browser.saveScreenshot("test-results/ui-help-management-light.png");
-    await browser.execute(() => {
-      document.documentElement.dataset.theme = "dark";
-    });
-    await browser.waitUntil(
-      async () =>
-        browser.execute(
-          () =>
-            document
-              .querySelector<HTMLElement>('[data-testid="help-nav-people"]')
-              ?.getAttribute("aria-current") === "location" &&
-            (document.querySelector<HTMLElement>('[data-testid="help-content"]')
-              ?.scrollTop ?? 0) > 0,
-        ),
-      { timeoutMsg: "신청자 관리 도움말이 해당 섹션으로 이동하지 않았습니다." },
-    );
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLAnchorElement>(
-          '[data-testid="help-nav-quick-start"]',
-        )
-        ?.click();
-    });
-    await browser.waitUntil(
-      async () =>
-        (await browser.execute(() =>
-          document
-            .querySelector<HTMLElement>('[data-testid="help-nav-quick-start"]')
-            ?.getAttribute("aria-current"),
-        )) === "location",
-      {
-        timeoutMsg: "도움말 목차의 빠른 시작 선택 상태가 갱신되지 않았습니다.",
-      },
-    );
-    await browser.saveScreenshot("test-results/ui-help-quick-start-dark.png");
-    expect(
-      await browser.execute(() => {
-        const copies = [
-          ...document.querySelectorAll<HTMLElement>(
-            ".help-step-list .help-step-copy",
-          ),
-        ];
-        return {
-          stepCount: document.querySelectorAll(".help-step-list > li").length,
-          copyCount: copies.length,
-          minCopyWidth: Math.min(
-            ...copies.map((copy) => copy.getBoundingClientRect().width),
-          ),
-        };
-      }),
-    ).toEqual({
-      stepCount: 5,
-      copyCount: 5,
-      minCopyWidth: expect.any(Number),
-    });
-    expect(
-      await browser.execute(() => {
-        const widths = [
-          ...document.querySelectorAll<HTMLElement>(
-            ".help-step-list .help-step-copy",
-          ),
-        ].map((copy) => copy.getBoundingClientRect().width);
-        return widths.every((width) => width > 160);
-      }),
-    ).toBe(true);
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLAnchorElement>('[data-testid="help-nav-handover"]')
-        ?.click();
-    });
-    await browser.waitUntil(
-      async () =>
-        browser.execute(
-          () =>
-            document
-              .querySelector<HTMLElement>('[data-testid="help-nav-handover"]')
-              ?.getAttribute("aria-current") === "location",
-        ),
-      {
-        timeoutMsg: "도움말 목차의 백업·복원 선택 상태가 갱신되지 않았습니다.",
-      },
-    );
-    await browser.execute(() => {
-      const content = document.querySelector<HTMLElement>(
-        '[data-testid="help-content"]',
-      );
-      const notes = document.querySelector<HTMLElement>(
-        '[data-testid="help-notes"]',
-      );
-      if (!content || !notes) return;
-      content.style.scrollBehavior = "auto";
-      content.scrollTop =
-        notes.getBoundingClientRect().top -
-        content.getBoundingClientRect().top +
-        content.scrollTop;
-      content.dispatchEvent(new Event("scroll"));
-    });
-    await browser.waitUntil(
-      async () =>
-        browser.execute(
-          () =>
-            document
-              .querySelector<HTMLElement>('[data-testid="help-nav-notes"]')
-              ?.getAttribute("aria-current") === "location",
-        ),
-      {
-        timeoutMsg:
-          "도움말 스크롤 위치와 목차 선택 상태가 동기화되지 않았습니다.",
-      },
-    );
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLAnchorElement>('[data-testid="help-nav-app-info"]')
-        ?.click();
-    });
-    await browser.waitUntil(
-      async () =>
-        (await browser.execute(() =>
-          document
-            .querySelector<HTMLElement>('[data-testid="help-nav-app-info"]')
-            ?.getAttribute("aria-current"),
-        )) === "location",
-      { timeoutMsg: "도움말 목차의 앱 정보 선택 상태가 갱신되지 않았습니다." },
-    );
-    await waitForText('[data-testid="support-info"]', "0.1.0");
-    await waitForText(
-      '[data-testid="help-app-info"]',
-      "운영 로그에는 이름·전화번호·메모를 기록하지 않습니다",
-    );
-    await waitForText(
-      '[data-testid="help-distribution"]',
-      "현장 배부 표는 구독과 배부 상태를 넓게 보여주기 위해",
-    );
-    expect(
-      await browser.execute(() => {
-        const dataPath = document.querySelector<HTMLElement>(
-          '[data-testid="support-path-data"]',
-        );
-        const logPath = document.querySelector<HTMLElement>(
-          '[data-testid="support-path-log"]',
-        );
-        return {
-          dataTitle: dataPath?.title ?? "",
-          logTitle: logPath?.title ?? "",
-          dataWhiteSpace: dataPath ? getComputedStyle(dataPath).whiteSpace : "",
-          logWhiteSpace: logPath ? getComputedStyle(logPath).whiteSpace : "",
-        };
-      }),
-    ).toMatchObject({
-      dataTitle: expect.any(String),
-      logTitle: expect.any(String),
-      dataWhiteSpace: "normal",
-      logWhiteSpace: "normal",
-    });
-    await browser.execute(() => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-    });
-    await browser.waitUntil(
-      async () =>
-        (await browser.execute(() =>
-          Boolean(document.querySelector("#help-title")),
-        )) === false,
-      { timeoutMsg: "Escape로 도움말이 닫히지 않았습니다." },
-    );
-    await browser.execute(() => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }));
-    });
-    await browser.waitUntil(
-      async () =>
-        (await browser.execute(() =>
-          Boolean(document.querySelector("#help-title")),
-        )) === false,
-      { timeoutMsg: "제거된 도움말 단축키가 도움말을 다시 열었습니다." },
-    );
-    await browser.execute(() => {
-      document
-        .querySelector<HTMLButtonElement>('[data-testid="open-help"]')
-        ?.click();
-    });
-    await waitForText("#help-title", "QT Manager 도움말");
-    await browser.$('[data-testid="help-dismiss-area"]').click();
-    await browser.waitUntil(
-      async () =>
-        (await browser.execute(() => document.querySelector("#help-title"))) ===
-        null,
-      { timeoutMsg: "도움말 바깥 영역 클릭으로 닫히지 않았습니다." },
-    );
-    await clickButtonByText("현장 배부");
-    await waitForText('[data-testid="selected-issue"]', "월호");
-    expect(
-      await browser.execute(
-        () =>
-          document
-            .querySelector<HTMLButtonElement>(
-              ".app-navigation [aria-current='page']",
-            )
-            ?.textContent?.trim() ?? "",
-      ),
-    ).toContain("현장 배부");
-  });
-
   it("refreshes incomplete on-site intakes immediately and confirms annual and one-issue payments", async () => {
     await clickButtonByText("신청자 관리");
     await waitForText('[data-testid="draft-count-filter"]', "누락");
@@ -4237,14 +2958,14 @@ describe("QT Manager desktop flow", () => {
     const monthly = `가상입금한호${Date.now()}`;
     await clickButtonByText("+ 1년 구독");
     await setInput("input[name='name']", annual);
-    await clickButtonByText("1년 구독 신청");
+    await clickButtonByText("신청만 저장");
     await waitForText(
       '[data-testid="draft-cohort-error"]',
       "또래를 입력하세요.",
     );
     await setInput("input[name='cohort']", "00");
-    await clickButtonByText("1년 구독 신청");
-    await waitForText(".toast", "현장 신청자를 추가했습니다");
+    await clickButtonByText("신청만 저장");
+    await waitForText(".toast", "1년 구독 신청을 저장했습니다");
     await clickButtonByText("신청자 관리");
     await waitForText('[data-testid="draft-count-filter"]', "누락");
     await browser.execute(() =>
@@ -4345,6 +3066,7 @@ describe("QT Manager desktop flow", () => {
     ).toBe(true);
     await browser.saveScreenshot("test-results/payment-queue.png");
     await clickButtonByText("도움말");
+    await browser.$('[data-testid="help-detailed-toggle"]').click();
     await browser.waitUntil(async () =>
       browser.execute(
         () =>
@@ -4544,6 +3266,7 @@ describe("QT Manager desktop flow", () => {
     await invokeTauri("seed_e2e_group_command");
     await refreshApp("군지체 fixture를 표시하지 못했습니다.");
     await configureOperatorIfNeeded();
+    await setPersonFilterPreset("남은 배부");
     await waitForText('[data-testid="person-row"]', "군지체");
     await waitForText(".table-title h2", "남은 신청자 0");
     expect(await textOf(".table-title h2")).not.toContain("군지체");
@@ -4963,7 +3686,7 @@ describe("QT Manager desktop flow", () => {
       formatVersion: number;
       counts: { people: number };
     }>("preview_state_import_command", { path: paths.exportPath });
-    expect(preview.formatVersion).toBe(3);
+    expect(preview.formatVersion).toBe(4);
     expect(preview.counts.people).toBe(exported.people);
 
     const unique = `가상인수인계${Date.now()}`;
@@ -5062,6 +3785,222 @@ describe("QT Manager desktop flow", () => {
     expect(management.people.some((person) => person.name === unique)).toBe(
       true,
     );
+  });
+  it("uses all six filters by default and accepts checkbox and label activation plus search shortcuts", async () => {
+    const current = await selectedIssue();
+    await registerE2ePerson("가상원");
+    const future = shiftIssue(current, 1);
+    await invokeTauri("register_person_command", {
+      request: {
+        name: "가상예정",
+        cohort: "00",
+        phone: null,
+        personNote: null,
+        issueYear: future.year,
+        issueMonth: future.startMonth,
+        quantity: 1,
+        appliedAt: null,
+        memo: null,
+        confirmDuplicate: true,
+      },
+    });
+    await invokeTauri("record_purchase_for_new_person_command", {
+      request: {
+        name: "가상단건",
+        cohort: null,
+        cohortNotApplicable: true,
+        phone: null,
+        issueYear: current.year,
+        issueMonth: current.startMonth,
+        quantity: 1,
+        note: null,
+      },
+    });
+    await refreshApp("전체 필터 기본값을 확인할 화면이 준비되지 않았습니다.");
+    await waitForText(".filter-trigger", "필터 · 6개");
+    if (nativeVisualEnabled)
+      await captureMacOsCompositor("test-results/native-all-filters.png");
+    await waitForText(".person-list", "가상예정");
+    await waitForText(".person-list", "가상단건");
+    await browser.$(".filter-trigger").click();
+    const labels = await browser.$$(".filter-popover > label");
+    expect(labels).toHaveLength(6);
+    for (const label of labels)
+      expect(await label.$("input").isSelected()).toBe(true);
+    const scheduled = labels[4];
+    await scheduled.$("span").click();
+    expect(await scheduled.$("input").isSelected()).toBe(false);
+    expect(await browser.$(".filter-popover").isDisplayed()).toBe(true);
+    await browser.waitUntil(
+      async () => !(await textOf(".person-list")).includes("가상예정"),
+    );
+    await scheduled.$("input").click();
+    expect(await scheduled.$("input").isSelected()).toBe(true);
+    // Embedded WebDriver 1.2 dispatches untrusted keyboard events and does
+    // not implement the browser's checkbox Space default. Label/input activation
+    // is exercised above; native Space belongs to the OS installation checklist.
+    await browser.keys("Escape");
+    await setPersonFilterPreset("전체");
+    await setInput('[data-testid="people-search"]', "가상워");
+    await waitForText('[data-testid="person-row"]', "가상원");
+    await browser.$('[data-testid="people-search"]').click();
+    await browser.keys("Escape");
+    expect(await browser.$('[data-testid="people-search"]').getValue()).toBe(
+      "",
+    );
+    await setInput('[data-testid="people-search"]', "가상");
+    await browser.$('[data-testid="person-row"]').click();
+    await browser.keys("/");
+    expect(
+      await browser.execute(() => {
+        const input = document.querySelector<HTMLInputElement>(
+          '[data-testid="people-search"]',
+        )!;
+        return (
+          document.activeElement === input &&
+          input.selectionStart === 0 &&
+          input.selectionEnd === input.value.length
+        );
+      }),
+    ).toBe(true);
+  });
+
+  it("registers and distributes with Enter, exempts a cohort and corrects a subscription without rewriting delivery", async () => {
+    const name = `가상신청배부${Date.now()}`;
+    await browser.$('[data-testid="open-draft"]').click();
+    await setInput('input[name="name"]', name);
+    await browser.waitUntil(async () =>
+      browser.$(".cohort-exemption input").isExisting(),
+    );
+    await browser.$(".cohort-exemption input").click();
+    expect(await browser.$('input[name="cohort"]').isEnabled()).toBe(false);
+    const quantity = await browser.$('input[name="quantity"]');
+    await quantity.setValue("2");
+    await quantity.click();
+    expect(
+      await browser.execute(() => document.activeElement?.getAttribute("name")),
+    ).toBe("quantity");
+    await browser.keys("Enter");
+    try {
+      await waitForText(".toast", "신청과 배부");
+    } catch (reason) {
+      const state = await browser.execute(() => ({
+        focus: document.activeElement?.getAttribute("name"),
+        dialog: document.querySelector('[data-testid="draft-form"]')
+          ?.textContent,
+        toast: document.querySelector(".toast")?.textContent,
+        fields: [
+          ...document.querySelectorAll<HTMLInputElement>(
+            '[data-testid="draft-form"] input',
+          ),
+        ].map((input) => ({
+          name: input.name,
+          value: input.value,
+          checked: input.checked,
+          disabled: input.disabled,
+        })),
+      }));
+      throw new Error(
+        `${String(reason)} — 익명 E2E 상태: ${JSON.stringify(state)}`,
+      );
+    }
+    const management = await invokeTauri<{
+      people: { id: string; name: string; status: string }[];
+    }>("load_people_management_command", {
+      query: name,
+      includeArchived: true,
+    });
+    expect(management.people).toHaveLength(1);
+    const id = management.people[0].id;
+    expect(management.people[0].status).toBe("정식 등록");
+    let detail = await invokeTauri<{
+      cohortNotApplicable: boolean;
+      subscriptions: { id: string; quantity: number }[];
+      distributions: { quantity: number }[];
+    }>("load_person_detail_command", { personId: id });
+    expect(detail.cohortNotApplicable).toBe(true);
+    expect(detail.subscriptions).toHaveLength(1);
+    expect(detail.distributions).toHaveLength(1);
+    expect(detail.distributions[0].quantity).toBe(2);
+    await clickButtonByText("신청자 관리");
+    await selectManagementPerson(name);
+    await browser.$('button[aria-label="1년 구독 수정"]').click();
+    await browser
+      .$('[data-testid="subscription-correction-form"] input[name="quantity"]')
+      .setValue("1");
+    await browser
+      .$('[data-testid="subscription-correction-form"] button[type="submit"]')
+      .click();
+    await waitForText('[data-testid="correction-conflicts"]', "실제 2권");
+    await browser.$('[data-testid="correction-conflicts"] input').click();
+    await browser
+      .$('[data-testid="subscription-correction-form"] button[type="submit"]')
+      .click();
+    await waitForText(".toast", "구독 이력을 정정");
+    detail = await invokeTauri("load_person_detail_command", { personId: id });
+    expect(detail.subscriptions[0].quantity).toBe(1);
+    expect(detail.distributions).toHaveLength(1);
+    expect(detail.distributions[0].quantity).toBe(2);
+    await waitForText('[data-testid="person-detail"]', "실제 2권");
+    await clickButtonByText("도움말");
+    // Embedded WebDriver 1.2 uses offsetParent for visibility, which does not
+    // reliably describe content in fixed WebKit panels. Check rendered geometry
+    // and ancestor styles, including the panel's entry animation, instead.
+    await waitForHelpVisibility('[data-testid="help-brief"]');
+    expect((await helpVisibility('[data-testid="help-search"]')).visible).toBe(
+      false,
+    );
+    await browser.$('[data-testid="help-detailed-toggle"]').click();
+    await waitForHelpVisibility('[data-testid="help-search"]');
+    await browser.keys("Escape");
+  });
+
+  it("corrects one-issue purchases through the pencil and preserves original and payment history", async () => {
+    const name = `가상단건정정${Date.now()}`;
+    const issue = await selectedIssue();
+    const personId = await invokeTauri<string>(
+      "record_purchase_for_new_person_command",
+      {
+        request: {
+          name,
+          cohort: null,
+          cohortNotApplicable: true,
+          phone: null,
+          issueYear: issue.year,
+          issueMonth: issue.startMonth,
+          quantity: 1,
+          note: null,
+        },
+      },
+    );
+    await refreshApp("정정할 단건 신청자를 불러오지 못했습니다.");
+    await clickButtonByText("신청자 관리");
+    await selectManagementPerson(name);
+    await browser.$('button[aria-label="1달 구독 수정"]').click();
+    await browser
+      .$('[data-testid="subscription-correction-form"] input[name="quantity"]')
+      .setValue("3");
+    await browser
+      .$('[data-testid="subscription-correction-form"] button[type="submit"]')
+      .click();
+    await waitForText(".toast", "구독 이력을 정정");
+    const detail = await invokeTauri<{
+      purchases: {
+        id: string;
+        quantity: number;
+        cancelled: boolean;
+        reversed: boolean;
+        correctionOf: string | null;
+      }[];
+    }>("load_person_detail_command", { personId });
+    expect(detail.purchases).toHaveLength(3);
+    const active = detail.purchases.filter((p) => !p.cancelled && !p.reversed);
+    expect(active).toHaveLength(1);
+    expect(active[0].quantity).toBe(3);
+    expect(Boolean(active[0].correctionOf)).toBe(true);
+    await clickButtonByText("입금 관리");
+    await waitForText('[data-testid="payment-row"]', name);
+    await waitForText('[data-testid="payment-row"]', "3권");
   });
 });
 
@@ -5192,22 +4131,6 @@ function shiftIssue(
   return { year, startMonth: index * 2 + 1 };
 }
 
-function currentCalendarIssue() {
-  // 앱 런타임과 같은 Asia/Seoul 달력 날짜를 사용해 자정 경계에서도 상태가 맞는다.
-  const seoulNow = new Date(Date.now() + 9 * 60 * 60 * 1_000);
-  const year = seoulNow.getUTCFullYear();
-  const month = seoulNow.getUTCMonth() + 1;
-  return { year, startMonth: month % 2 === 0 ? month - 1 : month };
-}
-
-async function sendMacOsOptionTab() {
-  await execNativeCommand(
-    "/usr/bin/osascript",
-    ["-e", 'tell application "System Events" to key code 48 using option down'],
-    "macOS Option+Tab 입력",
-  );
-}
-
 async function activateMacOsQtManager() {
   const pid = await getMacOsQtManagerPid();
   const { stdout } = await execNativeCommand(
@@ -5334,66 +4257,6 @@ async function execNativeCommand(
   }
 }
 
-async function focusPreviousElementBeforePersonRow() {
-  return browser.execute(() => {
-    const row = document.querySelector<HTMLElement>(
-      '[data-testid="person-row"]',
-    );
-    const tabbable = [
-      ...document.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ),
-    ].filter(
-      (element) =>
-        element.getClientRects().length > 0 &&
-        getComputedStyle(element).visibility !== "hidden",
-    );
-    const rowIndex = row ? tabbable.indexOf(row) : -1;
-    const previous = rowIndex > 0 ? tabbable[rowIndex - 1] : null;
-    previous?.focus();
-    return previous !== null && document.activeElement === previous;
-  });
-}
-
-async function personRowFocusContract() {
-  return browser.execute(() => {
-    const row = document.querySelector<HTMLElement>(
-      '[data-testid="person-row"]',
-    );
-    const style = row ? getComputedStyle(row) : null;
-    const accentProbe = document.createElement("span");
-    accentProbe.style.color = "var(--accent)";
-    document.body.append(accentProbe);
-    const accent = getComputedStyle(accentProbe).color;
-    accentProbe.remove();
-    return {
-      active: document.activeElement === row,
-      focusVisible: row?.matches(":focus-visible") ?? false,
-      width: style?.outlineWidth ?? "",
-      offset: style?.outlineOffset ?? "",
-      style: style?.outlineStyle ?? "",
-      colorMatchesAccent: style?.outlineColor === accent,
-    };
-  });
-}
-
-async function personRowFocusRule() {
-  return browser.execute(() => {
-    const rules = [...document.styleSheets].flatMap((sheet) => [
-      ...sheet.cssRules,
-    ]);
-    const rule = rules.find(
-      (candidate): candidate is CSSStyleRule =>
-        candidate instanceof CSSStyleRule &&
-        candidate.selectorText === ".person-row:focus-visible",
-    );
-    return {
-      outline: rule?.style.outline ?? "",
-      offset: rule?.style.outlineOffset ?? "",
-    };
-  });
-}
-
 async function selectManagementPerson(name: string) {
   await browser.waitUntil(
     async () =>
@@ -5408,304 +4271,6 @@ async function selectManagementPerson(name: string) {
         return true;
       }, name),
     { timeoutMsg: `관리 신청자 행을 찾지 못했습니다: ${name}` },
-  );
-}
-
-async function managementScrollContract() {
-  return browser.execute(() => {
-    const list = document.querySelector<HTMLElement>(
-      ".management-person-list",
-    )!;
-    const detail = document.querySelector<HTMLElement>(
-      '[data-testid="person-detail"]',
-    )!;
-    const root = document.querySelector<HTMLElement>("#root")!;
-    document
-      .querySelectorAll('[data-management-scroll-fixture="true"]')
-      .forEach((fixture) => fixture.remove());
-    for (const panel of [list, detail]) {
-      panel.style.removeProperty("height");
-      panel.style.removeProperty("min-height");
-      panel.style.removeProperty("max-height");
-    }
-    const panelHeights = [list.clientHeight, detail.clientHeight];
-    for (const [index, panel] of [list, detail].entries()) {
-      const height = panelHeights[index];
-      panel.style.height = `${height}px`;
-      panel.style.minHeight = "0";
-      panel.style.maxHeight = `${height}px`;
-      const fixture = document.createElement("div");
-      fixture.dataset.managementScrollFixture = "true";
-      fixture.setAttribute("aria-hidden", "true");
-      fixture.style.height = `${height + 160}px`;
-      fixture.style.minHeight = `${height + 160}px`;
-      fixture.style.width = "1px";
-      fixture.style.pointerEvents = "none";
-      panel.append(fixture);
-    }
-    const documentNodes = [document.documentElement, document.body, root];
-    for (const node of documentNodes) node.scrollTop = 0;
-    window.scrollTo(0, 0);
-    list.scrollTop = 0;
-    detail.scrollTop = 0;
-
-    const documentScrolls = () => [
-      window.scrollX,
-      window.scrollY,
-      ...documentNodes.map((node) => node.scrollTop),
-    ];
-    const initialDocumentScrolls = documentScrolls();
-
-    list.scrollTop = Math.min(64, list.scrollHeight - list.clientHeight);
-    const listAfterListMove = list.scrollTop;
-    const detailAfterListMove = detail.scrollTop;
-    const documentAfterListMove = documentScrolls();
-
-    detail.scrollTop = Math.min(64, detail.scrollHeight - detail.clientHeight);
-    const detailAfterDetailMove = detail.scrollTop;
-    const listAfterDetailMove = list.scrollTop;
-    const documentAfterDetailMove = documentScrolls();
-
-    return {
-      anonymousFixtureCount: document.querySelectorAll(
-        '[data-management-scroll-fixture="true"][aria-hidden="true"]',
-      ).length,
-      listActuallyOverflows: list.scrollHeight > list.clientHeight,
-      detailActuallyOverflows: detail.scrollHeight > detail.clientHeight,
-      listMoved: listAfterListMove > 0,
-      detailStayedWhileListMoved: detailAfterListMove === 0,
-      detailMoved: detailAfterDetailMove > 0,
-      listStayedWhileDetailMoved: listAfterDetailMove === listAfterListMove,
-      documentStayedStill:
-        documentAfterListMove.every(
-          (value, index) => value === initialDocumentScrolls[index],
-        ) &&
-        documentAfterDetailMove.every(
-          (value, index) => value === initialDocumentScrolls[index],
-        ),
-      documentFits: documentNodes.every(
-        (node) =>
-          node.scrollWidth === node.clientWidth &&
-          node.scrollHeight === node.clientHeight,
-      ),
-      panelOverflow: [
-        getComputedStyle(list).overflowY,
-        getComputedStyle(detail).overflowY,
-      ],
-      listPanelMinHeight: getComputedStyle(
-        list.closest<HTMLElement>(".management-list-panel")!,
-      ).minHeight,
-      detailPanelMinHeight: getComputedStyle(detail).minHeight,
-      listScrollbarGutter: getComputedStyle(list).scrollbarGutter,
-      detailScrollbarGutter: getComputedStyle(detail).scrollbarGutter,
-    };
-  });
-}
-
-async function prepareManagementCapture(
-  theme: "light" | "dark",
-  query: string,
-  applicant: string,
-  phone: string,
-  comparisonPhone: string,
-  personNote: string,
-  linkedCheck: string,
-) {
-  await browser.execute((targetTheme) => {
-    localStorage.setItem("qt-manager-theme", targetTheme);
-  }, theme);
-  await refreshApp(`${theme} 테마 캡처를 위한 새로고침에 실패했습니다.`);
-  await browser.setWindowSize(2000, 1440);
-  await browser.execute(() => {
-    document
-      .querySelector<HTMLButtonElement>('[data-testid="open-management"]')
-      ?.click();
-  });
-  await waitForText("h2", "신청자 관리");
-  await setInput('[data-testid="management-search"]', query);
-  await browser.waitUntil(
-    async () =>
-      browser.execute(
-        () =>
-          document.querySelectorAll('[data-testid="management-person"]')
-            .length === 2,
-      ),
-    { timeoutMsg: `${theme} 테마에서 관리 신청자 2명을 찾지 못했습니다.` },
-  );
-  await selectManagementPerson(applicant);
-  await waitForText('[data-testid="person-detail"]', phone);
-  await browser.waitUntil(
-    async () =>
-      browser.execute(
-        () =>
-          [
-            ...document.querySelectorAll<HTMLButtonElement>(
-              ".detail-actions button",
-            ),
-          ]
-            .map((button) => button.textContent?.trim() ?? "")
-            .join("|") === "정보 수정|구독 추가",
-      ),
-    { timeoutMsg: `${theme} 테마에서 상세 버튼 전문이 준비되지 않았습니다.` },
-  );
-  await browser.execute(() => {
-    delete document.documentElement.dataset.managementCaptureReady;
-    let scheduled = false;
-    const afterFonts = () => {
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          document.documentElement.dataset.managementCaptureReady = "true";
-        }),
-      );
-    };
-    void document.fonts.ready.then(afterFonts, afterFonts);
-    if (document.fonts.status === "loaded") afterFonts();
-    // WebKit can report loaded fonts without resolving `document.fonts.ready`
-    // promptly after a Tauri navigation. Keep the capture contract deterministic
-    // while still waiting for two animation frames when the promise is healthy.
-    window.setTimeout(afterFonts, 500);
-    window.setTimeout(() => {
-      if (!document.documentElement.dataset.managementCaptureReady) {
-        document.documentElement.dataset.managementCaptureReady = "true";
-      }
-    }, 1_000);
-  });
-  await browser.waitUntil(
-    async () =>
-      browser.execute(
-        () =>
-          document.documentElement.dataset.managementCaptureReady === "true",
-      ),
-    {
-      timeoutMsg: `${theme} 테마의 폰트와 연속 프레임이 안정화되지 않았습니다.`,
-    },
-  );
-  return browser.execute(
-    (fixture) => {
-      const detail = document.querySelector<HTMLElement>(
-        '[data-testid="person-detail"]',
-      )!;
-      const list = document.querySelector<HTMLElement>(
-        ".management-person-list",
-      )!;
-      const actionContract = (
-        button: HTMLButtonElement,
-        expectedClass: string,
-      ) => {
-        const rect = button.getBoundingClientRect();
-        return {
-          text: button.textContent?.trim() ?? "",
-          expectedClass,
-          hasExpectedClass: button.classList.contains(expectedClass),
-          hasOppositeClass: button.classList.contains(
-            expectedClass === "primary-button"
-              ? "secondary-button"
-              : "primary-button",
-          ),
-          height: Math.round(rect.height),
-          insideViewport:
-            rect.width > 0 &&
-            rect.height > 0 &&
-            rect.left >= 0 &&
-            rect.right <= window.innerWidth &&
-            rect.top >= 0 &&
-            rect.bottom <= window.innerHeight,
-        };
-      };
-      const headingButtons = [
-        ...document.querySelectorAll<HTMLButtonElement>(
-          ".heading-actions button",
-        ),
-      ];
-      const detailButtons = [
-        ...detail.querySelectorAll<HTMLButtonElement>(".detail-actions button"),
-      ];
-      const selectedRows = [
-        ...document.querySelectorAll<HTMLButtonElement>(
-          '[data-testid="management-person"][aria-pressed="true"]',
-        ),
-      ];
-      const panelLine = getComputedStyle(
-        document.querySelector<HTMLElement>(".management-grid")!,
-      ).borderTopColor;
-      const distributionLines = [
-        ...detail.querySelectorAll<HTMLElement>(
-          ".distribution-history-header, .distribution-history-row",
-        ),
-      ];
-      const distributionRows = [
-        ...detail.querySelectorAll<HTMLElement>(".distribution-history-row"),
-      ];
-      const documentNodes = [
-        document.documentElement,
-        document.body,
-        document.querySelector<HTMLElement>("#root")!,
-      ];
-      return {
-        theme: document.documentElement.dataset.theme,
-        fontsStatus: document.fonts.status,
-        headingActionContracts: headingButtons.map((button, index) =>
-          actionContract(
-            button,
-            index === headingButtons.length - 1
-              ? "primary-button"
-              : "secondary-button",
-          ),
-        ),
-        detailActionContracts: detailButtons.map((button, index) =>
-          actionContract(
-            button,
-            index === 0 ? "secondary-button" : "primary-button",
-          ),
-        ),
-        currentStateCount: detail.querySelectorAll(
-          '[data-testid="subscription-current"]',
-        ).length,
-        pastStateCount: detail.querySelectorAll(
-          '[data-testid="subscription-past"]',
-        ).length,
-        selectedRowCount: selectedRows.length,
-        selectedApplicant:
-          selectedRows.length === 1 &&
-          Boolean(selectedRows[0].textContent?.includes(fixture.applicant)),
-        personNoteVisible:
-          detail
-            .querySelector('[data-testid="person-note"]')
-            ?.textContent?.includes(fixture.personNote) ?? false,
-        linkedCheckVisible:
-          detail
-            .querySelector('[data-testid="linked-check-items"]')
-            ?.textContent?.includes(fixture.linkedCheck) ?? false,
-        distributionHeaders: [
-          ...detail.querySelectorAll<HTMLElement>(
-            '[data-testid="distribution-history-header"] strong',
-          ),
-        ].map((header) => header.textContent?.trim() ?? ""),
-        distributionRowCount: distributionRows.length,
-        distributionRowLineMatchesPanel:
-          distributionRows.length > 0 &&
-          distributionRows.every(
-            (row) => getComputedStyle(row).borderBottomColor === panelLine,
-          ),
-        listHasFixturePhone: [fixture.phone, fixture.comparisonPhone].some(
-          (fixturePhone) => list.textContent?.includes(fixturePhone),
-        ),
-        detailHasFixturePhone: detail.textContent?.includes(fixture.phone),
-        distributionLineMatchesPanel:
-          distributionLines.length > 0 &&
-          distributionLines.every(
-            (row) => getComputedStyle(row).borderBottomColor === panelLine,
-          ),
-        documentFits: documentNodes.every(
-          (node) =>
-            node.scrollWidth === node.clientWidth &&
-            node.scrollHeight === node.clientHeight,
-        ),
-      };
-    },
-    { applicant, phone, comparisonPhone, personNote, linkedCheck },
   );
 }
 
@@ -5765,17 +4330,14 @@ async function setPersonFilterPreset(label: "남은 배부" | "전체") {
 
 async function setPersonFilters(labels: string[]) {
   await openPersonFilter();
-  await browser.execute((selectedLabels) => {
-    for (const label of document.querySelectorAll<HTMLLabelElement>(
-      ".filter-popover > label",
-    )) {
-      const input = label.querySelector<HTMLInputElement>("input");
-      const shouldCheck = selectedLabels.includes(
-        label.textContent?.trim() ?? "",
-      );
-      if (input && input.checked !== shouldCheck) input.click();
+  for (const label of await browser.$$(".filter-popover > label")) {
+    const input = await label.$("input");
+    const shouldCheck = labels.includes((await label.getText()).trim());
+    if ((await input.isSelected()) !== shouldCheck) {
+      await label.click();
+      expect(await input.isSelected()).toBe(shouldCheck);
     }
-  }, labels);
+  }
   await closePersonFilter();
 }
 
@@ -5832,17 +4394,6 @@ async function clickButtonByText(text: string, ariaLabel?: string) {
     text,
     ariaLabel,
   );
-}
-
-async function clickPinnedNoteMenu(noteId: string) {
-  await browser.execute((id) => {
-    const note = [
-      ...document.querySelectorAll<HTMLElement>(".pinned-note"),
-    ].find((candidate) => candidate.dataset.noteId === id);
-    note
-      ?.querySelector<HTMLButtonElement>('button[aria-label="고정 메모 메뉴"]')
-      ?.click();
-  }, noteId);
 }
 
 async function dispatchShortcut(key: string, shiftKey = false) {
@@ -5909,4 +4460,86 @@ async function invokeTauri<T = unknown>(
     command,
     args,
   );
+}
+
+async function helpVisibility(selector: string) {
+  return browser.execute((query) => {
+    const el = document.querySelector<HTMLElement>(query);
+    const panel = el?.closest<HTMLElement>(".help-panel");
+    if (!el || !panel)
+      return {
+        visible: false,
+        exists: Boolean(el),
+        offsetParent: null,
+        rect: null,
+        blockedBy: "missing",
+      };
+    const rect = el.getBoundingClientRect();
+    const clip = panel.getBoundingClientRect();
+    let blockedBy = "";
+    for (
+      let ancestor: HTMLElement | null = el;
+      ancestor;
+      ancestor = ancestor.parentElement
+    ) {
+      const style = getComputedStyle(ancestor);
+      if (
+        ancestor.hidden ||
+        style.display === "none" ||
+        style.visibility === "hidden" ||
+        Number(style.opacity) === 0
+      ) {
+        blockedBy = `${ancestor.tagName}.${ancestor.className}`;
+        break;
+      }
+    }
+    const visible =
+      !blockedBy &&
+      rect.width > 0 &&
+      rect.height > 0 &&
+      Math.min(rect.right, clip.right, innerWidth) >
+        Math.max(rect.left, clip.left, 0) &&
+      Math.min(rect.bottom, clip.bottom, innerHeight) >
+        Math.max(rect.top, clip.top, 0);
+    return {
+      visible,
+      exists: true,
+      offsetParent: el.offsetParent?.tagName ?? null,
+      rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      blockedBy,
+      visibility: document.visibilityState,
+      documentFocused: document.hasFocus(),
+      backdrop: panel.parentElement?.className,
+      panelStyle: {
+        opacity: getComputedStyle(panel).opacity,
+        transform: getComputedStyle(panel).transform,
+        animation: getComputedStyle(panel).animationName,
+        playState: getComputedStyle(panel).animationPlayState,
+      },
+      animations: panel.getAnimations().map((animation) => ({
+        state: animation.playState,
+        time: animation.currentTime,
+        rate: animation.playbackRate,
+      })),
+    };
+  }, selector);
+}
+async function waitForHelpVisibility(selector: string) {
+  try {
+    await browser.waitUntil(
+      async () => (await helpVisibility(selector)).visible,
+      {
+        timeoutMsg: `${selector} 도움말 내용이 화면 안에 표시되지 않았습니다.`,
+      },
+    );
+    console.info(
+      "help-rendered-visibility",
+      selector,
+      JSON.stringify(await helpVisibility(selector)),
+    );
+  } catch (reason) {
+    throw new Error(
+      `${String(reason)} — ${JSON.stringify(await helpVisibility(selector))}`,
+    );
+  }
 }

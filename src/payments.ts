@@ -1,3 +1,4 @@
+import { matchesKorean, normalizedSearch } from "./koreanSearch";
 import { invoke } from "@tauri-apps/api/core";
 export type PaymentView = {
   id: string;
@@ -30,12 +31,15 @@ export function filterPayments(
   confirmed: boolean,
 ) {
   const normalized = query.replace(/\s/g, "").toLowerCase();
-  return rows.filter(
-    (row) =>
-      row.status === (confirmed ? "confirmed" : "pending") &&
-      `${row.cohort ?? ""}${row.name}`
-        .replace(/\s/g, "")
-        .toLowerCase()
-        .includes(normalized),
-  );
+  return rows
+    .filter(
+      (row) =>
+        row.status === (confirmed ? "confirmed" : "pending") &&
+        matchesKorean(`${row.cohort ?? ""}${row.name}`, normalized),
+    )
+    .sort(
+      (a, b) =>
+        Number(normalizedSearch(b.name) === normalized) -
+        Number(normalizedSearch(a.name) === normalized),
+    );
 }

@@ -242,6 +242,17 @@ export function ManagementScreen({
                 setQuery(event.target.value);
               }}
               onKeyDown={(event) => {
+                if (
+                  event.key === "Escape" &&
+                  !event.nativeEvent.isComposing &&
+                  event.nativeEvent.keyCode !== 229
+                ) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setQuery("");
+                  return;
+                }
+
                 if (event.key !== "ArrowDown" || event.nativeEvent.isComposing)
                   return;
                 const firstPerson = visibleManagementPeople[0];
@@ -306,6 +317,7 @@ export function ManagementScreen({
         </div>
 
         <PersonDetailPanel
+          onCorrect={mutate}
           detail={selection.detail}
           busy={busy}
           onEdit={(person) => setDialog({ type: "edit", person })}
@@ -457,11 +469,14 @@ export function ManagementScreen({
       )}
       {dialog?.type === "renew" && (
         <RenewDialog
+          recordAction={recordAction}
           person={dialog.person}
           issue={issue}
           busy={busy}
           onClose={() => setDialog(null)}
-          onSaved={(work) => mutate(work, "새 연간 구독을 추가했습니다.")}
+          onSaved={(work, message) =>
+            mutate(work, message ?? "새 연간 구독을 추가했습니다.")
+          }
         />
       )}
     </main>

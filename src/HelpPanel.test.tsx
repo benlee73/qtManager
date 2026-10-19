@@ -35,7 +35,9 @@ describe("HelpPanel", () => {
     );
 
     expect(markup).toContain("오늘이 포함된 호");
-    expect(markup).toContain("현장 ‘1년 구독’은 신규 인원의 이름·또래가 필수");
+    expect(markup).toContain(
+      "현장 ‘1년 구독’은 신규 인원의 이름과 또래 또는 ‘해당 없음’ 선택이 필요",
+    );
     expect(markup).toContain("그 사람에게 구독을 추가합니다.");
     expect(markup).toContain("1년 구독의 메모는 해당 구독 이력에 남습니다.");
     expect(markup).toContain("삭제 후에도 보관함은 열려 있고");
@@ -47,7 +49,9 @@ describe("HelpPanel", () => {
     expect(markup).not.toContain("정식 등록");
     expect(markup).toContain("정보 보완이나 보관 상태는 작은 표시");
     expect(markup).toContain("‘전체 / 누락 / 보관’");
-    expect(markup).toContain("또래가 없는 일반 신청자를 표시합니다.");
+    expect(markup).toContain(
+      "또래가 비어 있고 ‘해당 없음’을 선택하지 않은 일반 신청자를 표시합니다.",
+    );
     expect(markup).toContain("보관된 구독은 과거 기록을 보존");
     expect(markup).toContain('data-testid="help-nav-people"');
     expect(markup).toContain('aria-current="location"');
@@ -62,7 +66,7 @@ describe("HelpPanel", () => {
     expect(markup).toContain('data-testid="help-search"');
     expect(markup).toContain("받은 백업 엑셀이 있다면 신청자 관리");
     expect(markup).toContain('class="help-card"');
-    expect(markup).toContain("도움말 2026-10-08");
+    expect(markup).toContain("도움말 2026-10-19");
     expect(markup).not.toContain("인터넷 없이 보는 사용법");
     expect(markup).not.toContain("->");
     expect(markup).toContain('class="help-step-copy"');
@@ -82,4 +86,12 @@ describe("HelpPanel", () => {
     expect(markup).toContain("메모 카드를 클릭하면 전문");
     expect(markup).not.toContain("카드를 두 번 클릭하면");
   });
+});
+
+it("offers a concise default with an explicit detailed view", () => {
+  const html = renderToStaticMarkup(<HelpPanel onClose={() => {}} />);
+  expect(html).toContain('data-testid="help-brief"');
+  expect(html).toMatch(/aria-pressed="true"[^>]*>간략/);
+  expect(html).toContain('class="help-layout" hidden=""');
+  expect(html).toContain('data-testid="help-detailed-toggle"');
 });

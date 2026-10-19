@@ -1,3 +1,4 @@
+use qt_application::{snapshot_memos,populate_snapshot_memos};
 use std::{collections::HashMap, path::Path};
 
 use calamine::{Data, DataType, Reader, Xlsx, open_workbook};
@@ -70,7 +71,7 @@ impl StateWorkbookV1 for XlsxStateWorkbook {
                 "지원하지 않는 XLSX 형식 버전입니다: {version}"
             )));
         }
-        if version == 3 {
+        if version >= 3 {
             for (sheet, required) in [(PEOPLE, vec!["is_group"]), (SUBSCRIPTIONS, vec!["payment_status"]), (PURCHASES, vec!["payment_status", "is_group_distribution"])] {
                 let range = workbook.worksheet_range(sheet).map_err(calamine_error)?;
                 let columns = range.rows().next().ok_or_else(|| PortError::new("필수 시트가 비어 있습니다."))?;
@@ -79,12 +80,19 @@ impl StateWorkbookV1 for XlsxStateWorkbook {
                 }
             }
         }
+        if version >= 4 {
+            for (sheet, column) in [(PEOPLE,"cohort_not_applicable"),(PURCHASES,"correction_of")] {
+                let range=workbook.worksheet_range(sheet).map_err(calamine_error)?;
+                if !range.rows().next().is_some_and(|row|row.iter().any(|cell|cell.as_string().as_deref()==Some(column))){return Err(PortError::new(format!("{sheet} 시트의 {column} 열이 없습니다.")));}
+            }
+        }
         let metadata = StateWorkbookMetadata {
-            format_version: version,
+            format_version: STATE_XLSX_FORMAT_VERSION,
             app_version: required_map(&info_values, "app_version")?,
             created_at: required_map(&info_values, "created_at")?,
         };
         let mut snapshot = StateSnapshot {
+            memos: None,
             settings: parse_rows(&mut workbook, SETTINGS, parse_setting)?,
             people: parse_rows(&mut workbook, PEOPLE, parse_person)?,
             subscriptions: parse_rows(&mut workbook, SUBSCRIPTIONS, parse_subscription)?,
@@ -100,8 +108,14 @@ impl StateWorkbookV1 for XlsxStateWorkbook {
             snapshot.pinned_notes = parse_rows(&mut workbook, "고정메모", parse_pinned_note)?;
         } else {
             require_sheets(&workbook, false)?;
-            let memos = parse_rows(&mut workbook, MEMOS, parse_memo)?;
-            snapshot_from_memos(&mut snapshot, memos)?;
+            let mut memos:Vec<Memo> = parse_rows(&mut workbook, MEMOS, parse_memo)?;
+            if version <= 3 {
+                for memo in &mut memos {
+                    if memo.legacy_source.as_deref()==Some("check_item") { memo.id=memo.id.strip_prefix("legacy-check:").unwrap_or(&memo.id).into(); }
+                    else if memo.legacy_source.as_deref().is_some_and(|s|s.starts_with("pinned_note")){memo.id=memo.id.strip_prefix("legacy-pinned:").unwrap_or(&memo.id).into();}
+                }
+            }
+            populate_snapshot_memos(&mut snapshot, memos);
         }
         validate_relations(&snapshot)?;
         Ok((metadata, snapshot))
@@ -113,7 +127,9 @@ impl StateWorkbook for XlsxStateWorkbook {
     fn export_person(&self, path: &Path, person: &ProbePerson) -> Result<(), PortError> {
         let timestamp = "2026-01-01T00:00:00+09:00";
         let snapshot = StateSnapshot {
+            memos: None,
             people: vec![Person {
+                cohort_not_applicable: false,
                 is_group: false,
                 id: person.id.clone(),
                 name: person.name.clone(),
@@ -256,6 +272,7 @@ fn write_people(
             "created_at",
             "updated_at",
             "is_group",
+            "cohort_not_applicable",
         ],
         header,
     )?;
@@ -270,6 +287,7 @@ fn write_people(
             .map_err(xlsx_error)?;
         strings_at(sheet, row, 6, &[&value.created_at, &value.updated_at])?;
         sheet.write_boolean(row, 8, value.is_group).map_err(xlsx_error)?;
+        sheet.write_boolean(row, 9, value.cohort_not_applicable).map_err(xlsx_error)?;
     }
     Ok(())
 }
@@ -394,6 +412,7 @@ fn write_purchases(
             "updated_at",
             "payment_status",
             "is_group_distribution",
+            "correction_of",
         ],
         header,
     )?;
@@ -420,80 +439,11 @@ fn write_purchases(
         strings_at(sheet, row, 9, &[&value.created_at, &value.updated_at])?;
         optional(sheet, row, 11, value.payment_status.map(qt_domain::PaymentStatus::as_str))?;
         sheet.write_boolean(row, 12, value.is_group_distribution).map_err(xlsx_error)?;
+        optional(sheet, row, 13, value.correction_of.as_deref())?;
     }
     Ok(())
 }
 
-fn snapshot_memos(snapshot: &StateSnapshot) -> Vec<Memo> {
-    let mut values = Vec::new();
-    for person in &snapshot.people {
-        if let Some(content) = person
-            .person_note
-            .as_deref()
-            .map(str::trim)
-            .filter(|content| !content.is_empty())
-        {
-            values.push(Memo {
-                id: format!("legacy-person:{}", person.id),
-                person_id: Some(person.id.clone()),
-                content: content.into(),
-                status: MemoStatus::Active,
-                operator_name: "이전 데이터".into(),
-                created_at: person.created_at.clone(),
-                updated_at: person.updated_at.clone(),
-                archived_at: None,
-                legacy_source: Some("person_note".into()),
-                legacy_title: None,
-            });
-        }
-    }
-    values.extend(snapshot.check_items.iter().map(|item| Memo {
-        id: format!("legacy-check:{}", item.id),
-        person_id: item.person_id.clone(),
-        content: item.content.clone(),
-        status: if item.status == CheckItemStatus::NeedsCheck {
-            MemoStatus::Active
-        } else {
-            MemoStatus::Archived
-        },
-        operator_name: item.operator_name.clone(),
-        created_at: item.created_at.clone(),
-        updated_at: item.updated_at.clone(),
-        archived_at: if item.status == CheckItemStatus::NeedsCheck {
-            None
-        } else {
-            item.checked_at.clone().or_else(|| Some(item.updated_at.clone()))
-        },
-        legacy_source: Some("check_item".into()),
-        legacy_title: None,
-    }));
-    values.extend(snapshot.pinned_notes.iter().map(|note| Memo {
-        id: format!("legacy-pinned:{}", note.id),
-        person_id: None,
-        content: if note.content.trim().is_empty() {
-            note.title.clone()
-        } else {
-            format!("{}\n{}", note.title.trim(), note.content.trim())
-        },
-        status: if note.status == PinnedNoteStatus::Active {
-            MemoStatus::Active
-        } else {
-            MemoStatus::Archived
-        },
-        operator_name: note.operator_name.clone(),
-        created_at: note.created_at.clone(),
-        updated_at: note.updated_at.clone(),
-        archived_at: note.archived_at.clone(),
-        legacy_source: Some(if note.is_pinned {
-            "pinned_note:pinned".into()
-        } else {
-            "pinned_note".into()
-        }),
-        legacy_title: Some(note.title.clone()),
-    }));
-    values.sort_by(|left, right| left.id.cmp(&right.id));
-    values
-}
 
 fn write_memos(
     sheet: &mut Worksheet,

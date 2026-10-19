@@ -1,6 +1,6 @@
 use qt_domain::{
-    ChangeLog, CheckItem, CheckItemStatus, Distribution, Issue, Memo, MemoStatus, OneTimePurchase,
-    Person, PersonStatus, Subscription, SubscriptionSource, SubscriptionStatus, format_phone,
+    ChangeLog, CheckItem, Distribution, Issue, Memo, MemoStatus, OneTimePurchase, Person,
+    PersonStatus, Subscription, SubscriptionSource, SubscriptionStatus, format_phone,
     normalize_phone,
 };
 use serde::{Deserialize, Serialize};
@@ -67,6 +67,7 @@ pub struct PeopleManagement {
 #[serde(rename_all = "camelCase")]
 pub struct PersonSummary {
     pub is_group: bool,
+    pub cohort_not_applicable: bool,
     pub id: String,
     pub name: String,
     pub cohort: Option<String>,
@@ -81,6 +82,7 @@ pub struct PersonSummary {
 #[serde(rename_all = "camelCase")]
 pub struct PersonDetail {
     pub is_group: bool,
+    pub cohort_not_applicable: bool,
     pub id: String,
     pub name: String,
     pub cohort: Option<String>,
@@ -90,6 +92,7 @@ pub struct PersonDetail {
     pub subscriptions: Vec<SubscriptionView>,
     pub distributions: Vec<DistributionView>,
     pub purchases: Vec<PurchaseView>,
+    #[serde(skip_serializing)]
     pub check_items: Vec<LinkedCheckItemView>,
     pub memos: Vec<LinkedMemoView>,
 }
@@ -106,6 +109,8 @@ pub enum SubscriptionPeriodState {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubscriptionView {
+    pub delivery_warnings: Vec<String>,
+    pub revision: String,
     pub payment_status: Option<qt_domain::PaymentStatus>,
     pub id: String,
     pub start_issue: String,
@@ -148,6 +153,11 @@ pub struct DistributionView {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PurchaseView {
+    pub id: String,
+    pub revision: String,
+    pub correction_of: Option<String>,
+    pub cancelled: bool,
+    pub note: Option<String>,
     pub payment_status: Option<qt_domain::PaymentStatus>,
     pub is_group_distribution: bool,
     pub issue: String,
@@ -169,6 +179,8 @@ pub struct DuplicateCandidate {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegisterPersonRequest {
+    #[serde(default)]
+    pub cohort_not_applicable: bool,
     pub name: String,
     pub cohort: Option<String>,
     pub phone: Option<String>,
@@ -184,6 +196,8 @@ pub struct RegisterPersonRequest {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdatePersonRequest {
+    #[serde(default)]
+    pub cohort_not_applicable: bool,
     pub person_id: String,
     pub name: String,
     pub cohort: Option<String>,
@@ -263,6 +277,7 @@ pub fn load_people_management<R: PeopleManagementRepository>(
             .map(|issue| issue.display_name());
         summaries.push(PersonSummary {
             is_group: person.is_group,
+            cohort_not_applicable: person.cohort_not_applicable,
             id: person.id,
             name: person.name,
             cohort: person.cohort,
@@ -297,7 +312,12 @@ pub fn load_person_detail<R: PeopleManagementRepository>(
     let mut subscriptions = record
         .subscriptions
         .iter()
-        .map(|item| subscription_view(item, reference_issue))
+        .map(|item| {
+            let (issue, mut view) = subscription_view(item, reference_issue)?;
+            view.delivery_warnings =
+                crate::operations::subscription_delivery_conflicts(item, &record.distributions)?;
+            Ok::<_, ApplicationError>((issue, view))
+        })
         .collect::<Result<Vec<_>, _>>()?;
     subscriptions.sort_by(|(left_issue, left), (right_issue, right)| {
         subscription_period_state_rank(left.period_state)
@@ -335,9 +355,18 @@ pub fn load_person_detail<R: PeopleManagementRepository>(
             .then_with(|| right.updated_at.cmp(&left.updated_at))
             .then_with(|| right.id.cmp(&left.id))
     });
+    let cancelled: std::collections::HashSet<_> = purchases
+        .iter()
+        .filter_map(|p| p.reversal_of.clone())
+        .collect();
     let purchases = purchases
         .into_iter()
         .map(|item| PurchaseView {
+            revision: serde_json::to_string(&item).expect("purchase serializes"),
+            cancelled: cancelled.contains(&item.id),
+            id: item.id,
+            correction_of: item.correction_of,
+            note: item.note,
             payment_status: item.payment_status,
             is_group_distribution: item.is_group_distribution,
             issue: item.issue.display_name(),
@@ -346,11 +375,7 @@ pub fn load_person_detail<R: PeopleManagementRepository>(
             reversed: item.reversal_of.is_some(),
         })
         .collect::<Vec<_>>();
-    let check_items = repository
-        .list_person_check_items(person_id)?
-        .into_iter()
-        .map(linked_check_item_view)
-        .collect();
+    let check_items = Vec::new();
     let memos = repository
         .list_person_memos(person_id)?
         .into_iter()
@@ -364,6 +389,7 @@ pub fn load_person_detail<R: PeopleManagementRepository>(
         .collect();
     Ok(PersonDetail {
         is_group: record.person.is_group,
+        cohort_not_applicable: record.person.cohort_not_applicable,
         id: record.person.id,
         name: record.person.name,
         cohort: record.person.cohort,
@@ -386,6 +412,8 @@ fn subscription_view(
     Ok((
         subscription.start_issue,
         SubscriptionView {
+            delivery_warnings: Vec::new(),
+            revision: serde_json::to_string(subscription).expect("subscription serializes"),
             payment_status: subscription.payment_status,
             id: subscription.id.clone(),
             start_issue: subscription.start_issue.display_name(),
@@ -422,23 +450,6 @@ fn subscription_period_state_rank(state: SubscriptionPeriodState) -> u8 {
         SubscriptionPeriodState::Scheduled => 1,
         SubscriptionPeriodState::Past => 2,
         SubscriptionPeriodState::Archived => 3,
-    }
-}
-
-fn linked_check_item_view(item: CheckItem) -> LinkedCheckItemView {
-    LinkedCheckItemView {
-        id: item.id,
-        summary: item.content,
-        status: check_item_status_label(item.status).into(),
-        updated_at: item.updated_at,
-    }
-}
-
-fn check_item_status_label(status: CheckItemStatus) -> &'static str {
-    match status {
-        CheckItemStatus::NeedsCheck => "확인 필요",
-        CheckItemStatus::Checked => "확인 완료",
-        CheckItemStatus::Archived => "보관",
     }
 }
 
@@ -494,6 +505,7 @@ where
         return Err(ApplicationError::DuplicatePersonConfirmationRequired);
     }
     let person = Person {
+        cohort_not_applicable: request.cohort_not_applicable,
         is_group: false,
         id: runtime.ids.next_id(),
         name: request.name.trim().into(),
@@ -569,7 +581,12 @@ where
     }
     let before = format!("status={}", person_status(person.status));
     person.name = request.name.trim().into();
-    person.cohort = clean_owned(request.cohort);
+    person.cohort_not_applicable = request.cohort_not_applicable;
+    person.cohort = if request.cohort_not_applicable {
+        None
+    } else {
+        clean_owned(request.cohort)
+    };
     person.phone = phone;
     person.normalized_phone = normalized_phone;
     person.person_note = clean_owned(request.person_note);
@@ -1017,6 +1034,7 @@ mod tests {
     #[test]
     fn requires_profile_completion_for_an_active_person_without_a_cohort() {
         let person = Person {
+            cohort_not_applicable: false,
             is_group: false,
             id: "person-without-cohort".into(),
             name: "가상 신청자".into(),
@@ -1037,6 +1055,7 @@ mod tests {
     fn includes_an_active_person_without_a_cohort_in_profile_completion_total() {
         let now = "2026-07-26T10:00:00+09:00".to_owned();
         let person = Person {
+            cohort_not_applicable: false,
             is_group: false,
             id: "person-without-cohort".into(),
             name: "가상 신청자".into(),
@@ -1080,6 +1099,7 @@ mod tests {
         let runtime = FixedRuntime(Cell::new(0));
         let now = runtime.now();
         let person = Person {
+            cohort_not_applicable: false,
             is_group: false,
             id: "person-1".into(),
             name: "가상상세".into(),
@@ -1177,9 +1197,14 @@ mod tests {
                 SubscriptionPeriodState::Archived,
             ],
         );
-        assert_eq!(detail.check_items.len(), 2);
-        assert_eq!(detail.check_items[0].status, "확인 필요");
-        assert_eq!(detail.check_items[1].status, "확인 완료");
+        assert!(detail.check_items.is_empty());
+        assert_eq!(
+            repository
+                .list_person_check_items("person-1")
+                .unwrap()
+                .len(),
+            2
+        );
     }
 
     #[test]
@@ -1187,6 +1212,7 @@ mod tests {
         let runtime = FixedRuntime(Cell::new(0));
         let now = runtime.now();
         let person = Person {
+            cohort_not_applicable: false,
             is_group: false,
             id: "person-history".into(),
             name: "가상 이력".into(),
@@ -1290,6 +1316,7 @@ mod tests {
     fn includes_linked_one_time_purchases_in_person_detail() {
         let runtime = FixedRuntime(Cell::new(0));
         let person = Person {
+            cohort_not_applicable: false,
             is_group: false,
             id: "person-purchase-history".into(),
             name: "가상 구매 이력".into(),
@@ -1302,6 +1329,7 @@ mod tests {
             updated_at: runtime.now(),
         };
         let purchase = OneTimePurchase {
+            correction_of: None,
             payment_status: None,
             is_group_distribution: false,
             id: "purchase-history-1".into(),
@@ -1349,6 +1377,7 @@ mod tests {
             &mut repository,
             &services(&runtime),
             RegisterPersonRequest {
+                cohort_not_applicable: false,
                 name: "가상정식".into(),
                 cohort: Some("00".into()),
                 phone: Some("010-0000-1234".into()),
@@ -1376,6 +1405,7 @@ mod tests {
         let runtime = FixedRuntime(Cell::new(0));
         let now = runtime.now();
         let person = Person {
+            cohort_not_applicable: false,
             is_group: false,
             id: "person-1".into(),
             name: "가상간이".into(),
@@ -1413,6 +1443,7 @@ mod tests {
             &mut repository,
             &services(&runtime),
             UpdatePersonRequest {
+                cohort_not_applicable: false,
                 person_id: "person-1".into(),
                 name: "가상정식".into(),
                 cohort: Some("00".into()),
@@ -1445,6 +1476,7 @@ mod tests {
         let runtime = FixedRuntime(Cell::new(0));
         let now = runtime.now();
         let person = Person {
+            cohort_not_applicable: false,
             is_group: false,
             id: "person-1".into(),
             name: "가상중복".into(),
@@ -1471,6 +1503,7 @@ mod tests {
             &mut repository,
             &services(&runtime),
             RegisterPersonRequest {
+                cohort_not_applicable: false,
                 name: "가상중복".into(),
                 cohort: Some("00".into()),
                 phone: Some("01000001111".into()),
@@ -1494,6 +1527,7 @@ mod tests {
         let runtime = FixedRuntime(Cell::new(0));
         let now = runtime.now();
         let person = Person {
+            cohort_not_applicable: false,
             is_group: false,
             id: "person-delete".into(),
             name: "가상삭제".into(),
@@ -1528,6 +1562,7 @@ mod tests {
         let runtime = FixedRuntime(Cell::new(0));
         let now = runtime.now();
         let person = Person {
+            cohort_not_applicable: false,
             is_group: false,
             id: "person-history-delete".into(),
             name: "가상이력삭제".into(),

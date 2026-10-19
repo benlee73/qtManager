@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 
 import {
   ALL_PERSON_FILTERS,
-  DEFAULT_PERSON_FILTERS,
+  REMAINING_PERSON_FILTERS,
   filterSelectionDescription,
   filterTriggerLabel,
   PERSON_FILTER_LABELS,
@@ -66,7 +66,7 @@ export function PersonFilterMenu({
           <div className="filter-presets">
             <button
               type="button"
-              onClick={() => onChange([...DEFAULT_PERSON_FILTERS])}
+              onClick={() => onChange([...REMAINING_PERSON_FILTERS])}
             >
               남은 배부
             </button>

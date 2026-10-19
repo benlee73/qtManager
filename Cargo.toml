@@ -11,14 +11,14 @@ resolver = "2"
 edition = "2024"
 license = "MIT"
 rust-version = "1.97.1"
-version = "0.1.0"
+version = "0.2.0"
 
 [workspace.dependencies]
 calamine = "0.36.0"
 qt-application = { path = "crates/qt-application" }
 qt-domain = { path = "crates/qt-domain" }
 qt-infrastructure = { path = "crates/qt-infrastructure" }
-rusqlite = { version = "0.40.1", features = ["bundled"] }
+rusqlite = { version = "0.40.1", features = ["bundled", "functions"] }
 rust_xlsxwriter = "0.96.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

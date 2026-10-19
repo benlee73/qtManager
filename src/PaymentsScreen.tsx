@@ -80,6 +80,17 @@ export function PaymentsScreen({
           <span aria-hidden="true">⌕</span>
           <input
             data-testid="payment-search"
+            onKeyDown={(event) => {
+              if (
+                event.key === "Escape" &&
+                !event.nativeEvent.isComposing &&
+                event.nativeEvent.keyCode !== 229
+              ) {
+                event.preventDefault();
+                event.stopPropagation();
+                setQuery("");
+              }
+            }}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="이름, 또래 검색"

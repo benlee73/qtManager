@@ -124,6 +124,6 @@ describe("PersonRow", () => {
 
     expect(markup).toContain('data-testid="renew-subscription"');
     expect(markup).not.toContain('disabled=""');
-    expect(markup).toContain("구독 갱신");
+    expect(markup).toContain("구독 추가");
   });
 });

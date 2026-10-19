@@ -21,6 +21,7 @@ where
         .person;
     let now = runtime.clock.now();
     let record = OneTimePurchase {
+        correction_of: None,
         id: runtime.ids.next_id(),
         person_id: Some(person.id),
         buyer_name: Some(person.name),
@@ -71,6 +72,7 @@ where
         .ok_or(ApplicationError::NoPurchaseToCancel)?;
     let now = runtime.clock.now();
     let reversal = OneTimePurchase {
+        correction_of: None,
         id: runtime.ids.next_id(),
         purchased_at: now.clone(),
         created_at: now.clone(),

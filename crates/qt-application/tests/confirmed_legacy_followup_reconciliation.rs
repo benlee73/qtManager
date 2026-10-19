@@ -23,6 +23,7 @@ impl IdGenerator for SequentialIds {
 
 fn person(id: &str, cohort: Option<&str>) -> Person {
     Person {
+        cohort_not_applicable: false,
         is_group: false,
         id: id.into(),
         name: "가상 신청자".into(),
@@ -93,6 +94,7 @@ fn distribution(id: &str, subscription_id: &str, year: i32, month: u8) -> Distri
 #[test]
 fn replaces_generic_check_with_actionable_detail_without_logging_its_content() {
     let mut snapshot = StateSnapshot {
+        memos: None,
         people: vec![person("person", None)],
         check_items: vec![warning("check", "person")],
         ..StateSnapshot::default()
@@ -131,6 +133,7 @@ fn replaces_generic_check_with_actionable_detail_without_logging_its_content() {
 #[test]
 fn consolidates_confirmed_expiry_into_one_person_and_subscription_with_all_receipts() {
     let mut snapshot = StateSnapshot {
+        memos: None,
         people: vec![person("canonical", Some("00")), person("duplicate", None)],
         subscriptions: vec![
             subscription("retained", "canonical", 2025, 11),
@@ -189,6 +192,7 @@ fn consolidates_confirmed_expiry_into_one_person_and_subscription_with_all_recei
 #[test]
 fn rejects_a_modified_later_followup_without_partially_updating_an_earlier_check() {
     let mut snapshot = StateSnapshot {
+        memos: None,
         people: vec![person("first", None), person("second", None)],
         check_items: vec![
             warning("first-check", "first"),

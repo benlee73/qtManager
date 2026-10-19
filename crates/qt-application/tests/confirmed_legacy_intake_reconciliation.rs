@@ -23,6 +23,7 @@ impl IdGenerator for SequentialIds {
 
 fn person(id: &str, cohort: Option<&str>) -> Person {
     Person {
+        cohort_not_applicable: false,
         is_group: false,
         id: id.into(),
         name: "가상 신청자".into(),
@@ -93,6 +94,7 @@ fn distribution(id: &str, subscription_id: &str, year: i32, month: u8) -> Distri
 #[test]
 fn confirms_direct_and_merged_annual_intakes_without_losing_history() {
     let mut snapshot = StateSnapshot {
+        memos: None,
         people: vec![
             person("direct", None),
             person("canonical", Some("00")),
@@ -168,6 +170,7 @@ fn confirms_direct_and_merged_annual_intakes_without_losing_history() {
 #[test]
 fn converts_confirmed_single_issue_intakes_to_purchases_and_keeps_existing_annual() {
     let mut snapshot = StateSnapshot {
+        memos: None,
         people: vec![
             person("single", None),
             person("canonical", Some("00")),
@@ -238,6 +241,7 @@ fn converts_confirmed_single_issue_intakes_to_purchases_and_keeps_existing_annua
 #[test]
 fn rejects_modified_input_without_partially_applying_confirmations() {
     let mut snapshot = StateSnapshot {
+        memos: None,
         people: vec![person("first", None), person("second", None)],
         subscriptions: vec![
             subscription("first-renewal", "first", 2026, 7, 1),

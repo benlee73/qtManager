@@ -41,17 +41,15 @@ impl PeopleManagementRepository for SqliteCoreRepository {
             .prepare(
                 "
                 SELECT id, name, cohort, phone, normalized_phone, status, person_note,
-                       created_at, updated_at, is_group
+                       created_at, updated_at, is_group, cohort_not_applicable
                 FROM people
                 WHERE (?1 OR status != 'archived')
                   AND (
-                    ?2 = ''
-                    OR lower(replace(name, ' ', '')) LIKE '%' || ?2 || '%'
-                    OR coalesce(cohort, '') LIKE '%' || ?2 || '%'
-                    OR coalesce(cohort, '') || lower(replace(name, ' ', '')) LIKE '%' || ?2 || '%'
+                    qt_matches(coalesce(cohort, '') || name, ?2)
                     OR (?3 != '' AND coalesce(normalized_phone, '') LIKE '%' || ?3 || '%')
                   )
-                ORDER BY CASE WHEN status != 'archived' AND NOT is_group
+                ORDER BY CASE WHEN replace(lower(name), ' ', '') = ?2 AND ?2 != '' THEN 0 ELSE 1 END,
+                         CASE WHEN status != 'archived' AND NOT is_group AND NOT cohort_not_applicable
                                    AND coalesce(trim(cohort), '') = '' THEN 0 ELSE 1 END,
                          name, id
                 ",
@@ -106,7 +104,7 @@ impl PeopleManagementRepository for SqliteCoreRepository {
             .query_row(
                 "
                 SELECT id, name, cohort, phone, normalized_phone, status, person_note,
-                       created_at, updated_at, is_group
+                       created_at, updated_at, is_group, cohort_not_applicable
                 FROM people WHERE id = ?1
                 ",
                 [id],
@@ -245,7 +243,7 @@ impl PeopleManagementRepository for SqliteCoreRepository {
             .prepare(
                 "
                 SELECT id, person_id, buyer_name, issue_year, issue_month, quantity,
-                       purchased_at, note, reversal_of, created_at, updated_at, payment_status, is_group_distribution
+                       purchased_at, note, reversal_of, created_at, updated_at, payment_status, is_group_distribution, correction_of
                 FROM one_time_purchases
                 WHERE person_id = ?1
                 ORDER BY issue_year DESC, issue_month DESC,
@@ -273,7 +271,7 @@ impl PeopleManagementRepository for SqliteCoreRepository {
             .prepare(
                 "
                 SELECT id, name, cohort, phone, normalized_phone, status, person_note,
-                       created_at, updated_at, is_group
+                       created_at, updated_at, is_group, cohort_not_applicable
                 FROM people
                 WHERE status != 'archived'
                   AND (?1 IS NULL OR id != ?1)

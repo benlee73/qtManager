@@ -117,9 +117,13 @@ pub struct DistributionDesk {
     pub operator_name: Option<String>,
     pub totals: DeskTotals,
     pub people: Vec<DeskPerson>,
+    #[serde(skip_serializing)]
     pub check_items: Vec<CheckItemView>,
+    #[serde(skip_serializing)]
     pub pinned_notes: Vec<PinnedNoteView>,
+    #[serde(skip_serializing)]
     pub archived_check_items: Vec<CheckItemView>,
+    #[serde(skip_serializing)]
     pub archived_pinned_notes: Vec<PinnedNoteView>,
     pub memos: Vec<MemoView>,
     pub archived_memos: Vec<MemoView>,
@@ -161,6 +165,7 @@ pub struct DeskTotals {
 #[serde(rename_all = "camelCase")]
 pub struct DeskPerson {
     pub is_group: bool,
+    pub cohort_not_applicable: bool,
     pub latest_group_distribution_id: Option<String>,
     pub latest_group_distribution_quantity: u32,
     pub person_id: String,
@@ -257,6 +262,8 @@ pub struct UndoDistributionResult {
 #[serde(rename_all = "camelCase")]
 pub struct CreateDraftRequest {
     #[serde(default)]
+    pub cohort_not_applicable: bool,
+    #[serde(default)]
     pub memo: Option<String>,
     pub name: String,
     pub cohort: Option<String>,
@@ -338,6 +345,8 @@ pub struct RecordPurchaseRequest {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecordPurchasePersonRequest {
+    #[serde(default)]
+    pub cohort_not_applicable: bool,
     pub name: String,
     pub cohort: Option<String>,
     pub phone: Option<String>,
@@ -396,7 +405,7 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
     }
     let mut matching_person_ids = std::collections::HashSet::new();
     let mut people = if query.trim().is_empty() {
-        eligible_people
+        all_people
     } else {
         repository
             .list_desk_records(query, selected_issue)?
@@ -407,12 +416,16 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
             .map(|record| desk_person(record, selected_issue))
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
-            .filter(is_distribution_candidate)
             .collect()
     };
     people.sort_by(|left, right| {
-        (!left.can_distribute)
-            .cmp(&(!right.can_distribute))
+        let normalized = qt_domain::normalize_search_text(query);
+        let exact = |name: &str| {
+            !normalized.is_empty() && qt_domain::normalize_search_text(name) == normalized
+        };
+        exact(&right.name)
+            .cmp(&exact(&left.name))
+            .then((!left.can_distribute).cmp(&(!right.can_distribute)))
             .then((left.remaining_quantity == 0).cmp(&(right.remaining_quantity == 0)))
             .then(left.name.cmp(&right.name))
     });
@@ -421,46 +434,11 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
             person.is_group || (person.can_distribute && person.remaining_quantity > 0)
         });
     }
-    let to_check_item_view = |item: CheckItem| CheckItemView {
-        id: item.id,
-        person_name: item
-            .person_id
-            .as_ref()
-            .and_then(|id| person_names.get(id))
-            .cloned(),
-        person_id: item.person_id,
-        summary: item.content,
-        operator_name: item.operator_name,
-        updated_at: item.updated_at,
-        status: check_item_status_label(item.status).into(),
-    };
-    let check_items = repository
-        .list_check_items()?
-        .into_iter()
-        .map(&to_check_item_view)
-        .collect();
-    let to_pinned_note_view = |note: PinnedNote| PinnedNoteView {
-        id: note.id,
-        title: note.title,
-        content: note.content,
-        is_pinned: note.is_pinned,
-    };
-    let pinned_notes = repository
-        .list_pinned_notes()?
-        .into_iter()
-        .filter(PinnedNote::is_visible)
-        .map(&to_pinned_note_view)
-        .collect();
-    let archived_check_items = repository
-        .list_archived_check_items()?
-        .into_iter()
-        .map(&to_check_item_view)
-        .collect();
-    let archived_pinned_notes = repository
-        .list_archived_pinned_notes()?
-        .into_iter()
-        .map(&to_pinned_note_view)
-        .collect();
+    // Legacy records are read only by migration/backup compatibility paths.
+    let check_items = Vec::new();
+    let pinned_notes = Vec::new();
+    let archived_check_items = Vec::new();
+    let archived_pinned_notes = Vec::new();
     let to_memo_view = |memo: Memo| MemoView {
         id: memo.id,
         person_name: memo
@@ -539,6 +517,7 @@ fn desk_person(record: DeskRecord, issue: Issue) -> Result<DeskPerson, Applicati
     });
     let mut view = DeskPerson {
         is_group: record.person.is_group,
+        cohort_not_applicable: record.person.cohort_not_applicable,
         latest_group_distribution_id: None,
         latest_group_distribution_quantity: 0,
         person_id: record.person.id,
@@ -799,12 +778,13 @@ where
     if name.is_empty() {
         return Err(qt_domain::DomainError::DraftNameRequired.into());
     }
-    if cohort.is_none() {
+    if cohort.is_none() && !request.cohort_not_applicable {
         return Err(qt_domain::DomainError::AnnualCohortRequired.into());
     }
     let now = services.clock.now();
     let person_phone = format_phone(request.phone.as_deref().unwrap_or_default())?;
     let person = Person {
+        cohort_not_applicable: request.cohort_not_applicable,
         is_group: false,
         id: services.ids.next_id(),
         name: name.into(),
@@ -1273,6 +1253,7 @@ where
 {
     let now = services.clock.now();
     let purchase = OneTimePurchase {
+        correction_of: None,
         payment_status: Some(qt_domain::PaymentStatus::Pending),
         is_group_distribution: false,
         id: services.ids.next_id(),
@@ -1318,6 +1299,7 @@ where
     let cohort = clean_optional(request.cohort);
     let phone = format_phone(request.phone.as_deref().unwrap_or_default())?;
     let person = Person {
+        cohort_not_applicable: request.cohort_not_applicable,
         is_group: false,
         id: services.ids.next_id(),
         name,
@@ -1332,6 +1314,7 @@ where
     person.validate()?;
 
     let purchase = OneTimePurchase {
+        correction_of: None,
         payment_status: Some(qt_domain::PaymentStatus::Pending),
         is_group_distribution: false,
         id: services.ids.next_id(),
@@ -1384,6 +1367,7 @@ where
         .ok_or(ApplicationError::NoPurchaseToCancel)?;
     let now = services.clock.now();
     let reversal = OneTimePurchase {
+        correction_of: None,
         payment_status: None,
         is_group_distribution: original.is_group_distribution,
         id: services.ids.next_id(),
@@ -1479,14 +1463,6 @@ fn subscription_status(status: SubscriptionStatus) -> &'static str {
         SubscriptionStatus::Active => "유효",
         SubscriptionStatus::Expired => "구독 만료",
         SubscriptionStatus::NeedsReview => "확인 필요",
-    }
-}
-
-fn check_item_status_label(status: CheckItemStatus) -> &'static str {
-    match status {
-        CheckItemStatus::NeedsCheck => "확인 필요",
-        CheckItemStatus::Checked => "확인 완료",
-        CheckItemStatus::Archived => "보관",
     }
 }
 
@@ -1783,6 +1759,7 @@ mod tests {
     fn record(quantity: u32) -> DeskRecord {
         let now = "2026-01-01T00:00:00+09:00";
         let person = Person {
+            cohort_not_applicable: false,
             is_group: false,
             id: "person-1".into(),
             name: "가상 신청자".into(),
@@ -1841,7 +1818,7 @@ mod tests {
     }
 
     #[test]
-    fn scheduled_and_issue_ineligible_people_are_not_distribution_candidates() {
+    fn scheduled_people_remain_searchable_without_affecting_distribution_totals() {
         let mut scheduled = record(1);
         scheduled.subscriptions[0].start_issue = Issue::new(2026, 9).unwrap();
         let mut repository = MemoryRepository {
@@ -1859,7 +1836,7 @@ mod tests {
         )
         .unwrap();
 
-        assert!(desk.people.is_empty());
+        assert_eq!(desk.people.len(), 1);
         assert_eq!(desk.totals.target_people, 0);
         assert_eq!(desk.totals.target_quantity, 0);
         assert_eq!(desk.totals.remaining_people, 0);
@@ -2122,8 +2099,8 @@ mod tests {
         .unwrap();
         assert!(desk.check_items.is_empty());
         assert!(desk.pinned_notes.is_empty());
-        assert_eq!(desk.archived_check_items.len(), 1);
-        assert_eq!(desk.archived_pinned_notes.len(), 1);
+        assert_eq!(repository.list_archived_check_items().unwrap().len(), 1);
+        assert_eq!(repository.list_archived_pinned_notes().unwrap().len(), 1);
 
         update_check_item_status(
             &mut repository,
@@ -2188,7 +2165,8 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(desk.check_items[0].summary, content);
+        assert!(desk.check_items.is_empty());
+        assert_eq!(repository.list_check_items().unwrap()[0].content, content);
     }
 
     #[test]
@@ -2321,6 +2299,7 @@ mod tests {
             &mut repository,
             &services,
             RecordPurchasePersonRequest {
+                cohort_not_applicable: false,
                 name: "가상 구매자".into(),
                 cohort: Some("00".into()),
                 phone: None,
@@ -2362,6 +2341,7 @@ mod tests {
             &mut repository,
             &services,
             CreateDraftRequest {
+                cohort_not_applicable: false,
                 name: "현장 단체".into(),
                 cohort: Some("00".into()),
                 phone: None,
@@ -2382,6 +2362,7 @@ mod tests {
             &mut repository,
             &services,
             CreateDraftRequest {
+                cohort_not_applicable: false,
                 name: "가상누락".into(),
                 cohort: None,
                 phone: None,
@@ -2398,6 +2379,7 @@ mod tests {
             &mut repository,
             &services,
             CreateDraftRequest {
+                cohort_not_applicable: false,
                 name: "  ".into(),
                 cohort: Some("94".into()),
                 phone: None,

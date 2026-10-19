@@ -316,7 +316,22 @@ CREATE INDEX idx_subscriptions_payment ON subscriptions(payment_status, person_i
 CREATE INDEX idx_purchases_payment ON one_time_purchases(payment_status, person_id);
 ";
 
+const VERSION_7: &str = "ALTER TABLE people ADD COLUMN cohort_not_applicable INTEGER NOT NULL DEFAULT 0 CHECK(cohort_not_applicable IN (0, 1)); ALTER TABLE one_time_purchases ADD COLUMN correction_of TEXT REFERENCES one_time_purchases(id); CREATE UNIQUE INDEX idx_purchase_correction ON one_time_purchases(correction_of) WHERE correction_of IS NOT NULL;";
+
 pub(crate) fn configure(connection: &Connection) -> Result<(), PortError> {
+    connection
+        .create_scalar_function(
+            "qt_matches",
+            2,
+            rusqlite::functions::FunctionFlags::SQLITE_UTF8
+                | rusqlite::functions::FunctionFlags::SQLITE_DETERMINISTIC,
+            |ctx| {
+                let text: String = ctx.get(0)?;
+                let query: String = ctx.get(1)?;
+                Ok(qt_domain::matches_korean(&text, &query))
+            },
+        )
+        .map_err(port_error)?;
     connection
         .pragma_update(None, "foreign_keys", "ON")
         .map_err(port_error)?;
@@ -328,7 +343,7 @@ pub(crate) fn configure(connection: &Connection) -> Result<(), PortError> {
         .map_err(port_error)
 }
 
-fn backup_before_version_six(connection: &Connection) -> Result<(), PortError> {
+fn backup_before_upgrade(connection: &Connection) -> Result<(), PortError> {
     let exists: bool = connection.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations')", [], |row| row.get(0)).map_err(port_error)?;
     if !exists {
         return Ok(());
@@ -338,14 +353,17 @@ fn backup_before_version_six(connection: &Connection) -> Result<(), PortError> {
             row.get(0)
         })
         .map_err(port_error)?;
-    if version.is_none_or(|version| version == 0 || version >= 6) {
+    if version.is_none_or(|version| version == 0 || version >= DATABASE_SCHEMA_VERSION) {
         return Ok(());
     }
     let Some(path) = connection.path().filter(|path| !path.is_empty()) else {
         return Ok(());
     };
-    let backup = std::path::Path::new(path)
-        .with_extension(format!("pre-schema6-{}.sqlite", uuid::Uuid::new_v4()));
+    let backup = std::path::Path::new(path).with_extension(format!(
+        "pre-schema{}-{}.sqlite",
+        DATABASE_SCHEMA_VERSION,
+        uuid::Uuid::new_v4()
+    ));
     // VACUUM INTO captures a consistent SQLite snapshot including WAL contents.
     // Refuse the migration if this local safety copy cannot be written.
     connection
@@ -355,7 +373,7 @@ fn backup_before_version_six(connection: &Connection) -> Result<(), PortError> {
 }
 
 pub(crate) fn migrate(connection: &mut Connection) -> Result<MigrationReport, PortError> {
-    backup_before_version_six(connection)?;
+    backup_before_upgrade(connection)?;
     let transaction = connection.transaction().map_err(port_error)?;
     transaction
         .execute_batch(
@@ -390,6 +408,7 @@ pub(crate) fn migrate(connection: &mut Connection) -> Result<MigrationReport, Po
         (4_u16, VERSION_4),
         (5_u16, VERSION_5),
         (6_u16, VERSION_6),
+        (7_u16, VERSION_7),
     ] {
         let exists: bool = transaction
             .query_row(
@@ -469,7 +488,7 @@ mod tests {
 
         let report = migrate(&mut connection).unwrap();
 
-        assert_eq!(report.newly_applied, 4);
+        assert_eq!(report.newly_applied, 5);
         let person_note: String = connection
             .query_row(
                 "SELECT person_note FROM people WHERE id = 'person-1'",
@@ -530,7 +549,7 @@ mod tests {
         INSERT INTO subscriptions VALUES ('subscription', 'group', 2026, 1, 6, 1, NULL, 'legacy_xlsx', NULL, NULL, '2026-01-01', '2026-01-01', NULL);
         INSERT INTO one_time_purchases VALUES ('purchase', NULL, NULL, 2026, 1, 1, '2026-01-01', NULL, NULL, '2026-01-01', '2026-01-01');").unwrap();
         let report = migrate(&mut connection).unwrap();
-        assert_eq!(report.newly_applied, 1);
+        assert_eq!(report.newly_applied, 2);
         let person: (String, bool, String) = connection
             .query_row(
                 "SELECT name, is_group, cohort FROM people WHERE id = 'group'",
@@ -559,7 +578,7 @@ mod tests {
             .unwrap()
             .filter_map(Result::ok)
             .map(|entry| entry.path())
-            .find(|path| path.to_string_lossy().contains("pre-schema6-"))
+            .find(|path| path.to_string_lossy().contains("pre-schema7-"))
             .unwrap();
         let backup = Connection::open(backup_path).unwrap();
         let old_name: String = backup

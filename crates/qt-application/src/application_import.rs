@@ -288,6 +288,7 @@ where
             None if row.create_as_new => {
                 new_people_count += 1;
                 Person {
+                    cohort_not_applicable: false,
                     is_group: false,
                     id: runtime.ids.next_id(),
                     name: row.name.trim().into(),

@@ -1,3 +1,8 @@
+import {
+  SubscriptionCorrectionDialog,
+  EditPencil,
+  type CorrectionTarget,
+} from "./SubscriptionCorrectionDialog";
 import { type KeyboardEvent, type ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useTextDraft } from "./drafts";
@@ -131,7 +136,9 @@ export function ManagementPersonList({
               event.currentTarget.focus();
             }}
           >
-            <span className="cohort">{person.cohort ?? "--"}</span>
+            <span className="cohort">
+              {person.cohort ?? (person.cohortNotApplicable ? "없음" : "--")}
+            </span>
             <span className="management-person-copy">
               <span
                 className="management-person-primary"
@@ -163,6 +170,10 @@ export function ManagementPersonList({
 export type PersonDetailPanelProps = {
   detail: PersonDetail | null;
   busy: boolean;
+  onCorrect?: (
+    work: () => Promise<unknown>,
+    message: string,
+  ) => Promise<boolean>;
   onEdit: (detail: PersonDetail) => void;
   onRenew: (detail: PersonDetail) => void;
   onToggleArchived: (detail: PersonDetail) => void;
@@ -203,6 +214,7 @@ function PersonDetailContent({
   onRenew,
   onToggleArchived,
   onCreateMemo,
+  onCorrect,
   onUpdateMemo,
   onArchiveMemo,
   onDeleteMemo,
@@ -213,13 +225,14 @@ function PersonDetailContent({
   const setMemoDraft = memoDraftState.setValue;
   const [memoDetail, setMemoDetail] = useState<LinkedMemo | null>(null);
   const memos = detail.memos ?? [];
+  const [correction, setCorrection] = useState<CorrectionTarget | null>(null);
 
   return (
     <div className="person-detail-panel" data-testid="person-detail">
       <div className="detail-heading">
         <div className="identity large" data-testid="person-identity">
           <span className="cohort" data-testid="person-cohort">
-            {detail.cohort ?? "--"}
+            {detail.cohort ?? (detail.cohortNotApplicable ? "없음" : "--")}
           </span>
           <div>
             <h2 data-testid="person-name" title={detail.name}>
@@ -304,6 +317,14 @@ function PersonDetailContent({
               data-testid={`subscription-${subscription.periodState}`}
               key={subscription.id}
             >
+              {onCorrect && subscription.revision && (
+                <EditPencil
+                  label="1년 구독 수정"
+                  onClick={() =>
+                    setCorrection({ kind: "annual", value: subscription })
+                  }
+                />
+              )}
               <div className="subscription-period">
                 <div>
                   <span>시작</span>
@@ -324,6 +345,11 @@ function PersonDetailContent({
               <span className="subscription-state">
                 {subscriptionStateLabels[subscription.periodState]}
               </span>
+              {(subscription.deliveryWarnings ?? []).map((warning) => (
+                <p className="form-error" key={warning}>
+                  {warning}
+                </p>
+              ))}
               {subscription.appliedAt && (
                 <p className="subscription-applied-at">
                   신청 {formatApplicationDate(subscription.appliedAt)}
@@ -336,7 +362,14 @@ function PersonDetailContent({
             </article>
           ))}
           {!detail.isGroup && (detail.purchases ?? []).length > 0 && (
-            <PurchaseHistory purchases={detail.purchases ?? []} />
+            <PurchaseHistory
+              purchases={detail.purchases ?? []}
+              onEdit={
+                onCorrect
+                  ? (value) => setCorrection({ kind: "purchase", value })
+                  : undefined
+              }
+            />
           )}
           {detail.subscriptions.length === 0 &&
             (detail.isGroup || (detail.purchases ?? []).length === 0) && (
@@ -386,6 +419,14 @@ function PersonDetailContent({
         </DetailSection>
       )}
 
+      {correction && onCorrect && (
+        <SubscriptionCorrectionDialog
+          personId={detail.id}
+          target={correction}
+          onClose={() => setCorrection(null)}
+          onSave={onCorrect}
+        />
+      )}
       <div
         className="person-detail-footer-actions"
         data-testid="person-detail-actions"
@@ -484,8 +525,10 @@ function isLegacyMigrationMemo(value: string) {
 
 function PurchaseHistory({
   purchases,
+  onEdit,
 }: {
   purchases: NonNullable<PersonDetail["purchases"]>;
+  onEdit?: (purchase: NonNullable<PersonDetail["purchases"]>[number]) => void;
 }) {
   return (
     <div className="purchase-history" data-testid="purchase-history">
@@ -494,9 +537,27 @@ function PurchaseHistory({
           className="purchase-history-row"
           key={`${purchase.issue}-${purchase.purchasedAt}-${index}`}
         >
+          {onEdit &&
+            purchase.revision &&
+            !purchase.reversed &&
+            !purchase.cancelled && (
+              <EditPencil
+                label="1달 구독 수정"
+                onClick={() => onEdit(purchase)}
+              />
+            )}
           <strong title={purchase.issue}>{purchase.issue}</strong>
           <span className="purchase-history-status">
-            {!purchase.isGroupDistribution && <strong>1달 구독</strong>}
+            {!purchase.isGroupDistribution && (
+              <strong>
+                1달 구독
+                {purchase.correctionOf
+                  ? " · 정정"
+                  : purchase.cancelled
+                    ? " · 취소·정정 전"
+                    : ""}
+              </strong>
+            )}
             <span>
               {purchase.reversed
                 ? purchase.isGroupDistribution

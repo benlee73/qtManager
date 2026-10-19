@@ -44,6 +44,7 @@ export function HelpPanel({
   topic?: HelpTopic;
   onClose: () => void;
 }) {
+  const [mode, setMode] = useState<"brief" | "detailed">("brief");
   const [support, setSupport] = useState<AppSupportInfo | null>(null);
   const [supportError, setSupportError] = useState("");
   const [activeTopic, setActiveTopic] = useState<HelpTopic>(topic);
@@ -185,7 +186,7 @@ export function HelpPanel({
       window.clearTimeout(retry);
       content.removeEventListener("scroll", syncActiveTopic);
     };
-  }, [syncActiveTopic, topic]);
+  }, [syncActiveTopic, topic, mode]);
 
   return (
     <div
@@ -216,7 +217,7 @@ export function HelpPanel({
         <header className="help-heading">
           <div className="help-heading-copy">
             <h2 id="help-title">QT Manager 도움말</h2>
-            <label className="help-search">
+            <label className="help-search" hidden={mode === "brief"}>
               <span className="sr-only">도움말 검색</span>
               <input
                 data-testid="help-search"
@@ -232,7 +233,67 @@ export function HelpPanel({
             ×
           </button>
         </header>
-        <div className="help-layout">
+        <div className="help-mode" aria-label="도움말 보기 방식">
+          <button
+            type="button"
+            aria-pressed={mode === "brief"}
+            onClick={() => setMode("brief")}
+          >
+            간략
+          </button>
+          <button
+            type="button"
+            data-testid="help-detailed-toggle"
+            aria-pressed={mode === "detailed"}
+            onClick={() => setMode("detailed")}
+          >
+            자세히
+          </button>
+        </div>
+        {mode === "brief" && (
+          <div className="help-brief" data-testid="help-brief">
+            <h3>현장에서 기억할 것</h3>
+            <ul>
+              <li>
+                처음에는 전체 필터입니다. 만료·예정·구독 없음도 검색되며 ‘남은
+                배부’로 받을 사람만 좁힐 수 있습니다.
+              </li>
+              <li>
+                이름 옆 노란 점은 활성 메모입니다. 배부 전에 내용을 확인하세요.
+              </li>
+              <li>
+                이번 호가 마지막이면 1년 구독의 시작 호를 다음 호로 선택하세요.
+                다른 호 시작은 신청만 저장합니다.
+              </li>
+              <li>
+                현재 호 1년 구독은 ‘신청 + 배부’가 기본입니다. 1달 구독은 현재
+                호 구매와 전달을 함께 기록합니다.
+              </li>
+              <li>
+                잘못된 구독은 이력의 연필 버튼으로 정정합니다. 기존 배부와
+                충돌하면 내용을 확인하세요.
+              </li>
+              <li>
+                또래가 없는 모임은 ‘해당 없음’을 체크하세요. 누락 표시에서
+                제외됩니다.
+              </li>
+              <li>
+                ‘/’는 검색창 전체 선택, 검색창의 Esc는 검색어 지우기입니다.
+                한글을 완성하기 전에도 검색됩니다.
+              </li>
+              <li>
+                입금 확인은 배부와 별개입니다. 입금 관리에서 처리하고 잘못
+                확인한 건은 취소할 수 있습니다.
+              </li>
+              <li>
+                배부 되돌리기는 구독을 지우지 않습니다. 백업 ‘교체’는 현재
+                데이터를 받은 파일로 바꾸고, ‘병합’은 기록을 합칩니다.
+              </li>
+            </ul>
+            <p>설치·백업 복원 절차와 전체 단축키는 ‘자세히’에서 확인하세요.</p>
+          </div>
+        )}
+        <div className="help-layout" hidden={mode === "brief"}>
           <nav aria-label="도움말 목차">
             {topics
               .filter((item) => !matchingTopics || matchingTopics.has(item.id))
@@ -334,7 +395,8 @@ export function HelpPanel({
                 <HelpCard title="필터와 표">
                   <HelpList>
                     <li>
-                      필터에서 미배부·일부·완료·만료를 여러 개 선택합니다.
+                      필터는 전체로 시작합니다. 미배부·일부·완료·만료·예정·구독
+                      없음을 여러 개 선택합니다.
                     </li>
                     <li>표 머리글을 눌러 오름차순·내림차순을 바꿉니다.</li>
                   </HelpList>
@@ -426,9 +488,9 @@ export function HelpPanel({
                       정리되며, 010이 아닌 번호는 저장할 수 없습니다.
                     </li>
                     <li>
-                      현장 ‘1년 구독’은 신규 인원의 이름·또래가 필수이며
-                      연락처는 선택입니다. 신청 시 누락된 필드는 빨간 입력
-                      오류로 표시됩니다.
+                      현장 ‘1년 구독’은 신규 인원의 이름과 또래 또는 ‘해당 없음’
+                      선택이 필요하며 연락처는 선택입니다. 신청 시 누락된 필드는
+                      빨간 입력 오류로 표시됩니다.
                     </li>
                     <li>
                       현장 ‘1년 구독’에서도 기존 신청자를 검색해 선택하면 그
@@ -440,6 +502,16 @@ export function HelpPanel({
                       추가합니다.
                     </li>
                     <li>기간이 다른 여러 권은 구독 이력을 따로 보존합니다.</li>
+                    <li>
+                      1년 구독의 시작 연도·호를 선택하면 끝 호를 확인할 수
+                      있습니다. 현재 호는 ‘신청 + 배부’, 다른 호는 ‘신청만
+                      저장’이 기본입니다.
+                    </li>
+                    <li>
+                      구독 이력의 연필 버튼은 입력 실수를 정정합니다. 연간 배부
+                      기록은 유지하고, 단건은 원본과 취소·대체 기록을
+                      보존합니다.
+                    </li>
                     <li>
                       1년·1달 신청창은 같은 순서로 검색·선택, 또래·연락처,
                       수량·선택 메모를 입력합니다. 1년 구독의 메모는 해당 구독
@@ -493,10 +565,10 @@ export function HelpPanel({
                     </li>
                     <li>
                       ‘전체 / 누락 / 보관’은 간격을 좁힌 한 줄 필터입니다.
-                      ‘누락’은 또래가 없는 일반 신청자를 표시합니다. 연락처는
-                      선택이며 군지체는 제외합니다. 버튼을 누르면 대상자만
-                      필터링되고, 마우스를 올리거나 포커스하면 대상 이름을
-                      확인할 수 있습니다.
+                      ‘누락’은 또래가 비어 있고 ‘해당 없음’을 선택하지 않은 일반
+                      신청자를 표시합니다. 연락처는 선택이며 군지체는
+                      제외합니다. 버튼을 누르면 대상자만 필터링되고, 마우스를
+                      올리거나 포커스하면 대상 이름을 확인할 수 있습니다.
                     </li>
                     <li>
                       구독 수·마지막 호는 상세에서 확인합니다. 구독 표는 오늘이
@@ -854,7 +926,7 @@ export function HelpPanel({
             </HelpSection>
 
             <footer>
-              앱 {support?.appVersion ?? "버전 확인 중"} · 도움말 2026-10-08
+              앱 {support?.appVersion ?? "버전 확인 중"} · 도움말 2026-10-19
             </footer>
           </div>
         </div>

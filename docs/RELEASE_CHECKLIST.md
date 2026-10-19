@@ -1,6 +1,21 @@
 # QT Manager 릴리스 체크리스트
 
-릴리스 버전: `0.1.0`
+릴리스 버전: `0.2.0`
+
+## 0.2.0 현재 검증
+
+- [x] macOS 로컬 포맷·정적 검사·Python 2개·프론트엔드 156개·Rust 전체 검증·E2E 타입 검사 (`just check`, 2026-10-19). Windows는 별도 검증 대기.
+- [x] 로컬 자동 검사: 이전 SQLite/백업 업그레이드, 현재 메모·정정 이력 XLSX 왕복·병합·교체·복원. 실제 양 OS 설치 앱 왕복은 대기.
+- [x] macOS 실제 필터·한글 검색·Enter 신청 + 배부·연필 정정·간략/자세히 도움말 E2E: 29개 통과, 제외 0개 (2026-10-19). Windows는 대기.
+- [x] macOS Universal 앱·DMG 생성, 0.2.0 버전·Intel/Apple Silicon 포함·DMG 무결성 확인.
+- [ ] macOS 실제 설치·실행 및 Windows GUI EXE 생성·설치·실행 검증
+- [ ] 실제 Windows 배율 100/125/150% 메뉴와 한글 입력 확인
+- [ ] 실제 OS의 Tab/Space 필터 체크와 Enter 연간 신청 기본 동작 확인 (embedded WebDriver의 기본 키 동작 미지원과 구분).
+- [x] 전체 테스트 감사표 대조: 로컬 자동 검사 통과, Windows·OS 기본 키·배율·실제 설치는 별도 미완료로 기록.
+
+macOS 일반 터미널에서는 `pnpm_config_verify_deps_before_run=false just release-macos > target/qt-020-release.log 2>&1`로 E2E 성공 후 Universal DMG를 생성한다. Windows 검증은 이 결과와 별개로 릴리스 Actions에서 수행한다.
+
+## 0.1.0 과거 검증 기록 (0.2.0의 통과 근거로 사용하지 않음)
 
 ## 자동 검증
 

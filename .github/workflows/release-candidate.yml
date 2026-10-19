@@ -40,7 +40,7 @@ jobs:
       - run: just e2e
       - name: Build macOS Universal DMG
         if: runner.os == 'macOS'
-        run: pnpm tauri build --target universal-apple-darwin --bundles app,dmg
+        run: just 'bundle_args=--target universal-apple-darwin --bundles app,dmg' package
       - name: Verify macOS package
         if: runner.os == 'macOS'
         shell: bash
@@ -53,7 +53,7 @@ jobs:
           hdiutil verify "$dmg_path"
       - name: Build Windows NSIS installer
         if: runner.os == 'Windows'
-        run: pnpm tauri build --bundles nsis
+        run: just package
       - name: Verify Windows package
         if: runner.os == 'Windows'
         shell: pwsh
@@ -84,6 +84,8 @@ jobs:
           if ($null -eq $application) {
             throw "Installed QT Manager executable was not found."
           }
+          python scripts/check_windows_gui.py $application.FullName
+          if ($LASTEXITCODE -ne 0) { throw "Windows application subsystem verification failed." }
           $process = Start-Process -FilePath $application.FullName -PassThru
           Start-Sleep -Seconds 5
           if ($process.HasExited) {

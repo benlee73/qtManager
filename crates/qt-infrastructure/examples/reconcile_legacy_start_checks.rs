@@ -28,6 +28,10 @@ fn main() {
     let current = SqliteStateTransfer::new(&mut repository)
         .load_state()
         .expect("현재 앱 상태를 읽을 수 없습니다.");
+    assert!(
+        !should_apply || current.memos.is_none(),
+        "이 도구는 이전 형식 자료 전용입니다. 현재 메모를 직접 보존하는 0.2.0 상태에는 적용할 수 없습니다."
+    );
     let operator = current
         .settings
         .iter()

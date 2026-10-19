@@ -16,6 +16,8 @@ export const PERSON_FILTERS = [
   "partial",
   "completed",
   "expired",
+  "scheduled",
+  "unsubscribed",
 ] as const;
 
 export type PersonFilter = (typeof PERSON_FILTERS)[number];
@@ -25,16 +27,21 @@ export const PERSON_FILTER_LABELS: Record<PersonFilter, string> = {
   partial: "일부 배부",
   completed: "배부 완료",
   expired: "구독 만료",
+  scheduled: "구독 예정",
+  unsubscribed: "구독 없음",
 };
 
-export const DEFAULT_PERSON_FILTERS: PersonFilter[] = [
+export const REMAINING_PERSON_FILTERS: PersonFilter[] = [
   "undistributed",
   "partial",
 ];
 
 export const ALL_PERSON_FILTERS: PersonFilter[] = [...PERSON_FILTERS];
+export const DEFAULT_PERSON_FILTERS: PersonFilter[] = [...PERSON_FILTERS];
 
 export function personFilter(person: DeskPerson): PersonFilter {
+  if (person.subscriptionStatus === "예정") return "scheduled";
+  if (person.subscriptionStatus === "대상 아님") return "unsubscribed";
   if (person.subscriptionStatus === "구독 만료") return "expired";
   if (person.distributionStatus === "일부 배부") return "partial";
   if (person.distributionStatus === "배부 완료") return "completed";
@@ -45,15 +52,7 @@ export function filterPeople(
   people: DeskPerson[],
   filters: ReadonlySet<PersonFilter>,
 ) {
-  // A person whose selected issue is outside every subscription is not a
-  // distribution candidate. Keep the filter vocabulary focused on actions the
-  // operator can actually perform; these rows are available in management.
-  return people.filter(
-    (person) =>
-      person.subscriptionStatus !== "대상 아님" &&
-      person.subscriptionStatus !== "예정" &&
-      filters.has(personFilter(person)),
-  );
+  return people.filter((person) => filters.has(personFilter(person)));
 }
 
 export function subscriptionHeadline(person: DeskPerson): string | null {
@@ -61,6 +60,7 @@ export function subscriptionHeadline(person: DeskPerson): string | null {
     return `${person.distributionTargets.length}개 구독`;
   if (person.isLastIssue) return "이번 호 마지막";
   if (person.subscriptionStatus === "유효") return null;
+  if (person.subscriptionStatus === "대상 아님") return "구독 없음";
   return person.subscriptionStatus;
 }
 
@@ -103,8 +103,8 @@ export function filterLabel(filters: ReadonlySet<PersonFilter>) {
   if (PERSON_FILTERS.every((filter) => filters.has(filter)))
     return "전체 신청자";
   if (
-    filters.size === DEFAULT_PERSON_FILTERS.length &&
-    DEFAULT_PERSON_FILTERS.every((filter) => filters.has(filter))
+    filters.size === REMAINING_PERSON_FILTERS.length &&
+    REMAINING_PERSON_FILTERS.every((filter) => filters.has(filter))
   )
     return "남은 신청자";
   if (filters.size === 0) return "선택한 신청자";

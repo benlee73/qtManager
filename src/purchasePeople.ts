@@ -1,3 +1,4 @@
+import { matchesKorean, normalizedSearch } from "./koreanSearch";
 import type { PersonSummary } from "./phase3";
 
 /**
@@ -16,12 +17,13 @@ export function filterPurchasePeople(
       if (person.isGroup) return false;
       const name = person.name.replace(/\s/g, "").toLowerCase();
       const cohort = person.cohort ?? "";
-      return (
-        name.includes(normalized) ||
-        cohort.includes(normalized) ||
-        `${cohort}${name}`.includes(normalized)
-      );
+      return matchesKorean(`${cohort}${name}`, normalized);
     })
+    .sort(
+      (a, b) =>
+        Number(normalizedSearch(b.name) === normalized) -
+        Number(normalizedSearch(a.name) === normalized),
+    )
     .slice(0, 8);
 }
 

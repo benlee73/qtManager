@@ -20,7 +20,7 @@ impl PaymentRepository for SqliteCoreRepository {
     }
     fn payment_intakes(&self) -> Result<Vec<PaymentIntake>, PortError> {
         let load_person = |id: &str| {
-            self.connection.query_row("SELECT id, name, cohort, phone, normalized_phone, status, person_note, created_at, updated_at, is_group FROM people WHERE id = ?1", [id], person_from_row).optional().map_err(error)
+            self.connection.query_row("SELECT id, name, cohort, phone, normalized_phone, status, person_note, created_at, updated_at, is_group, cohort_not_applicable FROM people WHERE id = ?1", [id], person_from_row).optional().map_err(error)
         };
         let mut result = Vec::new();
         let mut statement = self.connection.prepare("SELECT id, person_id, start_issue_year, start_issue_month, issue_count, quantity, applied_at, source, source_reference, memo, created_at, updated_at, archived_at, payment_status FROM subscriptions WHERE payment_status IS NOT NULL AND archived_at IS NULL").map_err(error)?;
@@ -34,7 +34,7 @@ impl PaymentRepository for SqliteCoreRepository {
                 result.push(PaymentIntake::Subscription(person, subscription));
             }
         }
-        let mut statement = self.connection.prepare("SELECT p.id, p.person_id, p.buyer_name, p.issue_year, p.issue_month, p.quantity, p.purchased_at, p.note, p.reversal_of, p.created_at, p.updated_at, p.payment_status, p.is_group_distribution FROM one_time_purchases p WHERE p.payment_status IS NOT NULL AND p.reversal_of IS NULL AND NOT EXISTS (SELECT 1 FROM one_time_purchases r WHERE r.reversal_of = p.id)").map_err(error)?;
+        let mut statement = self.connection.prepare("SELECT p.id, p.person_id, p.buyer_name, p.issue_year, p.issue_month, p.quantity, p.purchased_at, p.note, p.reversal_of, p.created_at, p.updated_at, p.payment_status, p.is_group_distribution, p.correction_of FROM one_time_purchases p WHERE p.payment_status IS NOT NULL AND p.reversal_of IS NULL AND NOT EXISTS (SELECT 1 FROM one_time_purchases r WHERE r.reversal_of = p.id)").map_err(error)?;
         let purchases = statement
             .query_map([], purchase_from_row)
             .map_err(error)?

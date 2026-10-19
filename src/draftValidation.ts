@@ -1,9 +1,11 @@
 export type DraftInput = {
   name: string;
   cohort: string;
+  cohortNotApplicable?: boolean;
   phone: string;
   quantity: number;
   memo?: string;
+  appliedAt?: string;
 };
 
 export function validateDraftFields(
@@ -14,8 +16,9 @@ export function validateDraftFields(
   if (!existingPerson) {
     if (!input.name.trim()) errors.name = "이름을 입력하세요.";
     const cohort = input.cohort.trim();
-    if (!cohort) errors.cohort = "또래를 입력하세요.";
-    else if (!/^\d{2}$/.test(cohort))
+    if (!cohort && !input.cohortNotApplicable)
+      errors.cohort = "또래를 입력하세요.";
+    else if (cohort && !/^\d{2}$/.test(cohort))
       errors.cohort = "또래는 두 자리 숫자만 입력할 수 있습니다.";
     if (input.phone.trim() && !/^010-\d{4}-\d{4}$/.test(input.phone.trim()))
       errors.phone = "연락처는 010-xxxx-xxxx 형식으로 입력하세요.";

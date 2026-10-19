@@ -165,7 +165,7 @@ p {
   display: grid;
   width: 100%;
   height: 100%;
-  grid-template-columns: 76px minmax(0, 1fr);
+  grid-template-columns: 88px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
   color: var(--text);
@@ -295,7 +295,8 @@ p {
 .rail-item {
   position: relative;
   display: grid;
-  width: 62px;
+  width: 74px;
+  white-space: nowrap;
   min-height: 58px;
   place-items: center;
   align-content: center;
@@ -343,7 +344,8 @@ p {
 
 .rail-operator {
   display: grid;
-  width: 62px;
+  width: 74px;
+  white-space: nowrap;
   min-height: 56px;
   place-items: center;
   gap: 2px;
@@ -2344,4 +2346,82 @@ kbd {
 }
 .payment-queue td:last-child {
   white-space: normal;
+}
+
+.cohort-exemption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: var(--font-meta);
+}
+.cohort-exemption input {
+  width: 20px;
+  min-height: 20px;
+  height: 20px;
+}
+.help-layout[hidden],
+.help-search[hidden] {
+  display: none;
+}
+.help-mode {
+  display: flex;
+  gap: 8px;
+  padding: 8px 20px;
+}
+.help-mode button {
+  padding: 8px 14px;
+  border-radius: 6px;
+}
+.help-mode button[aria-pressed="true"] {
+  background: var(--accent);
+  color: white;
+}
+.help-brief {
+  overflow: auto;
+  padding: 12px 24px 24px;
+}
+.help-brief li {
+  margin: 12px 0;
+}
+
+.subscription-card,
+.purchase-history-row {
+  position: relative;
+  padding-right: 38px;
+}
+.edit-pencil {
+  position: absolute;
+  right: 7px;
+  top: 9px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+  border-radius: 5px;
+  color: var(--muted);
+  background: var(--panel-high);
+}
+.edit-pencil:hover {
+  color: var(--text);
+  background: var(--panel-hover);
+}
+.correction-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.annual-submit-actions {
+  display: flex;
+  gap: 8px;
+}
+.annual-submit-actions > button {
+  flex: 1;
+}
+
+.cohort-exemption input {
+  padding: 0;
+  min-width: 20px;
 }

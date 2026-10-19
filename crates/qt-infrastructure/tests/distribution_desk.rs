@@ -56,6 +56,7 @@ fn search_prioritizes_linked_memos_without_hiding_or_modifying_other_memos() {
             &mut repository,
             &services,
             CreateDraftRequest {
+                cohort_not_applicable: false,
                 name: name.into(),
                 cohort: Some(cohort.into()),
                 phone: None,
@@ -119,7 +120,7 @@ fn search_prioritizes_linked_memos_without_hiding_or_modifying_other_memos() {
     assert_eq!(repository.list_memos().unwrap(), original);
     assert_eq!(repository.list_changes().unwrap(), original_changes);
 
-    // A different issue can hide a person from distribution without hiding their memos.
+    // Future subscriptions stay searchable without hiding their memos.
     let desk = load_distribution_desk(
         &mut repository,
         &clock,
@@ -128,7 +129,8 @@ fn search_prioritizes_linked_memos_without_hiding_or_modifying_other_memos() {
         true,
     )
     .unwrap();
-    assert!(desk.people.is_empty());
+    assert_eq!(desk.people.len(), 1);
+    assert!(!desk.people[0].can_distribute);
     assert_eq!(desk.memos[0].id, memo_ids[1]);
 }
 
@@ -160,6 +162,7 @@ fn persists_and_searches_complete_distribution_desk_flow_after_reopen() {
         &mut repository,
         &services,
         CreateDraftRequest {
+            cohort_not_applicable: false,
             name: "가상 홍길동".into(),
             cohort: Some("94".into()),
             phone: Some("010-1234-5678".into()),
@@ -227,13 +230,17 @@ fn persists_and_searches_complete_distribution_desk_flow_after_reopen() {
         load_distribution_desk(&mut reopened, &FixedClock, issue, "94가상", false).unwrap();
     assert_eq!(restored.people[0].distribution_status, "일부 배부");
     assert_eq!(restored.people[0].remaining_quantity, 1);
-    assert!(restored.people[0].has_memo);
-    assert_eq!(restored.check_items.len(), 1);
-    assert_eq!(
-        restored.check_items[0].person_name.as_deref(),
-        Some("가상 홍길동")
+    assert!(
+        !restored.people[0].has_memo,
+        "legacy check items must not create a memo dot"
     );
-    assert_eq!(restored.pinned_notes.len(), 1);
+    let legacy_items = reopened.list_check_items().unwrap();
+    assert_eq!(legacy_items.len(), 1);
+    assert_eq!(
+        legacy_items[0].person_id.as_deref(),
+        Some(found.people[0].person_id.as_str())
+    );
+    assert_eq!(reopened.list_pinned_notes().unwrap().len(), 1);
     assert_eq!(
         (restored.purchase_count, restored.purchased_quantity),
         (1, 1)
@@ -248,7 +255,7 @@ fn persists_and_searches_complete_distribution_desk_flow_after_reopen() {
         &mut reopened,
         &services,
         UpdateCheckItemStatusRequest {
-            id: restored.check_items[0].id.clone(),
+            id: legacy_items[0].id.clone(),
             status: CheckItemStatus::Checked,
         },
     )
@@ -266,10 +273,14 @@ fn persists_and_searches_complete_distribution_desk_flow_after_reopen() {
     let after_undo =
         load_distribution_desk(&mut reopened, &FixedClock, issue, "가상", false).unwrap();
     assert_eq!(after_undo.people[0].distribution_status, "미배부");
-    assert_eq!(after_undo.check_items[0].status, "확인 완료");
+    assert_eq!(
+        reopened.list_check_items().unwrap()[0].status,
+        CheckItemStatus::Checked
+    );
 
-    delete_check_item(&mut reopened, &services, &restored.check_items[0].id).unwrap();
-    delete_pinned_note(&mut reopened, &services, &restored.pinned_notes[0].id).unwrap();
+    delete_check_item(&mut reopened, &services, &legacy_items[0].id).unwrap();
+    let legacy_note_id = reopened.list_pinned_notes().unwrap()[0].id.clone();
+    delete_pinned_note(&mut reopened, &services, &legacy_note_id).unwrap();
     let after_delete = load_distribution_desk(&mut reopened, &FixedClock, issue, "", true).unwrap();
     assert!(after_delete.check_items.is_empty());
     assert!(after_delete.pinned_notes.is_empty());

@@ -14,6 +14,8 @@ pub enum PersonStatus {
 #[serde(rename_all = "camelCase")]
 pub struct Person {
     #[serde(default)]
+    pub cohort_not_applicable: bool,
+    #[serde(default)]
     pub is_group: bool,
     pub id: String,
     pub name: String,
@@ -30,6 +32,7 @@ impl Person {
     pub fn needs_profile_completion(&self) -> bool {
         self.status != PersonStatus::Archived
             && !self.is_group
+            && !self.cohort_not_applicable
             && self
                 .cohort
                 .as_deref()
@@ -105,9 +108,7 @@ pub fn person_matches_search(person: &Person, query: &str) -> bool {
         .clone()
         .unwrap_or_else(|| normalize_phone(person.phone.as_deref().unwrap_or_default()));
     let phone_query = normalize_phone(&normalized);
-    name.contains(&normalized)
-        || cohort.contains(&normalized)
-        || combined.contains(&normalized)
+    crate::matches_korean(&combined, &normalized)
         || (!phone_query.is_empty() && phone.contains(&phone_query))
 }
 
@@ -234,6 +235,8 @@ impl PinnedNote {
 #[serde(rename_all = "camelCase")]
 pub struct OneTimePurchase {
     #[serde(default)]
+    pub correction_of: Option<String>,
+    #[serde(default)]
     pub payment_status: Option<crate::PaymentStatus>,
     #[serde(default)]
     pub is_group_distribution: bool,
@@ -310,6 +313,7 @@ mod tests {
     #[test]
     fn profile_completion_depends_only_on_cohort_with_group_and_archive_exceptions() {
         let mut person = Person {
+            cohort_not_applicable: false,
             is_group: false,
             id: "person".into(),
             name: "가상 신청자".into(),
@@ -322,6 +326,10 @@ mod tests {
             updated_at: "2026-10-04".into(),
         };
         assert!(person.needs_profile_completion());
+        person.cohort_not_applicable = true;
+        assert!(!person.needs_profile_completion());
+        person.validate().unwrap();
+        person.cohort_not_applicable = false;
         person.cohort = Some("00".into());
         person.status = PersonStatus::Draft;
         assert!(!person.needs_profile_completion());
@@ -353,6 +361,7 @@ mod tests {
     #[test]
     fn person_preserves_optional_leading_zero_cohort() {
         let person = Person {
+            cohort_not_applicable: false,
             is_group: false,
             id: "person-1".into(),
             name: "가상 신청자".into(),
@@ -371,6 +380,7 @@ mod tests {
     #[test]
     fn search_matches_name_cohort_combination_and_normalized_phone() {
         let person = Person {
+            cohort_not_applicable: false,
             is_group: false,
             id: "person-1".into(),
             name: "홍 길동".into(),
@@ -393,6 +403,7 @@ mod tests {
     #[test]
     fn draft_requires_name_and_preserves_optional_leading_zero_cohort() {
         let mut person = Person {
+            cohort_not_applicable: false,
             is_group: false,
             id: "person-1".into(),
             name: "현장 신청자".into(),

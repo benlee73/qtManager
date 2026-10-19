@@ -10,6 +10,7 @@ export type PeopleManagement = {
 
 export type PersonSummary = {
   isGroup?: boolean;
+  cohortNotApplicable?: boolean;
   id: string;
   name: string;
   cohort: string | null;
@@ -42,6 +43,7 @@ export type LinkedMemo = {
 
 export type PersonDetail = {
   isGroup?: boolean;
+  cohortNotApplicable?: boolean;
   id: string;
   name: string;
   cohort: string | null;
@@ -50,6 +52,8 @@ export type PersonDetail = {
   /** 구버전 데이터 호환용. 새 화면은 memos를 사용한다. */
   personNote?: string | null;
   subscriptions: {
+    revision?: string;
+    deliveryWarnings?: string[];
     paymentStatus?: "pending" | "confirmed" | null;
     id: string;
     startIssue: string;
@@ -68,6 +72,11 @@ export type PersonDetail = {
     reversed: boolean;
   }[];
   purchases?: {
+    id?: string;
+    revision?: string;
+    note?: string | null;
+    cancelled?: boolean;
+    correctionOf?: string | null;
     paymentStatus?: "pending" | "confirmed" | null;
     isGroupDistribution?: boolean;
     issue: string;
@@ -91,6 +100,7 @@ export type DuplicateCandidate = {
 export type PersonInput = {
   name: string;
   cohort: string;
+  cohortNotApplicable?: boolean;
   phone: string;
   /** 구버전 API 호환용. 새 입력 경로에서는 사용하지 않는다. */
   personNote?: string;
@@ -110,7 +120,8 @@ export function loadPersonDetail(personId: string) {
 export function previewDuplicates(input: PersonInput, excludingId?: string) {
   return invoke<DuplicateCandidate[]>("preview_duplicates_command", {
     name: input.name,
-    cohort: input.cohort || null,
+    cohort: input.cohortNotApplicable ? null : input.cohort || null,
+    cohortNotApplicable: input.cohortNotApplicable ?? false,
     phone: input.phone || null,
     excludingId: excludingId ?? null,
   });
@@ -128,7 +139,8 @@ export function registerPerson(
   return invoke<string>("register_person_command", {
     request: {
       name: input.name,
-      cohort: input.cohort || null,
+      cohort: input.cohortNotApplicable ? null : input.cohort || null,
+      cohortNotApplicable: input.cohortNotApplicable ?? false,
       phone: input.phone || null,
       personNote: input.personNote || null,
       issueYear: issue.year,
@@ -149,7 +161,8 @@ export function updatePerson(
     request: {
       personId,
       name: input.name,
-      cohort: input.cohort || null,
+      cohort: input.cohortNotApplicable ? null : input.cohort || null,
+      cohortNotApplicable: input.cohortNotApplicable ?? false,
       phone: input.phone || null,
       personNote: input.personNote || null,
       confirmDuplicate: input.confirmDuplicate,

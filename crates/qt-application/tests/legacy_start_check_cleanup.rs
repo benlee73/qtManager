@@ -10,6 +10,7 @@ const IMPORTED_AT: &str = "2026-07-27T09:23:07Z";
 
 fn person(id: &str) -> Person {
     Person {
+        cohort_not_applicable: false,
         is_group: false,
         id: id.into(),
         name: "가상 신청자".into(),
@@ -59,12 +60,14 @@ fn matching_snapshots() -> (StateSnapshot, StateSnapshot) {
     let verified_person = person("verified-person");
     (
         StateSnapshot {
+            memos: None,
             people: vec![current_person],
             subscriptions: vec![subscription("current-subscription", "current-person", 1)],
             check_items: vec![warning("warning-1", "current-person")],
             ..StateSnapshot::default()
         },
         StateSnapshot {
+            memos: None,
             people: vec![verified_person],
             subscriptions: vec![subscription("verified-subscription", "verified-person", 1)],
             ..StateSnapshot::default()

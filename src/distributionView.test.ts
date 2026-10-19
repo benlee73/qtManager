@@ -5,6 +5,7 @@ import {
   searchMemos,
   ALL_PERSON_FILTERS,
   DEFAULT_PERSON_FILTERS,
+  REMAINING_PERSON_FILTERS,
   distributionAllocations,
   filterPeople,
   filterSelectionDescription,
@@ -48,10 +49,11 @@ describe("distribution list filters", () => {
     person("미배부", "구독 만료"),
   ];
 
-  it("defaults to the two remaining distribution states", () => {
-    expect(DEFAULT_PERSON_FILTERS).toEqual(["undistributed", "partial"]);
+  it("defaults to every state and keeps the remaining preset separate", () => {
+    expect(DEFAULT_PERSON_FILTERS).toEqual(ALL_PERSON_FILTERS);
+    expect(REMAINING_PERSON_FILTERS).toEqual(["undistributed", "partial"]);
     expect(filterPeople(people, new Set(DEFAULT_PERSON_FILTERS))).toHaveLength(
-      2,
+      4,
     );
   });
 
@@ -59,10 +61,10 @@ describe("distribution list filters", () => {
     const group = { ...person("미배부"), isGroup: true };
     const rows = filterPeople(
       [...people, group],
-      new Set(DEFAULT_PERSON_FILTERS),
+      new Set(REMAINING_PERSON_FILTERS),
     );
     expect(
-      distributionListHeading(rows, new Set(DEFAULT_PERSON_FILTERS), ""),
+      distributionListHeading(rows, new Set(REMAINING_PERSON_FILTERS), ""),
     ).toEqual({
       label: "남은 신청자",
       count: 2,
@@ -70,7 +72,7 @@ describe("distribution list filters", () => {
     expect(
       distributionListHeading(
         [group],
-        new Set(DEFAULT_PERSON_FILTERS),
+        new Set(REMAINING_PERSON_FILTERS),
         "군지체",
       ),
     ).toEqual({
@@ -88,7 +90,7 @@ describe("distribution list filters", () => {
     expect(filterPeople(people, new Set(ALL_PERSON_FILTERS))).toHaveLength(4);
   });
 
-  it("does not put a scheduled or issue-ineligible person in distribution filters", () => {
+  it("includes scheduled and unsubscribed people only in their selected filters", () => {
     const scheduled = person("대상 아님", "예정");
     const notEligible = person("대상 아님", "대상 아님");
     expect(
@@ -96,14 +98,20 @@ describe("distribution list filters", () => {
         [...people, scheduled, notEligible],
         new Set(ALL_PERSON_FILTERS),
       ),
-    ).toHaveLength(4);
+    ).toHaveLength(6);
+    expect(
+      filterPeople([scheduled, notEligible], new Set(["scheduled"])),
+    ).toEqual([scheduled]);
+    expect(
+      filterPeople([scheduled, notEligible], new Set(["unsubscribed"])),
+    ).toEqual([notEligible]);
   });
 
   it("names the common presets and describes custom multi-selection", () => {
     expect(filterTriggerLabel(new Set(DEFAULT_PERSON_FILTERS))).toBe(
-      "필터 · 2개",
+      "필터 · 6개",
     );
-    expect(filterTriggerLabel(new Set(ALL_PERSON_FILTERS))).toBe("필터 · 4개");
+    expect(filterTriggerLabel(new Set(ALL_PERSON_FILTERS))).toBe("필터 · 6개");
     expect(filterTriggerLabel(new Set(["completed", "expired"]))).toBe(
       "필터 · 2개",
     );

@@ -16,7 +16,7 @@ describe("PersonFilterMenu", () => {
 
     expect(markup).toContain("남은 배부");
     expect(markup).toContain("전체");
-    expect(markup.match(/type="checkbox"/g)).toHaveLength(4);
+    expect(markup.match(/type="checkbox"/g)).toHaveLength(6);
     expect(markup).toContain("미배부");
     expect(markup).toContain("일부 배부");
     expect(markup).toContain("배부 완료");

@@ -119,6 +119,7 @@ fn parse_person(row: &RowValues<'_>) -> Result<Person, PortError> {
         legacy_group
     };
     let value = Person {
+        cohort_not_applicable: if row.has("cohort_not_applicable") { row.boolean("cohort_not_applicable")? } else { false },
         is_group,
         id: row.text("person_id")?,
         name: if legacy_group { "군지체".into() } else { name },
@@ -182,6 +183,7 @@ fn parse_distribution(row: &RowValues<'_>) -> Result<Distribution, PortError> {
 }
 fn parse_purchase(row: &RowValues<'_>) -> Result<OneTimePurchase, PortError> {
     let value = OneTimePurchase {
+        correction_of: row.optional_if_present("correction_of")?,
         payment_status: parse_payment_status(row)?,
         is_group_distribution: if row.has("is_group_distribution") {
             row.boolean("is_group_distribution")?
@@ -259,66 +261,7 @@ fn parse_memo(row: &RowValues<'_>) -> Result<Memo, PortError> {
     Ok(value)
 }
 
-fn snapshot_from_memos(snapshot: &mut StateSnapshot, memos: Vec<Memo>) -> Result<(), PortError> {
-    for memo in memos {
-        match memo.legacy_source.as_deref() {
-            Some("person_note") => {
-                if let Some(person_id) = memo.person_id.as_deref()
-                    && let Some(person) = snapshot.people.iter_mut().find(|p| p.id == person_id)
-                {
-                    person.person_note = Some(memo.content);
-                }
-            }
-            Some("pinned_note") | Some("pinned_note:pinned") => {
-                let title = memo
-                    .legacy_title
-                    .clone()
-                    .or_else(|| memo.content.lines().next().map(str::to_owned))
-                    .unwrap_or_else(|| "메모".into());
-                let content = memo
-                    .content
-                    .strip_prefix(&title)
-                    .unwrap_or(&memo.content)
-                    .trim_start_matches('\n')
-                    .to_owned();
-                snapshot.pinned_notes.push(StatePinnedNote {
-                    id: memo.id.strip_prefix("legacy-pinned:").unwrap_or(&memo.id).into(),
-                    title,
-                    content,
-                    is_pinned: memo.legacy_source.as_deref() == Some("pinned_note:pinned"),
-                    status: if memo.status == MemoStatus::Active {
-                        PinnedNoteStatus::Active
-                    } else {
-                        PinnedNoteStatus::Archived
-                    },
-                    operator_name: memo.operator_name,
-                    created_at: memo.created_at,
-                    updated_at: memo.updated_at,
-                    archived_at: memo.archived_at,
-                    legacy_active_from: None,
-                    legacy_active_until: None,
-                });
-            }
-            _ => {
-                snapshot.check_items.push(CheckItem {
-                    id: memo.id.strip_prefix("legacy-check:").unwrap_or(&memo.id).into(),
-                    person_id: memo.person_id,
-                    content: memo.content,
-                    status: if memo.status == MemoStatus::Active {
-                        CheckItemStatus::NeedsCheck
-                    } else {
-                        CheckItemStatus::Archived
-                    },
-                    operator_name: memo.operator_name,
-                    created_at: memo.created_at,
-                    updated_at: memo.updated_at.clone(),
-                    checked_at: memo.archived_at,
-                });
-            }
-        }
-    }
-    Ok(())
-}
+
 fn parse_change(row: &RowValues<'_>) -> Result<ChangeLog, PortError> {
     let value = ChangeLog {
         id: row.text("change_id")?,
@@ -388,6 +331,17 @@ fn validate_relations(snapshot: &StateSnapshot) -> Result<(), PortError> {
             ));
         }
     }
+    let mut corrected = std::collections::HashSet::new();
+    for purchase in &snapshot.purchases {
+        if let Some(source) = &purchase.correction_of {
+            let original = snapshot.purchases.iter().find(|p| &p.id == source).ok_or_else(||PortError::new("정정 기록의 원본 구매가 없습니다."))?;
+            if source == &purchase.id || original.reversal_of.is_some() || purchase.reversal_of.is_some() || original.person_id != purchase.person_id || !corrected.insert(source) {
+                return Err(PortError::new("구매 정정 연결이 올바르지 않거나 같은 원본에 정정이 중복됩니다."));
+            }
+            if !snapshot.purchases.iter().any(|p|p.reversal_of.as_ref()==Some(source)) { return Err(PortError::new("정정 전 원본의 취소 기록이 없습니다.")); }
+        }
+    }
+
     Ok(())
 }
 

@@ -23,6 +23,7 @@ impl IdGenerator for SequentialIds {
 
 fn person(id: &str, name: &str, cohort: Option<&str>, phone: Option<&str>) -> Person {
     Person {
+        cohort_not_applicable: false,
         is_group: false,
         id: id.into(),
         name: name.into(),
@@ -99,6 +100,7 @@ fn expectation(id: &str, owner: &str, year: i32, month: u8) -> LegacySubscriptio
 #[test]
 fn shifts_one_issue_late_subscription_and_preserves_distribution_reversal_history() {
     let mut snapshot = StateSnapshot {
+        memos: None,
         people: vec![person(
             "person",
             "가상 신청자",
@@ -149,6 +151,7 @@ fn shifts_one_issue_late_subscription_and_preserves_distribution_reversal_histor
 #[test]
 fn merges_multiple_legacy_people_into_one_renewal_and_keeps_independent_subscription() {
     let mut snapshot = StateSnapshot {
+        memos: None,
         people: vec![
             person(
                 "canonical",
@@ -263,6 +266,7 @@ fn merges_multiple_legacy_people_into_one_renewal_and_keeps_independent_subscrip
 #[test]
 fn rejects_any_modified_record_without_partially_applying_an_earlier_correction() {
     let mut snapshot = StateSnapshot {
+        memos: None,
         people: vec![
             person("first", "첫 신청자", Some("00"), None),
             person("second", "둘째 신청자", Some("01"), None),

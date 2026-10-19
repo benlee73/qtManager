@@ -1,3 +1,7 @@
+mod memo_compat;
+pub use memo_compat::{populate_snapshot_memos, snapshot_memos};
+mod operations;
+pub use operations::*;
 use std::path::Path;
 
 use qt_domain::{ProbePerson, STATE_XLSX_FORMAT_VERSION};

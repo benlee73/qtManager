@@ -6,7 +6,7 @@ use qt_application::{
     UpdatePersonRequest, load_people_management, load_person_detail, record_distribution,
     register_person, renew_subscription, set_person_archived, update_person,
 };
-use qt_domain::{ChangeLog, CheckItem, CheckItemStatus, Issue};
+use qt_domain::{ChangeLog, Issue, Memo, MemoStatus};
 use qt_infrastructure::SqliteCoreRepository;
 use tempfile::tempdir;
 
@@ -53,6 +53,7 @@ fn persists_registration_profile_completion_renewal_archive_and_history_across_r
             &mut repository,
             &services,
             RegisterPersonRequest {
+                cohort_not_applicable: false,
                 name: "가상관리".into(),
                 cohort: Some("00".into()),
                 phone: Some("010-0000-1234".into()),
@@ -79,6 +80,7 @@ fn persists_registration_profile_completion_renewal_archive_and_history_across_r
             &mut repository,
             &services,
             UpdatePersonRequest {
+                cohort_not_applicable: false,
                 person_id: person_id.clone(),
                 name: "가상관리수정".into(),
                 cohort: Some("00".into()),
@@ -143,6 +145,7 @@ fn orders_distribution_history_by_issue_when_imported_times_match() {
         &mut repository,
         &services,
         RegisterPersonRequest {
+            cohort_not_applicable: false,
             name: "가상이력".into(),
             cohort: Some("00".into()),
             phone: None,
@@ -196,7 +199,7 @@ fn orders_distribution_history_by_issue_when_imported_times_match() {
 }
 
 #[test]
-fn loads_non_archived_linked_check_items_in_latest_update_order_across_restart() {
+fn loads_only_active_linked_memos_in_latest_update_order_across_restart() {
     let directory = tempdir().unwrap();
     let path = directory.path().join("management.sqlite");
     let runtime = FixedRuntime(Cell::new(0));
@@ -218,6 +221,7 @@ fn loads_non_archived_linked_check_items_in_latest_update_order_across_restart()
             &mut repository,
             &services,
             RegisterPersonRequest {
+                cohort_not_applicable: false,
                 name: "가상신청자".into(),
                 cohort: Some("00".into()),
                 phone: Some("010-0000-1234".into()),
@@ -235,6 +239,7 @@ fn loads_non_archived_linked_check_items_in_latest_update_order_across_restart()
             &mut repository,
             &services,
             RegisterPersonRequest {
+                cohort_not_applicable: false,
                 name: "다른가상신청자".into(),
                 cohort: Some("01".into()),
                 phone: Some("010-0000-5678".into()),
@@ -249,45 +254,41 @@ fn loads_non_archived_linked_check_items_in_latest_update_order_across_restart()
         )
         .unwrap();
         for item in [
-            check_item(
+            memo(
                 "linked-needs-check",
                 Some(&person_id),
                 "가상 수량 확인",
-                CheckItemStatus::NeedsCheck,
+                MemoStatus::Active,
                 "2026-07-26T10:01:00+09:00",
                 None,
             ),
-            check_item(
-                "linked-checked",
+            memo(
+                "linked-second",
                 Some(&person_id),
                 "가상 연락 확인",
-                CheckItemStatus::Checked,
+                MemoStatus::Active,
                 "2026-07-26T10:02:00+09:00",
                 Some("2026-07-26T10:02:00+09:00"),
             ),
-            check_item(
+            memo(
                 "linked-archived",
                 Some(&person_id),
                 "가상 보관 확인",
-                CheckItemStatus::Archived,
+                MemoStatus::Archived,
                 "2026-07-26T10:03:00+09:00",
                 None,
             ),
-            check_item(
+            memo(
                 "other-person-check",
                 Some(&other_person_id),
                 "다른 가상 신청자 확인",
-                CheckItemStatus::NeedsCheck,
+                MemoStatus::Active,
                 "2026-07-26T10:04:00+09:00",
                 None,
             ),
         ] {
-            DistributionDeskRepository::save_check_item(
-                &mut repository,
-                &item,
-                &check_item_change(&item),
-            )
-            .unwrap();
+            DistributionDeskRepository::save_memo(&mut repository, &item, &memo_change(&item))
+                .unwrap();
         }
         person_id
     };
@@ -298,34 +299,31 @@ fn loads_non_archived_linked_check_items_in_latest_update_order_across_restart()
     assert_eq!(detail.person_note.as_deref(), Some("연락은 문자"));
     assert_eq!(
         detail
-            .check_items
+            .memos
             .iter()
             .map(|item| item.id.as_str())
             .collect::<Vec<_>>(),
-        vec!["linked-checked", "linked-needs-check"]
+        vec!["linked-second", "linked-needs-check"]
     );
     assert_eq!(
         detail
-            .check_items
+            .memos
             .iter()
-            .map(|item| (item.summary.as_str(), item.status.as_str()))
+            .map(|item| (item.content.as_str(), item.status.as_str()))
             .collect::<Vec<_>>(),
-        vec![
-            ("가상 연락 확인", "확인 완료"),
-            ("가상 수량 확인", "확인 필요"),
-        ]
+        vec![("가상 연락 확인", "활성"), ("가상 수량 확인", "활성"),]
     );
 }
 
-fn check_item(
+fn memo(
     id: &str,
     person_id: Option<&str>,
     content: &str,
-    status: CheckItemStatus,
+    status: MemoStatus,
     updated_at: &str,
-    checked_at: Option<&str>,
-) -> CheckItem {
-    CheckItem {
+    archived_at: Option<&str>,
+) -> Memo {
+    Memo {
         id: id.into(),
         person_id: person_id.map(str::to_owned),
         content: content.into(),
@@ -333,17 +331,23 @@ fn check_item(
         operator_name: "가상담당자".into(),
         created_at: "2026-07-26T10:00:00+09:00".into(),
         updated_at: updated_at.into(),
-        checked_at: checked_at.map(str::to_owned),
+        archived_at: if status == MemoStatus::Archived {
+            archived_at.map(str::to_owned)
+        } else {
+            None
+        },
+        legacy_source: None,
+        legacy_title: None,
     }
 }
 
-fn check_item_change(item: &CheckItem) -> ChangeLog {
+fn memo_change(item: &Memo) -> ChangeLog {
     ChangeLog {
         id: format!("change-{}", item.id),
         occurred_at: item.updated_at.clone(),
         operator_name: item.operator_name.clone(),
-        action_type: "check_item_saved".into(),
-        entity_type: "check_item".into(),
+        action_type: "memo_saved".into(),
+        entity_type: "memo".into(),
         entity_id: item.id.clone(),
         summary: "가상 확인 항목 저장".into(),
         before_json: None,

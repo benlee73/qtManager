@@ -406,7 +406,14 @@ export default function App() {
       // Dialogs own their keyboard interaction (including Enter and Escape).
       // Keeping the global shortcuts out of an open dialog prevents the first
       // Enter that opens a confirmation from submitting it immediately.
-      if (dialog || helpOpen) return;
+      if (
+        dialog ||
+        helpOpen ||
+        Array.from(
+          document.querySelectorAll<HTMLElement>('[role="dialog"]'),
+        ).some((element) => element.getClientRects().length > 0)
+      )
+        return;
 
       if (event.key === "/" && !isTextEntryTarget(event.target)) {
         event.preventDefault();
@@ -421,6 +428,7 @@ export default function App() {
                 )
               : searchRef.current;
         targetSearch?.focus();
+        targetSearch?.select();
       } else if (shortcutScreen) {
         event.preventDefault();
         setScreen(shortcutScreen);
@@ -652,7 +660,7 @@ export default function App() {
           const target = event.target as HTMLElement;
           if (
             !target.closest(
-              "button, input, textarea, select, a, [role='option'], .more-menu, .person-context-menu",
+              "button, input, textarea, select, label, a, [role='option'], .more-menu, .person-context-menu",
             )
           ) {
             setSelectedPersonId(null);
@@ -753,6 +761,17 @@ export default function App() {
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   onKeyDown={(event) => {
+                    if (
+                      event.key === "Escape" &&
+                      !event.nativeEvent.isComposing &&
+                      event.nativeEvent.keyCode !== 229
+                    ) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setQuery("");
+                      return;
+                    }
+
                     if (
                       event.key !== "ArrowDown" ||
                       event.nativeEvent.isComposing
@@ -886,12 +905,12 @@ export default function App() {
                   <strong>
                     {query
                       ? "일치하는 신청자가 없습니다"
-                      : "이번 호의 남은 배부가 없습니다"}
+                      : "선택한 필터에 해당하는 신청자가 없습니다"}
                   </strong>
                   <span>
                     {query
                       ? "검색어를 확인하거나 1년 구독을 이용하세요."
-                      : "검색하면 완료자와 만료자도 확인할 수 있습니다."}
+                      : "필터를 변경하거나 신규 구독을 추가하세요."}
                   </span>
                 </div>
               )}
@@ -1157,12 +1176,13 @@ export default function App() {
       )}
       {renewPerson && (
         <RenewDialog
+          recordAction={recordAction}
           person={renewPerson}
           issue={issue}
           busy={busy}
           onClose={() => setRenewPerson(null)}
-          onSaved={(work) =>
-            mutate(work, "구독을 추가했습니다.").then((saved) => {
+          onSaved={(work, message) =>
+            mutate(work, message ?? "구독을 추가했습니다.").then((saved) => {
               if (saved) setRenewPerson(null);
               return saved;
             })
@@ -1324,7 +1344,9 @@ export function PersonRow({
       }}
       data-testid="person-row"
     >
-      <span className="cohort">{person.cohort ?? "--"}</span>
+      <span className="cohort">
+        {person.cohort ?? (person.cohortNotApplicable ? "없음" : "--")}
+      </span>
       <div className="person-name">
         <b title={`${person.name} · ${person.phone ?? "연락처 없음"}`}>
           {person.name}
@@ -1390,7 +1412,7 @@ export function PersonRow({
                 ? "권수 입력"
                 : `${person.remainingQuantity}권 배부`
               : person.subscriptionStatus === "구독 만료"
-                ? "구독 갱신"
+                ? "구독 추가"
                 : person.distributionStatus}
         </button>
         <ActionMenu

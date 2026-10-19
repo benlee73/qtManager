@@ -49,7 +49,7 @@ impl DistributionDeskRepository for SqliteCoreRepository {
             .prepare(&format!(
                 "
                 SELECT id, name, cohort, phone, normalized_phone, status, person_note,
-                       created_at, updated_at, is_group
+                       created_at, updated_at, is_group, cohort_not_applicable
                 FROM people p
                 WHERE p.status != 'archived' AND ({})
                 ORDER BY p.name, p.id
@@ -67,7 +67,7 @@ impl DistributionDeskRepository for SqliteCoreRepository {
         let mut subscriptions = subscriptions_by_person(&self.connection, query)?;
         let mut distributions = distributions_by_subscription(&self.connection, query, issue)?;
         let item_people = active_memo_people(&self.connection)?;
-        let mut statement = self.connection.prepare("SELECT id, person_id, buyer_name, issue_year, issue_month, quantity, purchased_at, note, reversal_of, created_at, updated_at, payment_status, is_group_distribution FROM one_time_purchases WHERE is_group_distribution = 1 AND issue_year = ?1 AND issue_month = ?2").map_err(port_error)?;
+        let mut statement = self.connection.prepare("SELECT id, person_id, buyer_name, issue_year, issue_month, quantity, purchased_at, note, reversal_of, created_at, updated_at, payment_status, is_group_distribution, correction_of FROM one_time_purchases WHERE is_group_distribution = 1 AND issue_year = ?1 AND issue_month = ?2").map_err(port_error)?;
         let group_purchases = statement
             .query_map(params![issue.year, issue.start_month], purchase_from_row)
             .map_err(port_error)?
@@ -484,7 +484,7 @@ impl DistributionDeskRepository for SqliteCoreRepository {
             .query_row(
                 "
                 SELECT p.id, p.person_id, p.buyer_name, p.issue_year, p.issue_month, p.quantity,
-                       p.purchased_at, p.note, p.reversal_of, p.created_at, p.updated_at, p.payment_status, p.is_group_distribution
+                       p.purchased_at, p.note, p.reversal_of, p.created_at, p.updated_at, p.payment_status, p.is_group_distribution, p.correction_of
                 FROM one_time_purchases p
                 WHERE p.issue_year = ?1 AND p.issue_month = ?2
                   AND p.is_group_distribution = 0
@@ -595,15 +595,7 @@ fn distributions_by_subscription(
 }
 
 fn search_predicate(alias: &str) -> String {
-    format!(
-        "
-        ?1 = ''
-        OR lower(replace({alias}.name, ' ', '')) LIKE '%' || ?1 || '%'
-        OR coalesce({alias}.cohort, '') LIKE '%' || ?1 || '%'
-        OR coalesce({alias}.cohort, '') || lower(replace({alias}.name, ' ', ''))
-            LIKE '%' || ?1 || '%'
-        "
-    )
+    format!("qt_matches(coalesce({alias}.cohort, '') || {alias}.name, ?1)")
 }
 
 fn active_memo_people(
@@ -613,9 +605,7 @@ fn active_memo_people(
         .prepare(
             "SELECT DISTINCT person_id FROM memos
              WHERE status = 'active' AND person_id IS NOT NULL
-             UNION
-             SELECT DISTINCT person_id FROM check_items
-             WHERE status = 'needs_check' AND person_id IS NOT NULL",
+",
         )
         .map_err(port_error)?;
     let ids = statement
@@ -685,6 +675,7 @@ pub(crate) fn purchase_from_row(row: &Row<'_>) -> rusqlite::Result<OneTimePurcha
     let year = row.get(3)?;
     let month = row.get(4)?;
     Ok(OneTimePurchase {
+        correction_of: row.get(13)?,
         payment_status: crate::sqlite_core_repository::payment_from_row(row, 11)?,
         is_group_distribution: row.get(12)?,
         id: row.get(0)?,
@@ -715,8 +706,8 @@ pub(crate) fn upsert_purchase(
             "
             INSERT INTO one_time_purchases(
                 id, person_id, buyer_name, issue_year, issue_month, quantity, purchased_at,
-                note, reversal_of, created_at, updated_at, payment_status, is_group_distribution
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                note, reversal_of, created_at, updated_at, payment_status, is_group_distribution, correction_of
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
             ON CONFLICT(id) DO UPDATE SET
                 person_id = excluded.person_id,
                 buyer_name = excluded.buyer_name,
@@ -728,7 +719,8 @@ pub(crate) fn upsert_purchase(
                 reversal_of = excluded.reversal_of,
                 updated_at = excluded.updated_at,
                 payment_status = excluded.payment_status,
-                is_group_distribution = excluded.is_group_distribution
+                is_group_distribution = excluded.is_group_distribution,
+                correction_of = excluded.correction_of
             ",
             params![
                 purchase.id,
@@ -745,7 +737,8 @@ pub(crate) fn upsert_purchase(
                 purchase
                     .payment_status
                     .map(qt_domain::PaymentStatus::as_str),
-                purchase.is_group_distribution
+                purchase.is_group_distribution,
+                purchase.correction_of
             ],
         )
         .map_err(port_error)?;

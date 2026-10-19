@@ -1,3 +1,5 @@
+import { AnnualSubscriptionForm } from "./AnnualSubscriptionForm";
+import type { ReversibleAction } from "./actionHistory";
 import { useEffect, useState, type ReactNode } from "react";
 
 import type { Issue } from "./phase2";
@@ -9,9 +11,9 @@ import {
   type PersonInput,
   previewDuplicates,
   registerPerson,
-  renewSubscription,
   updatePerson,
 } from "./phase3";
+import { CohortField } from "./CohortField";
 import { handlePhoneInput } from "./phone";
 
 export function RegisterDialog({
@@ -321,67 +323,26 @@ export function RenewDialog({
   busy,
   onClose,
   onSaved,
+  recordAction,
 }: {
   person: PersonDetail;
   issue: Issue;
   busy: boolean;
   onClose: () => void;
-  onSaved: (work: () => Promise<unknown>) => Promise<boolean>;
+  onSaved: (work: () => Promise<unknown>, message?: string) => Promise<boolean>;
+  recordAction?: (action: ReversibleAction) => void;
 }) {
-  const [confirmOverlap, setConfirmOverlap] = useState(false);
-  const [overlap, setOverlap] = useState(false);
-
-  async function submit(form: HTMLFormElement) {
-    const data = new FormData(form);
-    const worked = await onSaved(() =>
-      renewSubscription(
-        person.id,
-        {
-          year: Number(data.get("issueYear")),
-          startMonth: Number(data.get("issueMonth")),
-        },
-        {
-          quantity: Number(data.get("quantity")),
-          appliedAt: String(data.get("appliedAt") ?? ""),
-          memo: String(data.get("memo") ?? ""),
-          confirmOverlap,
-        },
-      ),
-    );
-    if (!worked) setOverlap(true);
-  }
-
   return (
     <FormDialog title={`${person.name} · 구독 추가`} onClose={onClose}>
-      <form
-        data-testid="renew-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submit(event.currentTarget);
-        }}
-      >
-        <p className="dialog-description">
-          과거 구독은 그대로 보존하고 시작 호부터 연속 6개 호를 추가합니다.
-        </p>
-        <SubscriptionFields issue={issue} allowIssueChange />
-        {overlap && (
-          <label className="duplicate-warning">
-            <strong>기존 구독과 기간이 겹칠 수 있습니다.</strong>
-            <span>정말 두 구독을 모두 유지해야 할 때만 확인하세요.</span>
-            <span>
-              <input
-                type="checkbox"
-                checked={confirmOverlap}
-                onChange={(event) => setConfirmOverlap(event.target.checked)}
-              />{" "}
-              겹침을 확인했고 새 구독을 추가합니다
-            </span>
-          </label>
-        )}
-        <SubmitButton busy={busy} disabled={overlap && !confirmOverlap}>
-          연간 구독 추가
-        </SubmitButton>
-      </form>
+      <AnnualSubscriptionForm
+        issue={issue}
+        initialPerson={person}
+        busy={busy}
+        mutate={onSaved}
+        recordAction={recordAction}
+        formTestId="renew-form"
+        showApplicationDate
+      />
     </FormDialog>
   );
 }
@@ -393,21 +354,13 @@ function PersonFields({ person }: { person?: PersonDetail }) {
         <Field label="이름">
           <input name="name" required autoFocus defaultValue={person?.name} />
         </Field>
-        <Field label="또래">
-          <input
-            name="cohort"
-            inputMode="numeric"
-            pattern="[0-9]{2}"
-            maxLength={2}
-            placeholder="94"
-            defaultValue={person?.cohort ?? ""}
-            onInput={(event) => {
-              const input = event.currentTarget;
-              const digits = input.value.replace(/[^0-9]/g, "").slice(0, 2);
-              if (digits !== input.value) input.value = digits;
-            }}
+        <div className="field">
+          <span>또래</span>
+          <CohortField
+            value={person?.cohort}
+            notApplicable={person?.cohortNotApplicable}
           />
-        </Field>
+        </div>
       </div>
       <Field label="연락처">
         <input
@@ -589,6 +542,7 @@ function personInput(data: FormData): PersonInput {
   return {
     name: String(data.get("name") ?? ""),
     cohort: String(data.get("cohort") ?? ""),
+    cohortNotApplicable: data.get("cohortNotApplicable") === "on",
     phone: String(data.get("phone") ?? ""),
     personNote: String(data.get("personNote") ?? ""),
   };

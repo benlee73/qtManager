@@ -24,6 +24,7 @@ impl IdGenerator for SequentialIds {
 
 fn person(id: &str, cohort: Option<&str>) -> Person {
     Person {
+        cohort_not_applicable: false,
         is_group: false,
         id: id.into(),
         name: "가상 신청자".into(),
@@ -84,6 +85,7 @@ fn start_warning(id: &str, person_id: &str) -> CheckItem {
 
 fn duplicated_snapshot() -> StateSnapshot {
     StateSnapshot {
+        memos: None,
         people: vec![
             person("canonical-person", Some("00")),
             person("duplicate-person", None),

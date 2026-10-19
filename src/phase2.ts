@@ -16,6 +16,7 @@ export type IssueView = Issue & {
 
 export type DeskPerson = {
   isGroup?: boolean;
+  cohortNotApplicable?: boolean;
   latestGroupDistributionId?: string | null;
   latestGroupDistributionQuantity?: number;
   personId: string;
@@ -209,6 +210,7 @@ export function createDraft(
   input: {
     name: string;
     cohort: string;
+    cohortNotApplicable?: boolean;
     phone: string;
     quantity: number;
     memo?: string;
@@ -217,19 +219,14 @@ export function createDraft(
   return invoke<void>("create_draft_command", {
     request: {
       name: input.name,
-      cohort: input.cohort || null,
+      cohort: input.cohortNotApplicable ? null : input.cohort || null,
+      cohortNotApplicable: input.cohortNotApplicable ?? false,
       phone: input.phone || null,
       issueYear: issue.year,
       issueMonth: issue.startMonth,
       quantity: input.quantity,
       memo: input.memo || null,
     },
-  });
-}
-
-export function createCheckItem(personId: string | null, content: string) {
-  return invoke<string>("create_check_item_command", {
-    request: { personId, content },
   });
 }
 
@@ -251,56 +248,6 @@ export function updateMemoStatus(id: string, archived: boolean) {
 
 export function deleteMemo(id: string) {
   return invoke<void>("delete_memo_command", { id });
-}
-
-export function updateCheckItemStatus(
-  id: string,
-  status: "needs_check" | "checked" | "archived",
-) {
-  return invoke<void>("update_check_item_status_command", {
-    request: { id, status },
-  });
-}
-
-export function updateCheckItem(id: string, content: string) {
-  return invoke<void>("update_check_item_command", {
-    request: { id, content },
-  });
-}
-
-export function deleteCheckItem(id: string) {
-  return invoke<void>("delete_check_item_command", { id });
-}
-
-export function createPinnedNote(input: {
-  title: string;
-  content: string;
-  isPinned: boolean;
-}) {
-  return invoke<string>("create_pinned_note_command", {
-    request: {
-      title: input.title,
-      content: input.content,
-      isPinned: input.isPinned,
-    },
-  });
-}
-
-export function updatePinnedNote(
-  id: string,
-  input: { isPinned?: boolean; archived?: boolean },
-) {
-  return invoke<void>("update_pinned_note_command", {
-    request: {
-      id,
-      isPinned: input.isPinned ?? null,
-      archived: input.archived ?? null,
-    },
-  });
-}
-
-export function deletePinnedNote(id: string) {
-  return invoke<void>("delete_pinned_note_command", { id });
 }
 
 export function recordPurchase(
@@ -329,6 +276,7 @@ export function recordPurchaseForNewPerson(
   input: {
     name: string;
     cohort: string;
+    cohortNotApplicable?: boolean;
     phone: string;
     quantity: number;
     note: string;
@@ -337,7 +285,8 @@ export function recordPurchaseForNewPerson(
   return invoke<string>("record_purchase_for_new_person_command", {
     request: {
       name: input.name.trim(),
-      cohort: input.cohort.trim() || null,
+      cohort: input.cohortNotApplicable ? null : input.cohort.trim() || null,
+      cohortNotApplicable: input.cohortNotApplicable ?? false,
       phone: input.phone.trim() || null,
       issueYear: issue.year,
       issueMonth: issue.startMonth,
