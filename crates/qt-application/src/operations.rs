@@ -308,8 +308,14 @@ fn edited_subscription<R: OperationsRepository>(
     if request.applied_at != original.applied_at {
         validate_changed_date(request.applied_at.as_deref())?;
     }
-    edited.applied_at = clean(request.applied_at.clone());
-    edited.memo = clean(request.memo.clone());
+    // A reduced correction form returns hidden metadata unchanged, including
+    // historical formatting imported from older workbooks.
+    if request.applied_at != original.applied_at {
+        edited.applied_at = clean(request.applied_at.clone());
+    }
+    if request.memo != original.memo {
+        edited.memo = clean(request.memo.clone());
+    }
     edited.validate()?;
     let conflicts = subscription_delivery_conflicts(&edited, &record.distributions)?;
     Ok((original, edited, conflicts))
@@ -436,7 +442,11 @@ pub fn correct_purchase<R: OperationsRepository, C: Clock, I: IdGenerator>(
         issue: Issue::new(request.issue_year, request.issue_month)?,
         quantity: request.quantity,
         purchased_at: request.purchased_at,
-        note: clean(request.note),
+        note: if request.note == original.note {
+            original.note.clone()
+        } else {
+            clean(request.note)
+        },
         created_at: now.clone(),
         updated_at: now,
         ..original.clone()

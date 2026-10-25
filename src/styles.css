@@ -2367,7 +2367,8 @@ kbd {
 .help-mode {
   display: flex;
   gap: 8px;
-  padding: 8px 20px;
+  padding: 0;
+  flex: 0 0 auto;
 }
 .help-mode button {
   padding: 8px 14px;
@@ -2381,11 +2382,6 @@ kbd {
   overflow: auto;
   padding: 12px 24px 24px;
 }
-.help-brief li {
-  margin: 12px 0;
-}
-
-.subscription-card,
 .purchase-history-row {
   position: relative;
   padding-right: 38px;
@@ -2401,7 +2397,8 @@ kbd {
   padding: 4px;
   border-radius: 5px;
   color: var(--muted);
-  background: var(--panel-high);
+  background: transparent;
+  border: 0;
 }
 .edit-pencil:hover {
   color: var(--text);
@@ -2424,4 +2421,70 @@ kbd {
 .cohort-exemption input {
   padding: 0;
   min-width: 20px;
+}
+
+.issue-fields input,
+.issue-fields select {
+  box-sizing: border-box;
+  height: 40px;
+  min-height: 40px;
+  padding: 8px 10px;
+}
+.purchase-person-slot > .field {
+  margin-bottom: 0;
+  min-height: 66px;
+}
+.purchase-person-slot > .purchase-person-selected {
+  box-sizing: border-box;
+  min-height: 66px;
+}
+.purchase-person-slot {
+  margin-bottom: 10px;
+}
+.subscription-actions {
+  grid-column: 3;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.subscription-actions .edit-pencil {
+  position: static;
+  flex: 0 0 28px;
+}
+.help-heading h2,
+.help-mode button,
+.help-search input,
+.help-heading > button {
+  box-sizing: border-box;
+  height: 36px;
+}
+.help-heading h2 {
+  display: flex;
+  align-items: center;
+}
+.help-mode button {
+  font-size: var(--font-sm);
+  white-space: nowrap;
+}
+.help-heading > button {
+  flex: 0 0 36px;
+  padding: 0;
+}
+.help-brief {
+  display: grid;
+  gap: 16px;
+  min-height: 0;
+}
+.help-brief h3 {
+  margin-top: 0;
+}
+.help-brief li {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+.help-brief ol {
+  padding-left: 1.4rem;
+  margin-bottom: 0;
 }

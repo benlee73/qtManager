@@ -214,6 +214,12 @@ describe("QT Manager desktop flow", () => {
     await registerE2ePerson(`${prefix}가`);
     await registerE2ePerson(`${prefix}나`);
     await clickButtonByText("+ 1달 구독");
+    const initialSlotHeight = await browser.execute(
+      () =>
+        document
+          .querySelector(".purchase-person-slot > .field")!
+          .getBoundingClientRect().height,
+    );
     await setInput('[data-testid="purchase-person-search"]', prefix);
     await waitForText('[data-testid="purchase-person-result"]', prefix);
     const search = '[data-testid="purchase-person-search"]';
@@ -243,12 +249,33 @@ describe("QT Manager desktop flow", () => {
     await key("ArrowUp");
     await key("Enter");
     await waitForText(".purchase-person-selected", `${prefix}가`);
+    expect(await browser.$(search).isExisting()).toBe(false);
+    const selectedSlotHeight = await browser.execute(
+      () =>
+        document
+          .querySelector(".purchase-person-selected")!
+          .getBoundingClientRect().height,
+    );
+    expect(Math.abs(selectedSlotHeight - initialSlotHeight)).toBeLessThan(1);
     await clickButtonByText("선택 해제");
+    expect(await browser.$(search).isExisting()).toBe(true);
+    expect(
+      await browser.execute(() =>
+        document.activeElement?.getAttribute("data-testid"),
+      ),
+    ).toBe("purchase-person-search");
     await setInput(search, prefix);
     await waitForText('[data-testid="purchase-person-result"]', prefix);
     await browser.$('[data-testid="purchase-person-result"]').click();
     await waitForText(".purchase-person-selected", `${prefix}가`);
+    expect(await browser.$(search).isExisting()).toBe(false);
     await clickButtonByText("선택 해제");
+    expect(await browser.$(search).isExisting()).toBe(true);
+    expect(
+      await browser.execute(() =>
+        document.activeElement?.getAttribute("data-testid"),
+      ),
+    ).toBe("purchase-person-search");
     await setInput(search, prefix);
     await waitForText('[data-testid="purchase-person-result"]', prefix);
     expect(
@@ -545,7 +572,13 @@ describe("QT Manager desktop flow", () => {
       { timeoutMsg: "Escape로 신청자 수정 창이 닫히지 않았습니다." },
     );
     await clickButtonByText("현장 배부");
-    await clickButtonByText("구독 추가");
+    await browser.$('[data-testid="person-row"]').click();
+    await browser.execute(() =>
+      document
+        .querySelector<HTMLElement>('[data-testid="person-row"]')!
+        .focus(),
+    );
+    await browser.keys("Enter");
     await waitForText("#management-dialog-title", `${expiredName} · 구독 추가`);
     await browser.execute(() =>
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
@@ -794,12 +827,31 @@ describe("QT Manager desktop flow", () => {
       whiteSpace: "nowrap",
       height: expect.any(Number),
     });
-    expect(
-      await browser.execute(
-        () =>
-          document.querySelector<HTMLElement>("#help-title")?.offsetHeight ?? 0,
-      ),
-    ).toBeLessThanOrEqual(32);
+    const headerControls = await browser.execute(() => {
+      const selectors = [
+        "#help-title",
+        ".help-mode button:first-child",
+        ".help-mode button:last-child",
+        '[data-testid="help-search"]',
+        '.help-heading > button[aria-label="도움말 닫기"]',
+      ];
+      return selectors.map((selector) => {
+        const element = document.querySelector<HTMLElement>(selector);
+        if (!element) throw new Error(`도움말 헤더 요소 없음: ${selector}`);
+        const rect = element.getBoundingClientRect();
+        return { height: rect.height, centerY: rect.top + rect.height / 2 };
+      });
+    });
+    // The title now occupies the same control slot as the view buttons and
+    // search, rather than the previous text-only title box (<=32px).
+    expect(headerControls.map((control) => control.height)).toEqual([
+      36, 36, 36, 36, 36,
+    ]);
+    for (const control of headerControls) {
+      expect(
+        Math.abs(control.centerY - headerControls[0].centerY),
+      ).toBeLessThan(1);
+    }
     expect(
       await browser.execute(() => {
         const panel = document.querySelector<HTMLElement>(
@@ -902,7 +954,7 @@ describe("QT Manager desktop flow", () => {
         )) === "location",
       { timeoutMsg: "도움말 앱 정보 섹션으로 이동하지 않았습니다." },
     );
-    await waitForText('[data-testid="support-info"]', "0.2.0");
+    await waitForText('[data-testid="support-info"]', "0.2.1");
     expect(
       await browser.execute(() => {
         const supportLabel = document.querySelector<HTMLElement>(
@@ -3872,8 +3924,29 @@ describe("QT Manager desktop flow", () => {
     await browser.waitUntil(async () =>
       browser.$(".cohort-exemption input").isExisting(),
     );
+    await setInput('input[name="cohort"]', "94");
     await browser.$(".cohort-exemption input").click();
+    expect(await browser.$('input[name="cohort"]').getValue()).toBe("");
     expect(await browser.$('input[name="cohort"]').isEnabled()).toBe(false);
+    await browser.$(".cohort-exemption input").click();
+    expect(await browser.$('input[name="cohort"]').getValue()).toBe("");
+    expect(await browser.$('input[name="cohort"]').isEnabled()).toBe(true);
+    await browser.$(".cohort-exemption input").click();
+    expect(
+      await browser.execute(() => {
+        const year = document
+          .querySelector('[data-testid="annual-start-year"]')!
+          .getBoundingClientRect();
+        const month = document
+          .querySelector('[data-testid="annual-start-month"]')!
+          .getBoundingClientRect();
+        return (
+          Math.abs(year.height - month.height) < 1 &&
+          Math.abs(year.top - month.top) < 1
+        );
+      }),
+    ).toBe(true);
+    await setInput('input[name="note"]', "보존할 구독 메모");
     const quantity = await browser.$('input[name="quantity"]');
     await quantity.setValue("2");
     await quantity.click();
@@ -3915,16 +3988,45 @@ describe("QT Manager desktop flow", () => {
     expect(management.people[0].status).toBe("정식 등록");
     let detail = await invokeTauri<{
       cohortNotApplicable: boolean;
-      subscriptions: { id: string; quantity: number }[];
+      subscriptions: {
+        id: string;
+        quantity: number;
+        appliedAt: string | null;
+        memo: string | null;
+      }[];
       distributions: { quantity: number }[];
     }>("load_person_detail_command", { personId: id });
     expect(detail.cohortNotApplicable).toBe(true);
+    const originalDate = detail.subscriptions[0].appliedAt;
+    expect(detail.subscriptions[0].memo).toBe("보존할 구독 메모");
     expect(detail.subscriptions).toHaveLength(1);
     expect(detail.distributions).toHaveLength(1);
     expect(detail.distributions[0].quantity).toBe(2);
     await clickButtonByText("신청자 관리");
     await selectManagementPerson(name);
+    expect(
+      await browser.execute(() => {
+        const actions = document.querySelector(".subscription-actions")!;
+        const state = actions
+          .querySelector(".subscription-state")!
+          .getBoundingClientRect();
+        const pencil = actions
+          .querySelector(".edit-pencil")!
+          .getBoundingClientRect();
+        return pencil.left >= state.right + 4;
+      }),
+    ).toBe(true);
     await browser.$('button[aria-label="1년 구독 수정"]').click();
+    expect(
+      await browser
+        .$('[data-testid="subscription-correction-form"] input[name="date"]')
+        .isExisting(),
+    ).toBe(false);
+    expect(
+      await browser
+        .$('[data-testid="subscription-correction-form"] input[name="note"]')
+        .isExisting(),
+    ).toBe(false);
     await browser
       .$('[data-testid="subscription-correction-form"] input[name="quantity"]')
       .setValue("1");
@@ -3939,6 +4041,8 @@ describe("QT Manager desktop flow", () => {
     await waitForText(".toast", "구독 이력을 정정");
     detail = await invokeTauri("load_person_detail_command", { personId: id });
     expect(detail.subscriptions[0].quantity).toBe(1);
+    expect(detail.subscriptions[0].appliedAt).toBe(originalDate);
+    expect(detail.subscriptions[0].memo).toBe("보존할 구독 메모");
     expect(detail.distributions).toHaveLength(1);
     expect(detail.distributions[0].quantity).toBe(2);
     await waitForText('[data-testid="person-detail"]', "실제 2권");
@@ -3947,11 +4051,40 @@ describe("QT Manager desktop flow", () => {
     // reliably describe content in fixed WebKit panels. Check rendered geometry
     // and ancestor styles, including the panel's entry animation, instead.
     await waitForHelpVisibility('[data-testid="help-brief"]');
+    expect(
+      await browser.$('[data-testid="brief-distribution"]').isExisting(),
+    ).toBe(true);
+    expect(await browser.$('[data-testid="brief-transfer"]').isExisting()).toBe(
+      true,
+    );
+    expect(
+      await browser.$('[data-testid="brief-shortcuts"]').isExisting(),
+    ).toBe(true);
     expect((await helpVisibility('[data-testid="help-search"]')).visible).toBe(
       false,
     );
     await browser.$('[data-testid="help-detailed-toggle"]').click();
     await waitForHelpVisibility('[data-testid="help-search"]');
+    expect(
+      await browser.execute(() => {
+        const title = document
+          .querySelector("#help-title")!
+          .getBoundingClientRect();
+        const mode = document
+          .querySelector(".help-mode")!
+          .getBoundingClientRect();
+        const search = document
+          .querySelector('[data-testid="help-search"]')!
+          .getBoundingClientRect();
+        return (
+          title.right <= mode.left &&
+          mode.right <= search.left &&
+          Math.abs(
+            title.top + title.height / 2 - search.top - search.height / 2,
+          ) < 1
+        );
+      }),
+    ).toBe(true);
     await browser.keys("Escape");
   });
 

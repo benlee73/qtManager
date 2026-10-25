@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PersonSummary } from "./phase3";
 import { listIndexAfterKey } from "./keyboardNavigation";
 import { purchasePersonLabel } from "./purchasePeople";
@@ -36,6 +36,11 @@ export function PurchasePersonPicker({
 }) {
   const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
+  const previouslySelected = useRef(Boolean(selected));
+  useEffect(() => {
+    if (previouslySelected.current && !selected) inputRef.current?.focus();
+    previouslySelected.current = Boolean(selected);
+  }, [selected]);
   const optionRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
   const showResults =
     !selected && !newPerson && !loading && !failed && Boolean(query.trim());
@@ -45,89 +50,95 @@ export function PurchasePersonPicker({
     setActiveIndex(-1);
   };
   return (
-    <>
-      <label className="field">
-        <span>{label}</span>
-        <input
-          ref={inputRef}
-          name={inputName}
-          value={query}
-          autoFocus
-          required={required ?? newPerson}
-          placeholder={placeholder}
-          aria-invalid={Boolean(error)}
-          aria-describedby={error ? `${inputName}-error` : undefined}
-          data-testid="purchase-person-search"
-          role="combobox"
-          aria-autocomplete="list"
-          aria-expanded={showResults}
-          aria-controls={showResults ? "purchase-options" : undefined}
-          aria-activedescendant={
-            showResults && activeIndex >= 0
-              ? `purchase-option-${activeIndex}`
-              : undefined
-          }
-          onChange={(event) => {
-            setActiveIndex(-1);
-            onQuery(event.currentTarget.value);
-          }}
-          onKeyDown={(event) => {
-            if (
-              event.nativeEvent.isComposing ||
-              event.nativeEvent.keyCode === 229
-            ) {
-              if (event.key === "Enter") event.preventDefault();
-              return;
+    <div className="purchase-person-slot">
+      {!selected && (
+        <label className="field">
+          <span>{label}</span>
+          <input
+            ref={inputRef}
+            name={inputName}
+            value={query}
+            autoFocus
+            required={required ?? newPerson}
+            placeholder={placeholder}
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? `${inputName}-error` : undefined}
+            data-testid="purchase-person-search"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={showResults}
+            aria-controls={showResults ? "purchase-options" : undefined}
+            aria-activedescendant={
+              showResults && activeIndex >= 0
+                ? `purchase-option-${activeIndex}`
+                : undefined
             }
-            if (!showResults) return;
-            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-              event.preventDefault();
-              const next = listIndexAfterKey(
-                matches.length + 1,
-                activeIndex,
-                event.key === "ArrowDown" ? "down" : "up",
-              )!;
-              setActiveIndex(next);
-              optionRefs.current
-                .get(next)
-                ?.scrollIntoView({ block: "nearest" });
-            } else if (event.key === "Enter") {
-              // Searching must not implicitly submit a purchase or link the first match.
-              event.preventDefault();
-              if (activeIndex >= 0) choose(activeIndex);
-            }
-          }}
-        />
-        {error && (
-          <span
-            id={`${inputName}-error`}
-            className="form-error"
-            role="alert"
-            data-testid={
-              inputName === "name" ? "draft-form-error" : "purchase-name-error"
-            }
-          >
-            {error}
-          </span>
-        )}
-      </label>
-      {selected ? (
-        <div className="purchase-person-selected">
-          <span>
-            연결할 신청자: <strong>{purchasePersonLabel(selected)}</strong>
-          </span>
-          <button
-            type="button"
-            className="text-button"
-            onClick={() => {
+            onChange={(event) => {
               setActiveIndex(-1);
-              onSelect(null);
-              inputRef.current?.focus();
+              onQuery(event.currentTarget.value);
             }}
-          >
-            선택 해제
-          </button>
-        </div>
+            onKeyDown={(event) => {
+              if (
+                event.nativeEvent.isComposing ||
+                event.nativeEvent.keyCode === 229
+              ) {
+                if (event.key === "Enter") event.preventDefault();
+                return;
+              }
+              if (!showResults) return;
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                const next = listIndexAfterKey(
+                  matches.length + 1,
+                  activeIndex,
+                  event.key === "ArrowDown" ? "down" : "up",
+                )!;
+                setActiveIndex(next);
+                optionRefs.current
+                  .get(next)
+                  ?.scrollIntoView({ block: "nearest" });
+              } else if (event.key === "Enter") {
+                // Searching must not implicitly submit a purchase or link the first match.
+                event.preventDefault();
+                if (activeIndex >= 0) choose(activeIndex);
+              }
+            }}
+          />
+          {error && (
+            <span
+              id={`${inputName}-error`}
+              className="form-error"
+              role="alert"
+              data-testid={
+                inputName === "name"
+                  ? "draft-form-error"
+                  : "purchase-name-error"
+              }
+            >
+              {error}
+            </span>
+          )}
+        </label>
+      )}
+      {selected ? (
+        <>
+          <input type="hidden" name={inputName} value={query} />
+          <div className="purchase-person-selected">
+            <span>
+              연결할 신청자: <strong>{purchasePersonLabel(selected)}</strong>
+            </span>
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => {
+                setActiveIndex(-1);
+                onSelect(null);
+              }}
+            >
+              선택 해제
+            </button>
+          </div>
+        </>
       ) : newPerson ? (
         <div
           className="purchase-person-selected"
@@ -212,6 +223,6 @@ export function PurchasePersonPicker({
           )}
         </>
       )}
-    </>
+    </div>
   );
 }

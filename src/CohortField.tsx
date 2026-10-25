@@ -14,6 +14,7 @@ export function CohortField({
   invalid?: boolean;
 }) {
   const [exempt, setExempt] = useState(notApplicable);
+  const [cohort, setCohort] = useState(notApplicable ? "" : (value ?? ""));
   return (
     <div className="cohort-input">
       <input
@@ -23,14 +24,14 @@ export function CohortField({
         maxLength={2}
         pattern="[0-9]{2}"
         placeholder="94"
-        defaultValue={value ?? ""}
+        value={cohort}
         disabled={exempt}
         aria-invalid={invalid}
-        onChange={onChange}
-        onInput={(event) => {
-          event.currentTarget.value = event.currentTarget.value
-            .replace(/[^0-9]/g, "")
-            .slice(0, 2);
+        onChange={(event) => {
+          setCohort(
+            event.currentTarget.value.replace(/[^0-9]/g, "").slice(0, 2),
+          );
+          onChange?.();
         }}
       />
       <label className="cohort-exemption">
@@ -40,6 +41,7 @@ export function CohortField({
           checked={exempt}
           onChange={(event) => {
             setExempt(event.target.checked);
+            if (event.target.checked) setCohort("");
             onChange?.();
           }}
         />

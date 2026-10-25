@@ -95,3 +95,16 @@ it("offers a concise default with an explicit detailed view", () => {
   expect(html).toContain('class="help-layout" hidden=""');
   expect(html).toContain('data-testid="help-detailed-toggle"');
 });
+
+it("places view controls between the title and search, and groups concise guidance into three cards", () => {
+  const html = renderToStaticMarkup(<HelpPanel onClose={() => {}} />);
+  expect(html).not.toContain("현장에서 기억할 것");
+  expect(html).toContain('data-testid="brief-distribution"');
+  expect(html).toContain('data-testid="brief-transfer"');
+  expect(html).toContain('data-testid="brief-shortcuts"');
+  const headingEnd = html.indexOf("</header>");
+  expect(html.indexOf('class="help-mode"')).toBeLessThan(
+    html.indexOf('class="help-search"'),
+  );
+  expect(html.indexOf('class="help-mode"')).toBeLessThan(headingEnd);
+});

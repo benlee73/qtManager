@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  rowEnterAction,
   listIndexAfterKey,
   screenForShortcut,
   shouldReturnToSearch,
@@ -37,4 +38,26 @@ describe("keyboard list navigation", () => {
     expect(shouldReturnToSearch(3, 1, "up")).toBe(false);
     expect(shouldReturnToSearch(3, 0, "down")).toBe(false);
   });
+});
+
+it("maps an expired row to renewal while keeping unqualified rows blocked", () => {
+  expect(
+    rowEnterAction({ subscriptionStatus: "구독 만료", canDistribute: false }),
+  ).toBe("renew");
+  expect(
+    rowEnterAction({ subscriptionStatus: "유효", canDistribute: true }),
+  ).toBe("confirm-distribution");
+  expect(
+    rowEnterAction({
+      subscriptionStatus: "유효",
+      canDistribute: true,
+      isGroup: true,
+    }),
+  ).toBe("group-distribution");
+  expect(
+    rowEnterAction({ subscriptionStatus: "예정", canDistribute: false }),
+  ).toBeNull();
+  expect(
+    rowEnterAction({ subscriptionStatus: "대상 아님", canDistribute: false }),
+  ).toBeNull();
 });

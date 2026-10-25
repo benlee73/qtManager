@@ -59,6 +59,7 @@ import {
   listIndexAfterKey,
   screenForShortcut,
   shouldReturnToSearch,
+  rowEnterAction,
 } from "./keyboardNavigation";
 
 export default function App() {
@@ -442,7 +443,17 @@ export default function App() {
         const person = visiblePeople.find(
           (candidate) => candidate.personId === activePersonId,
         );
-        if (person) void defaultDistribution(person);
+        if (
+          person &&
+          !busy &&
+          !event.repeat &&
+          !event.isComposing &&
+          event.keyCode !== 229
+        ) {
+          if (rowEnterAction(person) === "renew")
+            void openPersonRenewal(person.personId);
+          else void defaultDistribution(person);
+        }
       } else if (
         screen === "distribution" &&
         !modified &&
@@ -454,14 +465,19 @@ export default function App() {
         const person = visiblePeople.find(
           (candidate) => candidate.personId === activePersonId,
         );
-        if (person?.canDistribute) {
-          event.preventDefault();
-          setDialog({
-            type: person.isGroup
-              ? "group-distribution"
-              : "confirm-distribution",
-            person,
-          });
+        if (
+          person &&
+          !busy &&
+          !event.repeat &&
+          !event.isComposing &&
+          event.keyCode !== 229
+        ) {
+          const action = rowEnterAction(person);
+          if (action) {
+            event.preventDefault();
+            if (action === "renew") void openPersonRenewal(person.personId);
+            else setDialog({ type: action, person });
+          }
         }
       } else if (modified && !textEntry && event.key.toLowerCase() === "n") {
         event.preventDefault();
@@ -542,6 +558,8 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeydown);
   }, [
     defaultDistribution,
+    openPersonRenewal,
+    busy,
     dialog,
     helpOpen,
     personContextMenu,
@@ -1344,9 +1362,7 @@ export function PersonRow({
       }}
       data-testid="person-row"
     >
-      <span className="cohort">
-        {person.cohort ?? (person.cohortNotApplicable ? "없음" : "--")}
-      </span>
+      <span className="cohort">{person.cohort ?? "--"}</span>
       <div className="person-name">
         <b title={`${person.name} · ${person.phone ?? "연락처 없음"}`}>
           {person.name}

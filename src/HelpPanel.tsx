@@ -1,3 +1,4 @@
+import { BriefHelp, HelpShortcuts } from "./BriefHelp";
 import {
   useCallback,
   useEffect,
@@ -217,6 +218,23 @@ export function HelpPanel({
         <header className="help-heading">
           <div className="help-heading-copy">
             <h2 id="help-title">QT Manager 도움말</h2>
+            <div className="help-mode" aria-label="도움말 보기 방식">
+              <button
+                type="button"
+                aria-pressed={mode === "brief"}
+                onClick={() => setMode("brief")}
+              >
+                간략
+              </button>
+              <button
+                type="button"
+                data-testid="help-detailed-toggle"
+                aria-pressed={mode === "detailed"}
+                onClick={() => setMode("detailed")}
+              >
+                자세히
+              </button>
+            </div>
             <label className="help-search" hidden={mode === "brief"}>
               <span className="sr-only">도움말 검색</span>
               <input
@@ -233,66 +251,7 @@ export function HelpPanel({
             ×
           </button>
         </header>
-        <div className="help-mode" aria-label="도움말 보기 방식">
-          <button
-            type="button"
-            aria-pressed={mode === "brief"}
-            onClick={() => setMode("brief")}
-          >
-            간략
-          </button>
-          <button
-            type="button"
-            data-testid="help-detailed-toggle"
-            aria-pressed={mode === "detailed"}
-            onClick={() => setMode("detailed")}
-          >
-            자세히
-          </button>
-        </div>
-        {mode === "brief" && (
-          <div className="help-brief" data-testid="help-brief">
-            <h3>현장에서 기억할 것</h3>
-            <ul>
-              <li>
-                처음에는 전체 필터입니다. 만료·예정·구독 없음도 검색되며 ‘남은
-                배부’로 받을 사람만 좁힐 수 있습니다.
-              </li>
-              <li>
-                이름 옆 노란 점은 활성 메모입니다. 배부 전에 내용을 확인하세요.
-              </li>
-              <li>
-                이번 호가 마지막이면 1년 구독의 시작 호를 다음 호로 선택하세요.
-                다른 호 시작은 신청만 저장합니다.
-              </li>
-              <li>
-                현재 호 1년 구독은 ‘신청 + 배부’가 기본입니다. 1달 구독은 현재
-                호 구매와 전달을 함께 기록합니다.
-              </li>
-              <li>
-                잘못된 구독은 이력의 연필 버튼으로 정정합니다. 기존 배부와
-                충돌하면 내용을 확인하세요.
-              </li>
-              <li>
-                또래가 없는 모임은 ‘해당 없음’을 체크하세요. 누락 표시에서
-                제외됩니다.
-              </li>
-              <li>
-                ‘/’는 검색창 전체 선택, 검색창의 Esc는 검색어 지우기입니다.
-                한글을 완성하기 전에도 검색됩니다.
-              </li>
-              <li>
-                입금 확인은 배부와 별개입니다. 입금 관리에서 처리하고 잘못
-                확인한 건은 취소할 수 있습니다.
-              </li>
-              <li>
-                배부 되돌리기는 구독을 지우지 않습니다. 백업 ‘교체’는 현재
-                데이터를 받은 파일로 바꾸고, ‘병합’은 기록을 합칩니다.
-              </li>
-            </ul>
-            <p>설치·백업 복원 절차와 전체 단축키는 ‘자세히’에서 확인하세요.</p>
-          </div>
-        )}
+        {mode === "brief" && <BriefHelp />}
         <div className="help-layout" hidden={mode === "brief"}>
           <nav aria-label="도움말 목차">
             {topics
@@ -772,44 +731,7 @@ export function HelpPanel({
             >
               <div className="help-card-grid help-card-grid-stacked">
                 <HelpCard title="자주 쓰는 동작">
-                  <dl className="shortcut-list">
-                    <div>
-                      <dt>/</dt>
-                      <dd>검색창으로 이동</dd>
-                    </div>
-                    <div>
-                      <dt>⌘/Ctrl + Enter</dt>
-                      <dd>선택한 사람 기본 배부</dd>
-                    </div>
-                    <div>
-                      <dt>⌘/Ctrl + N</dt>
-                      <dd>1년 구독</dd>
-                    </div>
-                    <div>
-                      <dt>⌘/Ctrl + Shift + M</dt>
-                      <dd>메모 입력으로 이동</dd>
-                    </div>
-                    <div>
-                      <dt>⌘/Ctrl + Z</dt>
-                      <dd>최근 동작 되돌리기</dd>
-                    </div>
-                    <div>
-                      <dt>⌘/Ctrl + Shift + Z</dt>
-                      <dd>되돌린 동작 다시 실행</dd>
-                    </div>
-                    <div>
-                      <dt>⌘/Ctrl + 1</dt>
-                      <dd>현장 배부로 이동</dd>
-                    </div>
-                    <div>
-                      <dt>⌘/Ctrl + 2</dt>
-                      <dd>신청자 관리로 이동</dd>
-                    </div>
-                    <div>
-                      <dt>⌘/Ctrl + 3</dt>
-                      <dd>입금 관리로 이동</dd>
-                    </div>
-                  </dl>
+                  <HelpShortcuts />
                 </HelpCard>
                 <HelpCard title="검색과 이동">
                   <HelpList>

@@ -452,3 +452,15 @@ it("hides the internal on-site subscription memo while preserving user notes", (
   expect(empty).not.toContain("등록된 메모가 없습니다.");
   expect(empty).not.toContain("메모 안내");
 });
+
+it("uses the same quiet placeholder for exempt and missing cohorts in the list", () => {
+  const html = renderToStaticMarkup(
+    <ManagementPersonList
+      people={[{ ...people[0], cohort: null, cohortNotApplicable: true }]}
+      selectedId={null}
+      onSelect={vi.fn()}
+    />,
+  );
+  expect(html).toMatch(/class="cohort"[^>]*>--</);
+  expect(html).not.toMatch(/>없음</);
+});

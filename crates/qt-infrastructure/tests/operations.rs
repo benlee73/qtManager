@@ -450,3 +450,98 @@ fn exact_name_search_precedes_partial_matches_in_desk_and_management() {
         "가상원"
     );
 }
+
+#[test]
+fn hidden_metadata_is_preserved_exactly_during_issue_and_quantity_corrections() {
+    let dir = tempdir().unwrap();
+    let mut repo = setup(&dir.path().join("metadata.sqlite"));
+    let rt = Runtime(Cell::new(0));
+    let runtime = RuntimeServices {
+        clock: &rt,
+        ids: &rt,
+    };
+    let mut intake = request();
+    intake.distribute = false;
+    let outcome = annual_intake(&mut repo, &runtime, intake).unwrap();
+    let mut subscription = repo
+        .load_person(&outcome.person_id)
+        .unwrap()
+        .unwrap()
+        .subscriptions[0]
+        .clone();
+    let original_subscription = subscription.clone();
+    subscription.applied_at = Some("2026-10-19".into());
+    subscription.memo = Some("  기존 메모\n둘째 줄  ".into());
+    repo.save_operation(&OperationBatch {
+        expected_subscription: Some(original_subscription),
+        subscriptions: vec![subscription.clone()],
+        ..Default::default()
+    })
+    .unwrap();
+    correct_subscription(
+        &mut repo,
+        &runtime,
+        CorrectSubscriptionRequest {
+            person_id: outcome.person_id.clone(),
+            subscription_id: subscription.id.clone(),
+            expected_revision: serde_json::to_string(&subscription).unwrap(),
+            issue_year: 2027,
+            issue_month: 1,
+            quantity: 3,
+            applied_at: subscription.applied_at.clone(),
+            memo: subscription.memo.clone(),
+            confirm_conflicts: false,
+        },
+    )
+    .unwrap();
+    let after = repo
+        .load_person(&outcome.person_id)
+        .unwrap()
+        .unwrap()
+        .subscriptions[0]
+        .clone();
+    assert_eq!(after.applied_at, subscription.applied_at);
+    assert_eq!(after.memo, subscription.memo);
+    record_purchase(
+        &mut repo,
+        &runtime,
+        RecordPurchaseRequest {
+            person_id: Some(outcome.person_id.clone()),
+            buyer_name: None,
+            issue_year: 2026,
+            issue_month: 11,
+            quantity: 1,
+            note: None,
+        },
+    )
+    .unwrap();
+    let mut purchase = repo.list_person_purchases(&outcome.person_id).unwrap()[0].clone();
+    purchase.note = Some("  원본 구매 메모  ".into());
+    repo.save_operation(&OperationBatch {
+        purchases: vec![purchase.clone()],
+        ..Default::default()
+    })
+    .unwrap();
+    correct_purchase(
+        &mut repo,
+        &runtime,
+        CorrectPurchaseRequest {
+            person_id: outcome.person_id.clone(),
+            purchase_id: purchase.id.clone(),
+            expected_revision: serde_json::to_string(&purchase).unwrap(),
+            issue_year: 2026,
+            issue_month: 11,
+            quantity: 2,
+            purchased_at: purchase.purchased_at.clone(),
+            note: purchase.note.clone(),
+        },
+    )
+    .unwrap();
+    let purchases = repo.list_person_purchases(&outcome.person_id).unwrap();
+    let corrected = purchases
+        .iter()
+        .find(|p| p.correction_of.is_some())
+        .unwrap();
+    assert_eq!(corrected.purchased_at, purchase.purchased_at);
+    assert_eq!(corrected.note, purchase.note);
+}

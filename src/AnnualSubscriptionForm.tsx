@@ -223,7 +223,7 @@ export function AnnualSubscriptionForm({
         }
       }}
     >
-      <div className="field-grid">
+      <div className="field-grid issue-fields">
         <label className="field">
           시작 연도
           <input

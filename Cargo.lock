@@ -2577,7 +2577,7 @@ dependencies = [
 
 [[package]]
 name = "qt-application"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "qt-domain",
  "serde",
@@ -2588,7 +2588,7 @@ dependencies = [
 
 [[package]]
 name = "qt-domain"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "serde",
  "thiserror 2.0.19",
@@ -2596,7 +2596,7 @@ dependencies = [
 
 [[package]]
 name = "qt-infrastructure"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "calamine",
  "qt-application",
@@ -2612,7 +2612,7 @@ dependencies = [
 
 [[package]]
 name = "qt-manager"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "qt-application",
  "qt-domain",

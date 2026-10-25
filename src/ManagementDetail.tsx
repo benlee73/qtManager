@@ -136,9 +136,7 @@ export function ManagementPersonList({
               event.currentTarget.focus();
             }}
           >
-            <span className="cohort">
-              {person.cohort ?? (person.cohortNotApplicable ? "없음" : "--")}
-            </span>
+            <span className="cohort">{person.cohort ?? "--"}</span>
             <span className="management-person-copy">
               <span
                 className="management-person-primary"
@@ -232,7 +230,7 @@ function PersonDetailContent({
       <div className="detail-heading">
         <div className="identity large" data-testid="person-identity">
           <span className="cohort" data-testid="person-cohort">
-            {detail.cohort ?? (detail.cohortNotApplicable ? "없음" : "--")}
+            {detail.cohort ?? "--"}
           </span>
           <div>
             <h2 data-testid="person-name" title={detail.name}>
@@ -317,14 +315,6 @@ function PersonDetailContent({
               data-testid={`subscription-${subscription.periodState}`}
               key={subscription.id}
             >
-              {onCorrect && subscription.revision && (
-                <EditPencil
-                  label="1년 구독 수정"
-                  onClick={() =>
-                    setCorrection({ kind: "annual", value: subscription })
-                  }
-                />
-              )}
               <div className="subscription-period">
                 <div>
                   <span>시작</span>
@@ -342,9 +332,19 @@ function PersonDetailContent({
               <div className="subscription-quantity numeric">
                 {subscription.quantity}권
               </div>
-              <span className="subscription-state">
-                {subscriptionStateLabels[subscription.periodState]}
-              </span>
+              <div className="subscription-actions">
+                <span className="subscription-state">
+                  {subscriptionStateLabels[subscription.periodState]}
+                </span>
+                {onCorrect && subscription.revision && (
+                  <EditPencil
+                    label="1년 구독 수정"
+                    onClick={() =>
+                      setCorrection({ kind: "annual", value: subscription })
+                    }
+                  />
+                )}
+              </div>
               {(subscription.deliveryWarnings ?? []).map((warning) => (
                 <p className="form-error" key={warning}>
                   {warning}

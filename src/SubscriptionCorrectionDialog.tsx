@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { PersonDetail } from "./phase3";
-export type CorrectionTarget =
-  | { kind: "annual"; value: PersonDetail["subscriptions"][number] }
-  | { kind: "purchase"; value: NonNullable<PersonDetail["purchases"]>[number] };
+import {
+  buildCorrectionRequest,
+  type CorrectionTarget,
+} from "./subscriptionCorrection";
+export type { CorrectionTarget } from "./subscriptionCorrection";
 export function EditPencil({
   onClick,
   label,
@@ -68,10 +69,6 @@ export function SubscriptionCorrectionDialog({
   const match = label.match(/(\d+)년\s*(\d+)~/);
   const year = Number(match?.[1] ?? new Date().getFullYear());
   const month = Number(match?.[2] ?? 1);
-  const applied =
-    target.kind === "annual"
-      ? target.value.appliedAt
-      : target.value.purchasedAt;
   return (
     <div
       className="modal-backdrop"
@@ -134,22 +131,15 @@ export function SubscriptionCorrectionDialog({
             try {
               if (!Number.isInteger(quantity) || quantity < 1)
                 throw new Error("수량은 1권 이상 입력하세요.");
-              const base = {
+              const correction = buildCorrectionRequest(
                 personId,
-                expectedRevision: value.revision,
-                issueYear,
-                issueMonth,
-                quantity,
-              };
+                target,
+                { issueYear, issueMonth, quantity },
+                confirm,
+              );
               let work: () => Promise<unknown>;
-              if (target.kind === "annual") {
-                const request = {
-                  ...base,
-                  subscriptionId: target.value.id,
-                  appliedAt: String(data.get("date") ?? "").trim() || null,
-                  memo: String(data.get("note") ?? "").trim() || null,
-                  confirmConflicts: confirm,
-                };
+              if (correction.kind === "annual") {
+                const request = correction.request;
                 const warnings = await invoke<string[]>(
                   "preview_subscription_correction_command",
                   { request },
@@ -161,14 +151,7 @@ export function SubscriptionCorrectionDialog({
                 work = () =>
                   invoke("correct_subscription_command", { request });
               } else {
-                const request = {
-                  ...base,
-                  purchaseId: target.value.id,
-                  purchasedAt: String(data.get("date") ?? "").trim(),
-                  note: String(data.get("note") ?? "").trim() || null,
-                };
-                if (!request.purchasedAt)
-                  throw new Error("구매·전달 시각을 입력하세요.");
+                const request = correction.request;
                 work = () => invoke("correct_purchase_command", { request });
               }
               if (await onSave(work, "구독 이력을 정정했습니다.")) onClose();
@@ -181,7 +164,7 @@ export function SubscriptionCorrectionDialog({
           }}
         >
           <fieldset disabled={busy} className="correction-fields">
-            <div className="field-grid">
+            <div className="field-grid issue-fields">
               <label className="field">
                 시작 연도
                 <input
@@ -212,30 +195,6 @@ export function SubscriptionCorrectionDialog({
                 defaultValue={value.quantity}
               />
             </label>
-            <label className="field">
-              {target.kind === "annual" ? "신청일" : "구매·전달 시각"}
-              <input
-                name="date"
-                defaultValue={applied ?? ""}
-                placeholder="YYYY-MM-DD 또는 기존 시각"
-              />
-            </label>
-            <label className="field">
-              메모
-              <input
-                name="note"
-                defaultValue={
-                  (target.kind === "annual"
-                    ? target.value.memo
-                    : target.value.note) ?? ""
-                }
-              />
-            </label>
-            <p>
-              {target.kind === "annual"
-                ? "실제 배부 기록은 그대로 보존합니다."
-                : "원본과 정정 기록을 보존하고 정정한 구매·전달 수량을 합계에 반영합니다."}
-            </p>
             {conflicts.length > 0 && (
               <div
                 className="duplicate-warning"

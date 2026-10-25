@@ -53,3 +53,14 @@ describe("구매자 후보 선택 접근성", () => {
     }
   });
 });
+
+it("replaces the search control with the selected person rather than showing both", () => {
+  const html = renderToStaticMarkup(
+    <PurchasePersonPicker {...props} selected={person} />,
+  );
+  expect(html).toContain("연결할 신청자:");
+  expect(html).toContain("선택 해제");
+  expect(html).not.toContain('role="combobox"');
+  expect(html).not.toContain('data-testid="purchase-person-search"');
+  expect(html).toContain('name="buyerName"');
+});

@@ -31,3 +31,13 @@ export function listIndexAfterKey(
   if (direction === "down") return Math.min(currentIndex + 1, length - 1);
   return Math.max(currentIndex - 1, 0);
 }
+
+export function rowEnterAction(person: {
+  subscriptionStatus: string;
+  canDistribute: boolean;
+  isGroup?: boolean;
+}): "renew" | "confirm-distribution" | "group-distribution" | null {
+  if (person.subscriptionStatus === "구독 만료") return "renew";
+  if (!person.canDistribute) return null;
+  return person.isGroup ? "group-distribution" : "confirm-distribution";
+}
