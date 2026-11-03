@@ -6,6 +6,8 @@ export type Issue = {
 };
 
 export type DistributionAllocation = {
+  purchaseId?: string;
+  personId?: string;
   subscriptionId: string;
   quantity: number;
 };
@@ -22,6 +24,7 @@ export type DeskPerson = {
   personId: string;
   subscriptionId: string | null;
   distributionTargets: {
+    purchaseId?: string | null;
     subscriptionId: string;
     startIssue: string;
     lastIssue: string;
@@ -54,7 +57,16 @@ export async function distributePerson(
   let remaining = quantity ?? person.remainingQuantity;
   for (const target of person.distributionTargets) {
     const amount = Math.min(target.remainingQuantity, remaining);
-    if (amount > 0) await distribute(issue, target.subscriptionId, amount);
+    if (amount > 0)
+      await distributeAllocations(issue, [
+        {
+          subscriptionId: target.subscriptionId,
+          quantity: amount,
+          ...(target.purchaseId
+            ? { purchaseId: target.purchaseId, personId: person.personId }
+            : {}),
+        },
+      ]);
     remaining -= amount;
     if (remaining === 0) return;
   }
@@ -64,16 +76,35 @@ export async function distributeAllocations(
   issue: Issue,
   allocations: DistributionAllocation[],
 ) {
-  for (const allocation of allocations)
-    await distribute(issue, allocation.subscriptionId, allocation.quantity);
+  for (const allocation of allocations) {
+    if (allocation.purchaseId)
+      await invoke("record_purchase_delivery_command", {
+        request: {
+          personId: allocation.personId,
+          purchaseId: allocation.purchaseId,
+          issueYear: issue.year,
+          issueMonth: issue.startMonth,
+          quantity: allocation.quantity,
+        },
+      });
+    else
+      await distribute(issue, allocation.subscriptionId, allocation.quantity);
+  }
 }
 
 export async function undoDistributionAllocations(
   issue: Issue,
   allocations: DistributionAllocation[],
 ) {
-  for (const allocation of [...allocations].reverse())
-    await undoDistribution(issue, allocation.subscriptionId);
+  for (const allocation of [...allocations].reverse()) {
+    if (allocation.purchaseId)
+      await undoPurchaseDelivery(
+        issue,
+        allocation.personId!,
+        allocation.purchaseId,
+      );
+    else await undoDistribution(issue, allocation.subscriptionId);
+  }
 }
 
 export async function cancelPersonDistribution(
@@ -82,8 +113,22 @@ export async function cancelPersonDistribution(
 ) {
   const cancelled: DistributionAllocation[] = [];
   for (const target of person.distributionTargets) {
-    if (target.distributedQuantity > 0)
-      cancelled.push(await undoDistribution(issue, target.subscriptionId));
+    if (target.distributedQuantity > 0) {
+      if (target.purchaseId) {
+        const result = await undoPurchaseDelivery(
+          issue,
+          person.personId,
+          target.purchaseId,
+        );
+        cancelled.push({
+          subscriptionId: target.subscriptionId,
+          purchaseId: target.purchaseId,
+          personId: person.personId,
+          quantity: result.quantity,
+        });
+      } else
+        cancelled.push(await undoDistribution(issue, target.subscriptionId));
+    }
   }
   return cancelled;
 }
@@ -325,5 +370,20 @@ export function cancelGroupDistribution(
     issueMonth: issue.startMonth,
     personId,
     purchaseId,
+  });
+}
+
+async function undoPurchaseDelivery(
+  issue: Issue,
+  personId: string,
+  purchaseId: string,
+) {
+  return invoke<{ quantity: number }>("undo_purchase_delivery_command", {
+    request: {
+      personId,
+      purchaseId,
+      issueYear: issue.year,
+      issueMonth: issue.startMonth,
+    },
   });
 }

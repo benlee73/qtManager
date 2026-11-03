@@ -152,6 +152,14 @@ export function SubscriptionCorrectionDialog({
                   invoke("correct_subscription_command", { request });
               } else {
                 const request = correction.request;
+                const warnings = await invoke<string[]>(
+                  "preview_purchase_correction_command",
+                  { request },
+                );
+                if (warnings.length && !confirm) {
+                  setConflicts(warnings);
+                  return;
+                }
                 work = () => invoke("correct_purchase_command", { request });
               }
               if (await onSave(work, "구독 이력을 정정했습니다.")) onClose();
@@ -187,7 +195,7 @@ export function SubscriptionCorrectionDialog({
               </label>
             </div>
             <label className="field">
-              {target.kind === "annual" ? "매 호 수량" : "구매·전달 수량"}
+              {target.kind === "annual" ? "매 호 수량" : "구독 수량"}
               <input
                 type="number"
                 name="quantity"

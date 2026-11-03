@@ -424,7 +424,7 @@ describe("QT Manager desktop flow", () => {
     await setInput('[data-testid="management-search"]', existing);
     await waitForText('[data-testid="management-person"]', existing);
     await waitForText('[data-testid="person-detail"]', "구독 이력 2건");
-    await waitForText('[data-testid="purchase-history"]', "구매·전달 1권");
+    await waitForText('[data-testid="purchase-history"]', "신청 1권");
 
     const newPerson = `가상구매신규${Date.now()}`;
     await clickButtonByText("현장 배부");
@@ -465,7 +465,7 @@ describe("QT Manager desktop flow", () => {
       ),
     ).toBe(1);
     await waitForText('[data-testid="person-detail"]', "구독 이력 3건");
-    await waitForText('[data-testid="purchase-history"]', "구매·전달 1권");
+    await waitForText('[data-testid="purchase-history"]', "신청 1권");
   });
 
   it("searches by cohort and name, blocks an expired subscription, renews it, and marks a last issue", async () => {
@@ -954,7 +954,7 @@ describe("QT Manager desktop flow", () => {
         )) === "location",
       { timeoutMsg: "도움말 앱 정보 섹션으로 이동하지 않았습니다." },
     );
-    await waitForText('[data-testid="support-info"]', "0.2.1");
+    await waitForText('[data-testid="support-info"]', "0.4.0");
     expect(
       await browser.execute(() => {
         const supportLabel = document.querySelector<HTMLElement>(
@@ -3738,7 +3738,7 @@ describe("QT Manager desktop flow", () => {
       formatVersion: number;
       counts: { people: number };
     }>("preview_state_import_command", { path: paths.exportPath });
-    expect(preview.formatVersion).toBe(4);
+    expect(preview.formatVersion).toBe(5);
     expect(preview.counts.people).toBe(exported.people);
 
     const unique = `가상인수인계${Date.now()}`;
@@ -4134,6 +4134,306 @@ describe("QT Manager desktop flow", () => {
     await clickButtonByText("입금 관리");
     await waitForText('[data-testid="payment-row"]', name);
     await waitForText('[data-testid="payment-row"]', "3권");
+  });
+  for (const screen of ["distribution", "management"] as const) {
+    it(`preserves cohort exemption through profile undo and redo from ${screen}`, async () => {
+      const name = `가상예외${Date.now()}`;
+      const issue = await selectedIssue();
+      const personId = await invokeTauri<string>("register_person_command", {
+        request: {
+          name,
+          cohort: null,
+          cohortNotApplicable: true,
+          phone: null,
+          personNote: null,
+          issueYear: issue.year,
+          issueMonth: issue.startMonth,
+          quantity: 1,
+          appliedAt: null,
+          memo: null,
+          confirmDuplicate: true,
+        },
+      });
+      await refreshApp("예외 신청자 fixture를 불러오지 못했습니다.");
+      if (screen === "distribution") {
+        await setInput('[data-testid="people-search"]', name);
+        await waitForText('[data-testid="person-row"]', name);
+        await browser.execute(() =>
+          document
+            .querySelector('[data-testid="person-row"]')!
+            .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })),
+        );
+        await clickButtonByText("신청자 정보 수정");
+      } else {
+        await clickButtonByText("신청자 관리");
+        await selectManagementPerson(name);
+        await waitForText('[data-testid="person-detail"]', name);
+        await clickButtonByText("정보 수정");
+      }
+      await browser.waitUntil(async () =>
+        browser.$('[data-testid="edit-person-form"]').isExisting(),
+      );
+      expect(
+        await browser.execute(
+          () =>
+            document.querySelector<HTMLInputElement>(".cohort-exemption input")
+              ?.checked,
+        ),
+      ).toBe(true);
+      await setInput('input[name="phone"]', "010-0000-0000");
+      await clickButtonByText("정보 저장");
+      await waitForText(".toast", "QT 신청자 정보를 수정했습니다.");
+      await browser.waitUntil(async () =>
+        browser.$('button[aria-label="마지막 동작 되돌리기"]').isEnabled(),
+      );
+      await clickButtonByText("", "마지막 동작 되돌리기");
+      await browser.waitUntil(
+        async () => {
+          const detail = await invokeTauri<{
+            phone: string | null;
+            cohortNotApplicable: boolean;
+          }>("load_person_detail_command", { personId });
+          return detail.phone === null && detail.cohortNotApplicable;
+        },
+        { timeoutMsg: "정보 수정 되돌리기에서 또래 예외가 사라졌습니다." },
+      );
+      await browser.waitUntil(async () =>
+        browser.$('button[aria-label="되돌린 동작 다시 실행"]').isEnabled(),
+      );
+      await clickButtonByText("", "되돌린 동작 다시 실행");
+      await browser.waitUntil(async () => {
+        const detail = await invokeTauri<{
+          phone: string | null;
+          cohortNotApplicable: boolean;
+        }>("load_person_detail_command", { personId });
+        return detail.phone === "010-0000-0000" && detail.cohortNotApplicable;
+      });
+      await clickButtonByText("신청자 관리");
+      await selectManagementPerson(name);
+      await waitForText('[data-testid="person-detail"]', name);
+      expect(
+        await browser.execute(
+          (id) =>
+            document.querySelector(
+              `[data-testid="management-person"][data-person-id="${id}"] [aria-label="정보 보완 필요"]`,
+            ) === null,
+          personId,
+        ),
+      ).toBe(true);
+    });
+  }
+
+  it("deletes one older group history row after confirmation and refreshes totals", async () => {
+    const personId = await invokeTauri<string>("seed_e2e_group_command");
+    const issue = await selectedIssue();
+    const first = await invokeTauri<string>(
+      "record_group_distribution_command",
+      {
+        personId,
+        issueYear: issue.year,
+        issueMonth: issue.startMonth,
+        quantity: 24,
+      },
+    );
+    const second = await invokeTauri<string>(
+      "record_group_distribution_command",
+      {
+        personId,
+        issueYear: issue.year,
+        issueMonth: issue.startMonth,
+        quantity: 13,
+      },
+    );
+    await refreshApp("군지체 배부 fixture를 불러오지 못했습니다.");
+    await clickButtonByText("신청자 관리");
+    await selectManagementPerson("군지체");
+    await waitForText('[data-testid="person-detail"]', "배부 권수 기록 2건");
+    const button = `[data-testid="delete-delivery-history"][data-record-id="${first}"]`;
+    await browser.execute(
+      (selector) =>
+        document.querySelector<HTMLButtonElement>(selector)!.focus(),
+      button,
+    );
+    expect(
+      await browser.execute((selector) => {
+        const style = getComputedStyle(document.querySelector(selector)!);
+        return { opacity: style.opacity, background: style.backgroundColor };
+      }, button),
+    ).toEqual({ opacity: "1", background: "rgba(0, 0, 0, 0)" });
+    await browser.$(button).click();
+    await waitForText('[data-testid="delivery-history-delete-dialog"]', "24권");
+    await browser
+      .$('[data-testid="delivery-history-delete-dialog"] .secondary-button')
+      .click();
+    expect(await browser.$(button).isExisting()).toBe(true);
+    await browser.execute(
+      (selector) =>
+        document.querySelector<HTMLButtonElement>(selector)!.focus(),
+      button,
+    );
+    await browser.$(button).click();
+    await browser.$('[data-testid="confirm-delete-delivery-history"]').click();
+    await waitForText(".toast", "배부 이력을 삭제했습니다.");
+    await browser.waitUntil(
+      async () => !(await browser.$(button).isExisting()),
+    );
+    expect(
+      await browser
+        .$(
+          `[data-testid="delete-delivery-history"][data-record-id="${second}"]`,
+        )
+        .isExisting(),
+    ).toBe(true);
+    const detail = await invokeTauri<{
+      purchases: { id: string; cancelled: boolean; reversed: boolean }[];
+    }>("load_person_detail_command", { personId });
+    expect(detail.purchases).toHaveLength(3);
+    expect(detail.purchases.find((p) => p.id === first)?.cancelled).toBe(true);
+    expect(detail.purchases.find((p) => p.id === second)?.cancelled).toBe(
+      false,
+    );
+    await browser.waitUntil(async () =>
+      browser.$('button[aria-label="마지막 동작 되돌리기"]').isEnabled(),
+    );
+    await clickButtonByText("", "마지막 동작 되돌리기");
+    await waitForText('[data-testid="person-detail"]', "배부 권수 기록 2건");
+    await browser.waitUntil(async () =>
+      browser.$('button[aria-label="되돌린 동작 다시 실행"]').isEnabled(),
+    );
+    await clickButtonByText("", "되돌린 동작 다시 실행");
+    await waitForText('[data-testid="person-detail"]', "배부 권수 기록 1건");
+    await clickButtonByText("현장 배부");
+    await waitForText('[data-testid="person-row"]', "13권 배부");
+    await refreshApp("삭제 후 배부 합계가 복원되지 않았습니다.");
+    await waitForText('[data-testid="person-row"]', "13권 배부");
+  });
+  it("separates monthly subscription and delivery, cancels and redelivers without changing payment or cohort exemption", async () => {
+    const name = `가상월배부${Date.now()}`;
+    const issue = await selectedIssue();
+    const personId = await invokeTauri<string>(
+      "record_purchase_for_new_person_command",
+      {
+        request: {
+          name,
+          cohort: null,
+          cohortNotApplicable: true,
+          phone: null,
+          issueYear: issue.year,
+          issueMonth: issue.startMonth,
+          quantity: 1,
+          note: null,
+        },
+      },
+    );
+    await refreshApp("1달 구독을 불러오지 못했습니다.");
+    await clickButtonByText("신청자 관리");
+    await selectManagementPerson(name);
+    await waitForText('[data-testid="person-detail"]', "구독 이력 1건");
+    await waitForText('[data-testid="person-detail"]', "배부 이력 1건");
+    type Detail = {
+      cohortNotApplicable: boolean;
+      purchases: {
+        id: string;
+        paymentStatus: string;
+        quantity: number;
+        cancelled: boolean;
+        reversed: boolean;
+      }[];
+      distributions: {
+        id: string;
+        purchaseId: string;
+        cancelled: boolean;
+        reversed: boolean;
+        quantity: number;
+        issue: string;
+      }[];
+    };
+    const before = await invokeTauri<Detail>("load_person_detail_command", {
+      personId,
+    });
+    await browser.execute(() =>
+      document
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="delete-delivery-history"]',
+        )!
+        .focus(),
+    );
+    await browser.$('[data-testid="delete-delivery-history"]').click();
+    await browser.$('[data-testid="confirm-delete-delivery-history"]').click();
+    await waitForText('[data-testid="person-detail"]', "배부 이력 0건");
+    const cancelled = await invokeTauri<Detail>("load_person_detail_command", {
+      personId,
+    });
+    const finance = (value: Detail) =>
+      value.purchases.map((p) => ({
+        id: p.id,
+        paymentStatus: p.paymentStatus,
+        quantity: p.quantity,
+        cancelled: p.cancelled,
+        reversed: p.reversed,
+      }));
+    expect(finance(cancelled)).toEqual(finance(before));
+    expect(cancelled.cohortNotApplicable).toBe(true);
+    await clickButtonByText("현장 배부");
+    await setPersonFilterPreset("전체");
+    await setInput('[data-testid="people-search"]', name);
+    await waitForText('[data-testid="person-row"]', "미배부");
+    await clickButtonByText("1권 배부");
+    await waitForText('[data-testid="person-row"]', "배부 완료");
+    await clickButtonByText("신청자 관리");
+    await selectManagementPerson(name);
+    await waitForText('[data-testid="person-detail"]', "배부 이력 1건");
+    const delivered = await invokeTauri<Detail>("load_person_detail_command", {
+      personId,
+    });
+    expect(finance(delivered)).toEqual(finance(before));
+    expect(delivered.cohortNotApplicable).toBe(true);
+    expect(
+      delivered.distributions.filter((d) => !d.cancelled && !d.reversed),
+    ).toHaveLength(1);
+    await browser.$('button[aria-label="1달 구독 수정"]').click();
+    const nextMonth = issue.startMonth === 11 ? 1 : issue.startMonth + 2;
+    const nextYear = issue.startMonth === 11 ? issue.year + 1 : issue.year;
+    await setInput(
+      '[data-testid="subscription-correction-form"] input[name="year"]',
+      String(nextYear),
+    );
+    await browser
+      .$('[data-testid="subscription-correction-form"] select[name="month"]')
+      .selectByAttribute("value", String(nextMonth));
+    await browser
+      .$('[data-testid="subscription-correction-form"] button[type="submit"]')
+      .click();
+    await waitForText('[data-testid="correction-conflicts"]', "실제 배부한");
+    await browser.$('[data-testid="correction-conflicts"] input').click();
+    await browser
+      .$('[data-testid="subscription-correction-form"] button[type="submit"]')
+      .click();
+    await waitForText(".toast", "구독 이력을 정정");
+    const corrected = await invokeTauri<Detail>("load_person_detail_command", {
+      personId,
+    });
+    expect(
+      corrected.distributions.map((d) => ({
+        id: d.id,
+        issue: d.issue,
+        quantity: d.quantity,
+        reversed: d.reversed,
+        cancelled: d.cancelled,
+      })),
+    ).toEqual(
+      delivered.distributions.map((d) => ({
+        id: d.id,
+        issue: d.issue,
+        quantity: d.quantity,
+        reversed: d.reversed,
+        cancelled: d.cancelled,
+      })),
+    );
+    expect(
+      corrected.purchases.filter((p) => !p.cancelled && !p.reversed)[0]
+        .paymentStatus,
+    ).toBe(before.purchases[0].paymentStatus);
   });
 });
 

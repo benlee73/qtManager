@@ -2488,3 +2488,56 @@ kbd {
   padding-left: 1.4rem;
   margin-bottom: 0;
 }
+
+.distribution-history-row.delivery-history-row,
+.purchase-history-row.delivery-history-row {
+  position: relative;
+  padding-right: 32px;
+}
+.history-delete {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+}
+.delivery-history-row:hover .history-delete,
+.delivery-history-row:focus-within .history-delete {
+  opacity: 1;
+  pointer-events: auto;
+}
+.history-delete:hover {
+  color: var(--red);
+  background: transparent;
+}
+@media (hover: none) {
+  .delivery-history-row .history-delete {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+.delivery-history-delete-dialog {
+  width: min(440px, 100%);
+}
+.delivery-history-delete-dialog time {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: var(--font-sm);
+}
+.delivery-history-delete-note {
+  margin: 16px 0;
+  color: var(--muted);
+  font-size: var(--font-sm);
+}

@@ -192,7 +192,7 @@ fn load_snapshot(connection: &Connection) -> Result<StateSnapshot, PortError> {
         )?,
         purchases: query_all(
             connection,
-            "SELECT id, person_id, buyer_name, issue_year, issue_month, quantity, purchased_at, note, reversal_of, created_at, updated_at, payment_status, is_group_distribution, correction_of FROM one_time_purchases ORDER BY id",
+            "SELECT id, person_id, buyer_name, issue_year, issue_month, quantity, purchased_at, note, reversal_of, created_at, updated_at, payment_status, is_group_distribution, correction_of, delivery_records FROM one_time_purchases ORDER BY id",
             purchase_from_row,
         )?,
         check_items: Vec::new(),
@@ -386,8 +386,8 @@ fn insert_purchase(
 ) -> Result<(), PortError> {
     transaction
         .execute(
-            "INSERT INTO one_time_purchases(id, person_id, buyer_name, issue_year, issue_month, quantity, purchased_at, note, reversal_of, created_at, updated_at, payment_status, is_group_distribution, correction_of) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-            params![value.id, value.person_id, value.buyer_name, value.issue.year, value.issue.start_month, value.quantity, value.purchased_at, value.note, value.reversal_of, value.created_at, value.updated_at, value.payment_status.map(qt_domain::PaymentStatus::as_str), value.is_group_distribution, value.correction_of],
+            "INSERT INTO one_time_purchases(id, person_id, buyer_name, issue_year, issue_month, quantity, purchased_at, note, reversal_of, created_at, updated_at, payment_status, is_group_distribution, correction_of, delivery_records) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![value.id, value.person_id, value.buyer_name, value.issue.year, value.issue.start_month, value.quantity, value.purchased_at, value.note, value.reversal_of, value.created_at, value.updated_at, value.payment_status.map(qt_domain::PaymentStatus::as_str), value.is_group_distribution, value.correction_of, value.delivery_records.as_ref().map(|v|serde_json::to_string(v).expect("delivery records serialize"))],
         )
         .map_err(sql_error)?;
     Ok(())
@@ -447,6 +447,18 @@ fn setting_from_row(row: &Row<'_>) -> rusqlite::Result<StateSetting> {
 }
 fn purchase_from_row(row: &Row<'_>) -> rusqlite::Result<OneTimePurchase> {
     Ok(OneTimePurchase {
+        delivery_records: row
+            .get::<_, Option<String>>(14)?
+            .map(|v| {
+                serde_json::from_str(&v).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        14,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })
+            })
+            .transpose()?,
         correction_of: row.get(13)?,
         payment_status: crate::sqlite_core_repository::payment_from_row(row, 11)?,
         is_group_distribution: row.get(12)?,

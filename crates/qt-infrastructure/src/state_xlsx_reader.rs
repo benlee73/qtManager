@@ -183,6 +183,7 @@ fn parse_distribution(row: &RowValues<'_>) -> Result<Distribution, PortError> {
 }
 fn parse_purchase(row: &RowValues<'_>) -> Result<OneTimePurchase, PortError> {
     let value = OneTimePurchase {
+        delivery_records: if row.has("delivery_records") { serde_json::from_str(&row.text("delivery_records")?).map_err(|_|PortError::new("1달 구독 배부 원장 형식이 올바르지 않습니다."))? } else { None },
         correction_of: row.optional_if_present("correction_of")?,
         payment_status: parse_payment_status(row)?,
         is_group_distribution: if row.has("is_group_distribution") {
@@ -517,6 +518,21 @@ mod tests {
         }
         let bytes = std::fs::read(directory.path().join("state.xlsx")).unwrap();
         assert_eq!(&bytes[..2], b"PK", "암호화하지 않은 표준 XLSX ZIP이어야 함");
+    }
+
+    #[test]
+    fn legacy_purchase_without_ledger_has_one_delivery_but_new_damaged_ledger_is_rejected() {
+        let names=["purchase_id","person_id","buyer_name","issue_year","issue_month","quantity","purchased_at","note","reversal_of","created_at","updated_at"];
+        let mut positions=names.iter().enumerate().map(|(i,n)|(n.to_string(),i)).collect::<HashMap<_,_>>();
+        let mut values=vec![Data::String("old-purchase".into()),Data::Empty,Data::Empty,Data::Int(2026),Data::Int(11),Data::Int(2),Data::String("2026-11-01".into()),Data::Empty,Data::Empty,Data::String("2026-11-01".into()),Data::String("2026-11-01".into())];
+        let read=||parse_purchase(&RowValues{sheet:PURCHASES,positions:&positions,row:&values}).unwrap();
+        assert_eq!(read().deliveries(),read().deliveries());assert_eq!(read().deliveries().len(),1);
+        positions.insert("delivery_records".into(),values.len());values.push(Data::Empty);
+        assert!(parse_purchase(&RowValues{sheet:PURCHASES,positions:&positions,row:&values}).is_err());
+        *values.last_mut().unwrap()=Data::String("null".into());
+        assert_eq!(parse_purchase(&RowValues{sheet:PURCHASES,positions:&positions,row:&values}).unwrap().deliveries().len(),1);
+        *values.last_mut().unwrap()=Data::String("[]".into());
+        assert!(parse_purchase(&RowValues{sheet:PURCHASES,positions:&positions,row:&values}).unwrap().deliveries().is_empty());
     }
 
     #[test]

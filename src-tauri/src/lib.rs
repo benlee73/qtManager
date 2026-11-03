@@ -1021,9 +1021,13 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             operation_commands::annual_intake_command,
+            operation_commands::change_delivery_history_command,
             operation_commands::preview_subscription_correction_command,
             operation_commands::correct_subscription_command,
             operation_commands::correct_purchase_command,
+            operation_commands::preview_purchase_correction_command,
+            operation_commands::record_purchase_delivery_command,
+            operation_commands::undo_purchase_delivery_command,
             run_phase0_probe,
             run_phase1_probe,
             main_window_contract_command,

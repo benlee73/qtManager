@@ -305,6 +305,7 @@ pub fn read_legacy_2026(
                 if let Some(buyer_name) = buyer_name {
                     let quantity = positive_integer(row.get(column + 2)).unwrap_or(1);
                     report.snapshot.purchases.push(OneTimePurchase {
+                        delivery_records: None,
                         correction_of: None,
                         payment_status: None,
                         is_group_distribution: false,

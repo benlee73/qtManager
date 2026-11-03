@@ -144,6 +144,9 @@ pub struct LinkedMemoView {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DistributionView {
+    pub purchase_id: Option<String>,
+    pub id: String,
+    pub cancelled: bool,
     pub issue: String,
     pub quantity: u32,
     pub distributed_at: String,
@@ -337,13 +340,26 @@ pub fn load_person_detail<R: PeopleManagementRepository>(
             .then_with(|| right.updated_at.cmp(&left.updated_at))
             .then_with(|| right.id.cmp(&left.id))
     });
-    let distributions = distributions
+    let cancelled_distributions: std::collections::HashSet<_> = record
+        .distributions
+        .iter()
+        .filter_map(|d| d.reversal_of.as_ref())
+        .collect();
+    let mut distributions = distributions
         .into_iter()
-        .map(|item| DistributionView {
-            issue: item.issue.display_name(),
-            quantity: item.quantity,
-            distributed_at: item.distributed_at.clone(),
-            reversed: item.reversal_of.is_some(),
+        .map(|item| {
+            (
+                item.issue,
+                DistributionView {
+                    purchase_id: None,
+                    id: item.id.clone(),
+                    cancelled: cancelled_distributions.contains(&item.id),
+                    issue: item.issue.display_name(),
+                    quantity: item.quantity,
+                    distributed_at: item.distributed_at.clone(),
+                    reversed: item.reversal_of.is_some(),
+                },
+            )
         })
         .collect::<Vec<_>>();
     let mut purchases = repository.list_person_purchases(person_id)?;
@@ -359,6 +375,33 @@ pub fn load_person_detail<R: PeopleManagementRepository>(
         .iter()
         .filter_map(|p| p.reversal_of.clone())
         .collect();
+    for purchase in purchases.iter().filter(|p| {
+        !p.is_group_distribution && p.reversal_of.is_none() && !cancelled.contains(&p.id)
+    }) {
+        let records = purchase.deliveries();
+        for d in &records {
+            distributions.push((
+                d.issue,
+                DistributionView {
+                    purchase_id: Some(purchase.id.clone()),
+                    id: d.id.clone(),
+                    issue: d.issue.display_name(),
+                    quantity: d.quantity,
+                    distributed_at: d.distributed_at.clone(),
+                    reversed: d.reversal_of.is_some(),
+                    cancelled: records
+                        .iter()
+                        .any(|r| r.reversal_of.as_deref() == Some(&d.id)),
+                },
+            ));
+        }
+    }
+    distributions.sort_by(|a, b| {
+        b.0.cmp(&a.0)
+            .then(b.1.distributed_at.cmp(&a.1.distributed_at))
+            .then(b.1.id.cmp(&a.1.id))
+    });
+    let distributions = distributions.into_iter().map(|(_, d)| d).collect();
     let purchases = purchases
         .into_iter()
         .map(|item| PurchaseView {
@@ -1329,6 +1372,7 @@ mod tests {
             updated_at: runtime.now(),
         };
         let purchase = OneTimePurchase {
+            delivery_records: None,
             correction_of: None,
             payment_status: None,
             is_group_distribution: false,

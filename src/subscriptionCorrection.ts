@@ -30,6 +30,7 @@ export function buildCorrectionRequest(
     request: {
       ...base,
       purchaseId: target.value.id,
+      confirmConflicts,
       purchasedAt: target.value.purchasedAt,
       note: target.value.note ?? null,
     },

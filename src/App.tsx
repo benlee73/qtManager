@@ -1,3 +1,4 @@
+import { personEditAction } from "./personEditAction";
 import { installCompositionClicks } from "./compositionClicks";
 import { searchMemos } from "./distributionView";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -46,12 +47,7 @@ import {
   updateMemo,
   updateMemoStatus,
 } from "./phase2";
-import {
-  type PersonDetail,
-  type PersonInput,
-  loadPersonDetail,
-  updatePerson,
-} from "./phase3";
+import { type PersonDetail, loadPersonDetail } from "./phase3";
 import { useNotifications } from "./useNotifications";
 import { createDistributionLoader } from "./distributionLoader";
 import { useTextDraft } from "./drafts";
@@ -1115,25 +1111,7 @@ export default function App() {
           onSaved={(work, input) =>
             mutate(work, "QT 신청자 정보를 수정했습니다.").then((saved) => {
               if (saved) {
-                const previous: PersonInput = {
-                  name: editPerson.name,
-                  cohort: editPerson.cohort ?? "",
-                  phone: editPerson.phone ?? "",
-                  personNote: editPerson.personNote ?? "",
-                };
-                recordAction({
-                  description: `${editPerson.name} 정보 수정`,
-                  undo: () =>
-                    updatePerson(editPerson.id, {
-                      ...previous,
-                      confirmDuplicate: true,
-                    }),
-                  redo: () =>
-                    updatePerson(editPerson.id, {
-                      ...input,
-                      confirmDuplicate: true,
-                    }),
-                });
+                recordAction(personEditAction(editPerson, input));
                 setEditPerson(null);
               }
               return saved;

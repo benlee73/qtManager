@@ -19,6 +19,7 @@ pub struct OperationBatch {
     pub expected_person: Option<Person>,
     pub expected_subscription: Option<Subscription>,
     pub expected_purchase: Option<OneTimePurchase>,
+    pub expected_distribution: Option<Distribution>,
     pub confirmed_memos: Option<(String, Vec<String>)>,
 }
 pub trait OperationsRepository: CoreRepository + PeopleManagementRepository {
@@ -74,7 +75,7 @@ fn change<C: Clock, I: IdGenerator>(
         entity_id: id.into(),
         summary: match action {
             "subscription_corrected" => "구독 내용 정정",
-            "purchase_corrected" => "1달 구독 구매·전달 정정",
+            "purchase_corrected" => "1달 구독 정정·배부 기록 보존",
             "distribution_recorded" => "구독 신청과 함께 배부",
             "person_created" => "현장 신청자 등록",
             _ => "연간 구독 추가",
@@ -385,6 +386,8 @@ pub fn correct_subscription<R: OperationsRepository, C: Clock, I: IdGenerator>(
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CorrectPurchaseRequest {
+    #[serde(default)]
+    pub confirm_conflicts: bool,
     pub person_id: String,
     pub purchase_id: String,
     pub expected_revision: String,
@@ -394,12 +397,75 @@ pub struct CorrectPurchaseRequest {
     pub purchased_at: String,
     pub note: Option<String>,
 }
+pub fn preview_purchase_correction<R: OperationsRepository>(
+    repo: &R,
+    request: &CorrectPurchaseRequest,
+) -> Result<Vec<String>, ApplicationError> {
+    let purchases = repo.list_person_purchases(&request.person_id)?;
+    let original = purchases
+        .iter()
+        .find(|p| {
+            p.id == request.purchase_id
+                && p.reversal_of.is_none()
+                && !p.is_group_distribution
+                && !purchases
+                    .iter()
+                    .any(|r| r.reversal_of.as_deref() == Some(&p.id))
+        })
+        .ok_or(ApplicationError::MissingDeskRecord)?;
+    if json(original) != request.expected_revision {
+        return Err(reject(
+            "다른 변경이 반영되었습니다. 이력을 다시 열어 수정하세요.",
+        ));
+    }
+    let issue = Issue::new(request.issue_year, request.issue_month)?;
+    if request.quantity == 0 {
+        return Err(qt_domain::DomainError::InvalidQuantity.into());
+    }
+    let records = original.deliveries();
+    let valid = records
+        .iter()
+        .filter(|d| {
+            d.reversal_of.is_none()
+                && !records
+                    .iter()
+                    .any(|r| r.reversal_of.as_deref() == Some(&d.id))
+        })
+        .collect::<Vec<_>>();
+    let mut warnings = Vec::new();
+    for d in valid.iter().filter(|d| d.issue != issue) {
+        let warning = format!(
+            "{}에 실제 배부한 {}권은 변경하지 않습니다.",
+            d.issue.display_name(),
+            d.quantity
+        );
+        if !warnings.contains(&warning) {
+            warnings.push(warning);
+        }
+    }
+    let delivered = valid
+        .iter()
+        .filter(|d| d.issue == issue)
+        .map(|d| d.quantity)
+        .sum::<u32>();
+    if delivered > request.quantity {
+        warnings.push(format!(
+            "실제 배부 {delivered}권이 정정 수량 {}권보다 많습니다.",
+            request.quantity
+        ));
+    }
+    Ok(warnings)
+}
 pub fn correct_purchase<R: OperationsRepository, C: Clock, I: IdGenerator>(
     repo: &mut R,
     runtime: &RuntimeServices<C, I>,
     request: CorrectPurchaseRequest,
 ) -> Result<(), ApplicationError> {
     let operator = operator(repo)?;
+    let warnings = preview_purchase_correction(repo, &request)?;
+    if !warnings.is_empty() && !request.confirm_conflicts {
+        return Err(reject("배부 이력과 불일치합니다. 확인 후 정정하세요."));
+    }
     let purchases = repo.list_person_purchases(&request.person_id)?;
     let original = purchases
         .iter()
@@ -436,6 +502,7 @@ pub fn correct_purchase<R: OperationsRepository, C: Clock, I: IdGenerator>(
         ..original.clone()
     };
     let edited = OneTimePurchase {
+        delivery_records: Some(original.deliveries()),
         id: runtime.ids.next_id(),
         reversal_of: None,
         correction_of: Some(original.id.clone()),

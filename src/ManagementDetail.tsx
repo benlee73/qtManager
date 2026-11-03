@@ -1,4 +1,9 @@
 import {
+  DeliveryHistoryDeleteDialog,
+  HistoryDeleteButton,
+  type DeliveryHistoryRecord,
+} from "./DeliveryHistoryDeleteDialog";
+import {
   SubscriptionCorrectionDialog,
   EditPencil,
   type CorrectionTarget,
@@ -168,6 +173,10 @@ export function ManagementPersonList({
 export type PersonDetailPanelProps = {
   detail: PersonDetail | null;
   busy: boolean;
+  onDeleteDeliveryHistory?: (
+    personId: string,
+    record: DeliveryHistoryRecord,
+  ) => Promise<boolean>;
   onCorrect?: (
     work: () => Promise<unknown>,
     message: string,
@@ -213,6 +222,7 @@ function PersonDetailContent({
   onToggleArchived,
   onCreateMemo,
   onCorrect,
+  onDeleteDeliveryHistory,
   onUpdateMemo,
   onArchiveMemo,
   onDeleteMemo,
@@ -223,6 +233,16 @@ function PersonDetailContent({
   const setMemoDraft = memoDraftState.setValue;
   const [memoDetail, setMemoDetail] = useState<LinkedMemo | null>(null);
   const memos = detail.memos ?? [];
+  const [deleteHistory, setDeleteHistory] =
+    useState<DeliveryHistoryRecord | null>(null);
+  const canDeleteDeliveryHistory =
+    detail.status !== "보관됨" && Boolean(onDeleteDeliveryHistory);
+  const distributions = detail.distributions.filter(
+    (d) => !d.reversed && !d.cancelled,
+  );
+  const groupPurchases = (detail.purchases ?? []).filter(
+    (p) => !p.reversed && !p.cancelled,
+  );
   const [correction, setCorrection] = useState<CorrectionTarget | null>(null);
 
   return (
@@ -378,7 +398,7 @@ function PersonDetailContent({
         </div>
       </DetailSection>
 
-      <DetailSection title={`배부 이력 ${detail.distributions.length}건`}>
+      <DetailSection title={`배부 이력 ${distributions.length}건`}>
         <div className="distribution-history">
           <div
             className="distribution-history-header"
@@ -388,13 +408,30 @@ function PersonDetailContent({
             <strong>처리</strong>
             <strong>처리 시각</strong>
           </div>
-          {detail.distributions.map((distribution, index) => (
+          {distributions.map((distribution, index) => (
             <div
-              className="distribution-history-row"
+              className="distribution-history-row delivery-history-row"
               key={`${distribution.distributedAt}-${index}`}
             >
+              {canDeleteDeliveryHistory && distribution.id && (
+                <HistoryDeleteButton
+                  busy={busy}
+                  onSelect={setDeleteHistory}
+                  record={{
+                    id: distribution.id,
+                    kind: distribution.purchaseId
+                      ? "purchase_delivery"
+                      : "distribution",
+                    purchaseId: distribution.purchaseId,
+                    issue: distribution.issue,
+                    quantity: distribution.quantity,
+                    processedAt: distribution.distributedAt,
+                  }}
+                />
+              )}
               <strong title={distribution.issue}>{distribution.issue}</strong>
               <span className="distribution-history-quantity">
+                {distribution.purchaseId ? "1달 구독 · " : ""}
                 {distribution.reversed ? "취소" : "배부"}{" "}
                 {distribution.quantity}권
               </span>
@@ -407,18 +444,28 @@ function PersonDetailContent({
               </time>
             </div>
           ))}
-          {detail.distributions.length === 0 && <p>배부 이력이 없습니다.</p>}
+          {distributions.length === 0 && <p>배부 이력이 없습니다.</p>}
         </div>
       </DetailSection>
 
       {detail.isGroup && (
-        <DetailSection
-          title={`배부 권수 기록 ${(detail.purchases ?? []).length}건`}
-        >
-          <PurchaseHistory purchases={detail.purchases ?? []} />
+        <DetailSection title={`배부 권수 기록 ${groupPurchases.length}건`}>
+          <PurchaseHistory
+            purchases={groupPurchases}
+            busy={busy}
+            onDelete={canDeleteDeliveryHistory ? setDeleteHistory : undefined}
+          />
         </DetailSection>
       )}
 
+      {deleteHistory && onDeleteDeliveryHistory && (
+        <DeliveryHistoryDeleteDialog
+          record={deleteHistory}
+          busy={busy}
+          onClose={() => setDeleteHistory(null)}
+          onDelete={() => onDeleteDeliveryHistory(detail.id, deleteHistory)}
+        />
+      )}
       {correction && onCorrect && (
         <SubscriptionCorrectionDialog
           personId={detail.id}
@@ -526,17 +573,38 @@ function isLegacyMigrationMemo(value: string) {
 function PurchaseHistory({
   purchases,
   onEdit,
+  busy = false,
+  onDelete,
 }: {
   purchases: NonNullable<PersonDetail["purchases"]>;
+  busy?: boolean;
+  onDelete?: (record: DeliveryHistoryRecord) => void;
   onEdit?: (purchase: NonNullable<PersonDetail["purchases"]>[number]) => void;
 }) {
   return (
     <div className="purchase-history" data-testid="purchase-history">
       {purchases.map((purchase, index) => (
         <div
-          className="purchase-history-row"
+          className={`purchase-history-row ${purchase.isGroupDistribution ? "delivery-history-row" : ""}`}
           key={`${purchase.issue}-${purchase.purchasedAt}-${index}`}
         >
+          {onDelete &&
+            purchase.isGroupDistribution &&
+            purchase.id &&
+            !purchase.reversed &&
+            !purchase.cancelled && (
+              <HistoryDeleteButton
+                busy={busy}
+                onSelect={onDelete}
+                record={{
+                  id: purchase.id,
+                  kind: "purchase",
+                  issue: purchase.issue,
+                  quantity: purchase.quantity,
+                  processedAt: purchase.purchasedAt,
+                }}
+              />
+            )}
           {onEdit &&
             purchase.revision &&
             !purchase.reversed &&
@@ -562,10 +630,10 @@ function PurchaseHistory({
               {purchase.reversed
                 ? purchase.isGroupDistribution
                   ? "배부 취소"
-                  : "구매·전달 취소"
+                  : "신청 취소"
                 : purchase.isGroupDistribution
                   ? "배부"
-                  : "구매·전달"}{" "}
+                  : "신청"}{" "}
               {purchase.quantity}권
             </span>
           </span>

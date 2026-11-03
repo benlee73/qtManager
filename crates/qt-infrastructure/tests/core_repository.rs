@@ -12,8 +12,8 @@ fn migrates_idempotently_and_runs_atomic_core_round_trip() {
 
     let first = repository.migrate_core().unwrap();
     let second = repository.migrate_core().unwrap();
-    assert_eq!(first.schema_version, 7);
-    assert_eq!(first.newly_applied, 7);
+    assert_eq!(first.schema_version, 8);
+    assert_eq!(first.newly_applied, 8);
     assert_eq!(second.newly_applied, 0);
 
     let logger = StderrEventLogger;
@@ -55,7 +55,7 @@ fn upgrades_phase0_database_without_losing_probe_row() {
     let report = repository.migrate_core().unwrap();
     drop(repository);
 
-    assert_eq!(report.newly_applied, 6);
+    assert_eq!(report.newly_applied, 7);
     let connection = Connection::open(&path).unwrap();
     let count: i64 = connection
         .query_row("SELECT COUNT(*) FROM phase0_people", [], |row| row.get(0))

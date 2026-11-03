@@ -243,7 +243,7 @@ impl PeopleManagementRepository for SqliteCoreRepository {
             .prepare(
                 "
                 SELECT id, person_id, buyer_name, issue_year, issue_month, quantity,
-                       purchased_at, note, reversal_of, created_at, updated_at, payment_status, is_group_distribution, correction_of
+                       purchased_at, note, reversal_of, created_at, updated_at, payment_status, is_group_distribution, correction_of, delivery_records
                 FROM one_time_purchases
                 WHERE person_id = ?1
                 ORDER BY issue_year DESC, issue_month DESC,

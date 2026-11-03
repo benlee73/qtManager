@@ -225,3 +225,37 @@ it("searches memo content and linked names without changing priority or confirma
   expect(searchMemos(items, " ")).toEqual(items);
   expect(items).toHaveLength(2);
 });
+
+it("keeps annual and monthly allocation identities separate", () => {
+  const candidate = person("일부 배부");
+  candidate.distributionTargets = [
+    {
+      subscriptionId: "annual",
+      startIssue: "2026년 11~12월호",
+      lastIssue: "2027년 9~10월호",
+      endDate: "2027-10-31",
+      targetQuantity: 1,
+      distributedQuantity: 0,
+      remainingQuantity: 1,
+    },
+    {
+      subscriptionId: "",
+      purchaseId: "monthly",
+      startIssue: "2026년 11~12월호",
+      lastIssue: "2026년 11~12월호",
+      endDate: "2026-12-31",
+      targetQuantity: 2,
+      distributedQuantity: 0,
+      remainingQuantity: 2,
+    },
+  ];
+  expect(distributionAllocations(candidate, 2)).toEqual([
+    { subscriptionId: "annual", quantity: 1 },
+    {
+      subscriptionId: "",
+      purchaseId: "monthly",
+      personId: candidate.personId,
+      quantity: 1,
+    },
+  ]);
+});

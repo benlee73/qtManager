@@ -88,3 +88,88 @@ pub(crate) fn correct_purchase_command(
     }
     result
 }
+
+#[tauri::command]
+pub(crate) fn change_delivery_history_command(
+    app: tauri::AppHandle,
+    request: qt_application::DeliveryHistoryRequest,
+) -> Result<qt_application::DeliveryHistoryChange, String> {
+    let mut repo = open_operational_repository(&app)?;
+    let runtime = SystemRuntime;
+    let logger = event_logger(&app);
+    logger.info("delivery_history_change_started");
+    let result = qt_application::change_delivery_history(
+        &mut repo,
+        &RuntimeServices {
+            clock: &runtime,
+            ids: &runtime,
+        },
+        request,
+    )
+    .map_err(|e| e.to_string());
+    if result.is_ok() {
+        logger.info("delivery_history_change_completed");
+    } else {
+        logger.error("delivery_history_change_failed");
+    }
+    result
+}
+
+#[tauri::command]
+pub(crate) fn preview_purchase_correction_command(
+    app: tauri::AppHandle,
+    request: CorrectPurchaseRequest,
+) -> Result<Vec<String>, String> {
+    let repo = open_operational_repository(&app)?;
+    qt_application::preview_purchase_correction(&repo, &request).map_err(|e| e.to_string())
+}
+#[tauri::command]
+pub(crate) fn record_purchase_delivery_command(
+    app: tauri::AppHandle,
+    request: qt_application::PurchaseDeliveryRequest,
+) -> Result<String, String> {
+    let mut repo = open_operational_repository(&app)?;
+    let rt = SystemRuntime;
+    let logger = event_logger(&app);
+    logger.info("purchase_delivery_started");
+    let result = qt_application::record_purchase_delivery(
+        &mut repo,
+        &RuntimeServices {
+            clock: &rt,
+            ids: &rt,
+        },
+        request,
+    )
+    .map_err(|e| e.to_string());
+    if result.is_ok() {
+        logger.info("purchase_delivery_completed");
+    } else {
+        logger.error("purchase_delivery_failed");
+    }
+    result
+}
+#[tauri::command]
+pub(crate) fn undo_purchase_delivery_command(
+    app: tauri::AppHandle,
+    request: qt_application::UndoPurchaseDeliveryRequest,
+) -> Result<qt_application::DeliveryHistoryChange, String> {
+    let mut repo = open_operational_repository(&app)?;
+    let rt = SystemRuntime;
+    let logger = event_logger(&app);
+    logger.info("purchase_delivery_reversal_started");
+    let result = qt_application::undo_purchase_delivery(
+        &mut repo,
+        &RuntimeServices {
+            clock: &rt,
+            ids: &rt,
+        },
+        request,
+    )
+    .map_err(|e| e.to_string());
+    if result.is_ok() {
+        logger.info("purchase_delivery_reversal_completed");
+    } else {
+        logger.error("purchase_delivery_reversal_failed");
+    }
+    result
+}

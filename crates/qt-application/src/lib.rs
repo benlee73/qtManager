@@ -314,3 +314,16 @@ pub use payments::{
 
 mod group_distribution;
 pub use group_distribution::{cancel_group_distribution, record_group_distribution};
+
+mod delivery_history;
+pub use delivery_history::{
+    DeliveryHistoryChange, DeliveryHistoryKind, DeliveryHistoryRequest, change_delivery_history,
+};
+
+mod purchase_delivery;
+pub use purchase_delivery::{
+    PurchaseDeliveryRequest, UndoPurchaseDeliveryRequest, record_purchase_delivery,
+    undo_purchase_delivery,
+};
+
+pub use operations::preview_purchase_correction;

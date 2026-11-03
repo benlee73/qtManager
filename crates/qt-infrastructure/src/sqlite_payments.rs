@@ -1,8 +1,6 @@
 use crate::SqliteCoreRepository;
-use crate::sqlite_core_repository::{
-    person_from_row, subscription_from_row, upsert_change, upsert_subscription,
-};
-use crate::sqlite_distribution_desk::{purchase_from_row, upsert_purchase};
+use crate::sqlite_core_repository::{person_from_row, subscription_from_row, upsert_change};
+use crate::sqlite_distribution_desk::purchase_from_row;
 use qt_application::{PaymentIntake, PaymentRepository, PortError};
 use qt_domain::ChangeLog;
 use rusqlite::OptionalExtension;
@@ -34,7 +32,7 @@ impl PaymentRepository for SqliteCoreRepository {
                 result.push(PaymentIntake::Subscription(person, subscription));
             }
         }
-        let mut statement = self.connection.prepare("SELECT p.id, p.person_id, p.buyer_name, p.issue_year, p.issue_month, p.quantity, p.purchased_at, p.note, p.reversal_of, p.created_at, p.updated_at, p.payment_status, p.is_group_distribution, p.correction_of FROM one_time_purchases p WHERE p.payment_status IS NOT NULL AND p.reversal_of IS NULL AND NOT EXISTS (SELECT 1 FROM one_time_purchases r WHERE r.reversal_of = p.id)").map_err(error)?;
+        let mut statement = self.connection.prepare("SELECT p.id, p.person_id, p.buyer_name, p.issue_year, p.issue_month, p.quantity, p.purchased_at, p.note, p.reversal_of, p.created_at, p.updated_at, p.payment_status, p.is_group_distribution, p.correction_of, p.delivery_records FROM one_time_purchases p WHERE p.payment_status IS NOT NULL AND p.reversal_of IS NULL AND NOT EXISTS (SELECT 1 FROM one_time_purchases r WHERE r.reversal_of = p.id)").map_err(error)?;
         let purchases = statement
             .query_map([], purchase_from_row)
             .map_err(error)?
@@ -57,11 +55,21 @@ impl PaymentRepository for SqliteCoreRepository {
     ) -> Result<(), PortError> {
         let transaction = self.connection.transaction().map_err(error)?;
         for (intake, change) in changes {
-            match intake {
-                PaymentIntake::Subscription(_, subscription) => {
-                    upsert_subscription(&transaction, subscription)?
-                }
-                PaymentIntake::Purchase(_, purchase) => upsert_purchase(&transaction, purchase)?,
+            let before = change
+                .before_json
+                .as_deref()
+                .and_then(|v| v.strip_prefix("payment_status="))
+                .ok_or_else(|| PortError::new("입금 변경 전 상태가 없습니다."))?;
+            // Only payment columns belong to this operation. A stale full purchase
+            // snapshot must never overwrite a newer independent delivery ledger.
+            let updated=match intake {
+                PaymentIntake::Subscription(_,s)=>transaction.execute("UPDATE subscriptions SET payment_status=?1,updated_at=?2 WHERE id=?3 AND payment_status=?4 AND archived_at IS NULL",rusqlite::params![s.payment_status.map(qt_domain::PaymentStatus::as_str),s.updated_at,s.id,before]),
+                PaymentIntake::Purchase(_,p)=>transaction.execute("UPDATE one_time_purchases SET payment_status=?1,updated_at=?2 WHERE id=?3 AND payment_status=?4 AND reversal_of IS NULL AND NOT EXISTS(SELECT 1 FROM one_time_purchases r WHERE r.reversal_of=one_time_purchases.id)",rusqlite::params![p.payment_status.map(qt_domain::PaymentStatus::as_str),p.updated_at,p.id,before]),
+            }.map_err(error)?;
+            if updated != 1 {
+                return Err(PortError::new(
+                    "입금 상태가 변경되었습니다. 목록을 다시 확인하세요.",
+                ));
             }
             upsert_change(&transaction, change)?;
         }

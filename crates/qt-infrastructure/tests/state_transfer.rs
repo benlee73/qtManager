@@ -228,6 +228,7 @@ fn fixture_state(now: &str) -> StateSnapshot {
         ],
         purchases: vec![
             OneTimePurchase {
+                delivery_records: None,
                 correction_of: None,
                 payment_status: None,
                 is_group_distribution: false,
@@ -243,6 +244,7 @@ fn fixture_state(now: &str) -> StateSnapshot {
                 updated_at: now.into(),
             },
             OneTimePurchase {
+                delivery_records: None,
                 correction_of: None,
                 payment_status: None,
                 is_group_distribution: false,

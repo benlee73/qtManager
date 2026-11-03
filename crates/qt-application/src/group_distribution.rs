@@ -21,6 +21,7 @@ where
         .person;
     let now = runtime.clock.now();
     let record = OneTimePurchase {
+        delivery_records: None,
         correction_of: None,
         id: runtime.ids.next_id(),
         person_id: Some(person.id),
@@ -59,13 +60,14 @@ where
         .find(|record| record.person.id == person_id && record.person.is_group)
         .ok_or(ApplicationError::MissingDeskRecord)?;
     let original = group
-        .group_purchases
+        .purchases
         .iter()
         .find(|purchase| {
             purchase.id == purchase_id
+                && purchase.is_group_distribution
                 && purchase.reversal_of.is_none()
                 && !group
-                    .group_purchases
+                    .purchases
                     .iter()
                     .any(|reversal| reversal.reversal_of.as_deref() == Some(purchase_id))
         })

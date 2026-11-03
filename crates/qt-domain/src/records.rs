@@ -235,6 +235,8 @@ impl PinnedNote {
 #[serde(rename_all = "camelCase")]
 pub struct OneTimePurchase {
     #[serde(default)]
+    pub delivery_records: Option<Vec<crate::PurchaseDelivery>>,
+    #[serde(default)]
     pub correction_of: Option<String>,
     #[serde(default)]
     pub payment_status: Option<crate::PaymentStatus>,
@@ -255,6 +257,11 @@ pub struct OneTimePurchase {
 impl OneTimePurchase {
     pub fn validate(&self) -> Result<(), DomainError> {
         required_id(&self.id, "one_time_purchase_id")?;
+        crate::purchase_delivery::validate_deliveries(
+            self.delivery_records
+                .as_deref()
+                .unwrap_or(&self.deliveries()),
+        )?;
         if self.quantity == 0 {
             return Err(DomainError::InvalidQuantity);
         }

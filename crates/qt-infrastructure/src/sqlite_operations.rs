@@ -1,7 +1,7 @@
 use crate::SqliteCoreRepository;
 use crate::sqlite_core_repository::{
-    person_from_row, subscription_from_row, upsert_change, upsert_distribution, upsert_person,
-    upsert_subscription,
+    distribution_from_row, person_from_row, subscription_from_row, upsert_change,
+    upsert_distribution, upsert_person, upsert_subscription,
 };
 use crate::sqlite_distribution_desk::{purchase_from_row, upsert_purchase};
 use qt_application::{OperationBatch, OperationsRepository, PortError};
@@ -23,10 +23,23 @@ impl OperationsRepository for SqliteCoreRepository {
             }
         }
         if let Some(expected) = &batch.expected_purchase {
-            let current=tx.query_row("SELECT id,person_id,buyer_name,issue_year,issue_month,quantity,purchased_at,note,reversal_of,created_at,updated_at,payment_status,is_group_distribution,correction_of FROM one_time_purchases WHERE id=?1",[&expected.id],purchase_from_row).optional().map_err(error)?;
+            let current=tx.query_row("SELECT id,person_id,buyer_name,issue_year,issue_month,quantity,purchased_at,note,reversal_of,created_at,updated_at,payment_status,is_group_distribution,correction_of, delivery_records FROM one_time_purchases WHERE id=?1",[&expected.id],purchase_from_row).optional().map_err(error)?;
             let cancelled: bool = tx
                 .query_row(
                     "SELECT EXISTS(SELECT 1 FROM one_time_purchases WHERE reversal_of=?1)",
+                    [&expected.id],
+                    |r| r.get(0),
+                )
+                .map_err(error)?;
+            if current.as_ref() != Some(expected) || cancelled {
+                return Err(stale());
+            }
+        }
+        if let Some(expected) = &batch.expected_distribution {
+            let current=tx.query_row("SELECT id,subscription_id,issue_year,issue_month,quantity,distributed_at,note,reversal_of,created_at,updated_at FROM distributions WHERE id=?1",[&expected.id],distribution_from_row).optional().map_err(error)?;
+            let cancelled: bool = tx
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM distributions WHERE reversal_of=?1)",
                     [&expected.id],
                     |r| r.get(0),
                 )

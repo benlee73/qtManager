@@ -245,7 +245,7 @@ fn groups_record_variable_quantities_without_subscription_targets_or_payments_an
         .write_state(&path, &snapshot, "0.1.0", &now)
         .unwrap();
     let (metadata, restored) = XlsxStateWorkbook.read_state(&path).unwrap();
-    assert_eq!(metadata.format_version, 4);
+    assert_eq!(metadata.format_version, 5);
     assert_eq!(restored.people, snapshot.people);
     assert_eq!(restored.purchases, snapshot.purchases);
     assert_eq!(restored.subscriptions, snapshot.subscriptions);

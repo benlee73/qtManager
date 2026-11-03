@@ -1,3 +1,5 @@
+import { deliveryHistoryAction } from "./deliveryHistoryAction";
+import { personEditAction } from "./personEditAction";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { EditDialog, RegisterDialog, RenewDialog } from "./Phase3Dialogs";
@@ -24,11 +26,12 @@ import {
   type PeopleManagement,
   type PersonDetail,
   type PersonInput,
+  type DeliveryHistoryChange,
   loadManagement,
+  changeDeliveryHistoryRecord,
   loadPersonDetail,
   deletePerson,
   setPersonArchived,
-  updatePerson,
 } from "./phase3";
 
 type ManagementDialog =
@@ -317,6 +320,20 @@ export function ManagementScreen({
         </div>
 
         <PersonDetailPanel
+          onDeleteDeliveryHistory={async (personId, record) => {
+            let deletion: DeliveryHistoryChange | undefined;
+            const saved = await mutate(async () => {
+              deletion = await changeDeliveryHistoryRecord(
+                personId,
+                record.kind,
+                record.id,
+                record.purchaseId,
+              );
+            }, "배부 이력을 삭제했습니다.");
+            if (saved && deletion)
+              recordAction(deliveryHistoryAction(personId, deletion));
+            return saved;
+          }}
           onCorrect={mutate}
           detail={selection.detail}
           busy={busy}
@@ -442,25 +459,7 @@ export function ManagementScreen({
           onSaved={(work, input) =>
             mutate(work, "QT 신청자 정보를 수정했습니다.").then((saved) => {
               if (saved) {
-                const previous: PersonInput = {
-                  name: dialog.person.name,
-                  cohort: dialog.person.cohort ?? "",
-                  phone: dialog.person.phone ?? "",
-                  personNote: dialog.person.personNote ?? "",
-                };
-                recordAction({
-                  description: `${dialog.person.name} 정보 수정`,
-                  undo: () =>
-                    updatePerson(dialog.person.id, {
-                      ...previous,
-                      confirmDuplicate: true,
-                    }),
-                  redo: () =>
-                    updatePerson(dialog.person.id, {
-                      ...input,
-                      confirmDuplicate: true,
-                    }),
-                });
+                recordAction(personEditAction(dialog.person, input));
               }
               return saved;
             })

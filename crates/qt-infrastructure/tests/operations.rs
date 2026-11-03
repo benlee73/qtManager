@@ -87,7 +87,7 @@ fn annual_registration_delivery_and_exemption_survive_reopen_and_xlsx_roundtrip(
         .write_state(&file, &state, "0.2.0", "2026-10-19")
         .unwrap();
     let (metadata, restored) = XlsxStateWorkbook.read_state(&file).unwrap();
-    assert_eq!(metadata.format_version, 4);
+    assert_eq!(metadata.format_version, 5);
     assert_eq!(state, restored);
 }
 #[test]
@@ -226,6 +226,7 @@ fn purchase_correction_keeps_original_and_payment_without_double_counting_and_ro
     .unwrap();
     let original = repo.list_person_purchases(&person).unwrap()[0].clone();
     let input = CorrectPurchaseRequest {
+        confirm_conflicts: true,
         person_id: person.clone(),
         purchase_id: original.id.clone(),
         expected_revision: serde_json::to_string(&original).unwrap(),
@@ -526,6 +527,7 @@ fn hidden_metadata_is_preserved_exactly_during_issue_and_quantity_corrections() 
         &mut repo,
         &runtime,
         CorrectPurchaseRequest {
+            confirm_conflicts: true,
             person_id: outcome.person_id.clone(),
             purchase_id: purchase.id.clone(),
             expected_revision: serde_json::to_string(&purchase).unwrap(),

@@ -50,6 +50,10 @@ def main() -> None:
             raise AssertionError(f"GitHub 토큰 형태 문자열 발견: {path.relative_to(ROOT)}")
 
     verify_release_metadata()
+    verify_e2e_workbook_version(
+        read_required("crates/qt-domain/src/lib.rs"),
+        read_required("tests/e2e/core.e2e.ts"),
+    )
     verify_icon_transparency()
     verify_offline_runtime()
     verify_log_privacy_boundary()
@@ -62,6 +66,16 @@ def read_required(relative_path: str) -> str:
     if not path.is_file() or path.stat().st_size == 0:
         raise AssertionError(f"필수 파일이 없거나 비어 있습니다: {relative_path}")
     return path.read_text(encoding="utf-8")
+
+
+def verify_e2e_workbook_version(domain_source: str, e2e_source: str) -> None:
+    domain = re.search(r"STATE_XLSX_FORMAT_VERSION:\s*u16\s*=\s*(\d+)", domain_source)
+    expectations = re.findall(
+        r"expect\(\s*preview\.formatVersion\s*\)\.toBe\(\s*(\d+)\s*\)",
+        e2e_source,
+    )
+    if domain is None or expectations != [domain.group(1)]:
+        raise AssertionError("XLSX 형식 버전과 E2E 백업 기대값이 불일치합니다.")
 
 
 def verify_release_metadata() -> None:

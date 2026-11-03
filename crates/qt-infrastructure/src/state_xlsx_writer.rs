@@ -86,6 +86,10 @@ impl StateWorkbookV1 for XlsxStateWorkbook {
                 if !range.rows().next().is_some_and(|row|row.iter().any(|cell|cell.as_string().as_deref()==Some(column))){return Err(PortError::new(format!("{sheet} 시트의 {column} 열이 없습니다.")));}
             }
         }
+        if version >= 5 {
+            let range=workbook.worksheet_range(PURCHASES).map_err(calamine_error)?;
+            if !range.rows().next().is_some_and(|r|r.iter().any(|v|v.as_string().as_deref()==Some("delivery_records"))) { return Err(PortError::new("개별구매 시트의 delivery_records 열이 없습니다.")); }
+        }
         let metadata = StateWorkbookMetadata {
             format_version: STATE_XLSX_FORMAT_VERSION,
             app_version: required_map(&info_values, "app_version")?,
@@ -413,6 +417,7 @@ fn write_purchases(
             "payment_status",
             "is_group_distribution",
             "correction_of",
+            "delivery_records",
         ],
         header,
     )?;
@@ -440,6 +445,7 @@ fn write_purchases(
         optional(sheet, row, 11, value.payment_status.map(qt_domain::PaymentStatus::as_str))?;
         sheet.write_boolean(row, 12, value.is_group_distribution).map_err(xlsx_error)?;
         optional(sheet, row, 13, value.correction_of.as_deref())?;
+        sheet.write_string(row,14,serde_json::to_string(&value.delivery_records).expect("delivery records serialize")).map_err(xlsx_error)?;
     }
     Ok(())
 }

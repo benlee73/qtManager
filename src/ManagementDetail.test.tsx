@@ -418,8 +418,8 @@ it("identifies purchase reversals and leaves payment wording in the payment scre
       onToggleArchived={vi.fn()}
     />,
   );
-  expect(markup).toContain("구매·전달 취소");
-  expect(markup).toContain("구매·전달");
+  expect(markup).toContain("신청 취소");
+  expect(markup).toContain("신청");
   expect(markup).not.toContain("입금 확인");
 });
 
@@ -463,4 +463,71 @@ it("uses the same quiet placeholder for exempt and missing cohorts in the list",
   );
   expect(html).toMatch(/class="cohort"[^>]*>--</);
   expect(html).not.toMatch(/>없음</);
+});
+
+it("offers row deletion for valid regular and group history and hides cancelled entries", () => {
+  const group = {
+    ...detail,
+    isGroup: true,
+    distributions: [
+      {
+        id: "legacy-valid",
+        issue: "2026년 11~12월호",
+        quantity: 5,
+        distributedAt: "2026-11-01T08:23:00+09:00",
+        reversed: false,
+      },
+      {
+        id: "legacy-cancelled",
+        issue: "2026년 9~10월호",
+        quantity: 9,
+        distributedAt: "2026-10-01T08:23:00+09:00",
+        reversed: false,
+        cancelled: true,
+      },
+    ],
+    purchases: [
+      {
+        id: "purchase-valid",
+        isGroupDistribution: true,
+        issue: "2026년 11~12월호",
+        quantity: 24,
+        purchasedAt: "2026-11-01T08:23:00+09:00",
+        reversed: false,
+      },
+      {
+        id: "purchase-reversal",
+        isGroupDistribution: true,
+        issue: "2026년 9~10월호",
+        quantity: 24,
+        purchasedAt: "2026-10-01T08:23:00+09:00",
+        reversed: true,
+      },
+    ],
+  };
+  const props = {
+    busy: false,
+    onEdit: vi.fn(),
+    onRenew: vi.fn(),
+    onToggleArchived: vi.fn(),
+    onDeleteDeliveryHistory: vi.fn(async () => true),
+  };
+  const html = renderToStaticMarkup(
+    <PersonDetailPanel {...props} detail={group} />,
+  );
+  expect(html.match(/data-testid="delete-delivery-history"/g)).toHaveLength(2);
+  expect(html).toContain('data-record-id="legacy-valid"');
+  expect(html).toContain('data-record-id="purchase-valid"');
+  expect(html).not.toContain('data-record-id="legacy-cancelled"');
+  expect(html).not.toContain('data-record-id="purchase-reversal"');
+  expect(html).toContain("배부 이력 1건");
+  expect(html).toContain("배부 권수 기록 1건");
+  const regular = renderToStaticMarkup(
+    <PersonDetailPanel {...props} detail={{ ...group, isGroup: false }} />,
+  );
+  expect(regular).toContain('data-testid="delete-delivery-history"');
+  const archived = renderToStaticMarkup(
+    <PersonDetailPanel {...props} detail={{ ...group, status: "보관됨" }} />,
+  );
+  expect(archived).not.toContain('data-testid="delete-delivery-history"');
 });

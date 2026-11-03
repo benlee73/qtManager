@@ -83,6 +83,9 @@ export function distributionAllocations(
     if (amount > 0)
       allocations.push({
         subscriptionId: target.subscriptionId,
+        ...(target.purchaseId
+          ? { purchaseId: target.purchaseId, personId: person.personId }
+          : {}),
         quantity: amount,
       });
     remaining -= amount;

@@ -66,6 +66,9 @@ export type PersonDetail = {
     periodState: SubscriptionPeriodState;
   }[];
   distributions: {
+    purchaseId?: string | null;
+    id?: string;
+    cancelled?: boolean;
     issue: string;
     quantity: number;
     distributedAt: string;
@@ -197,6 +200,36 @@ export function renewSubscription(
       appliedAt: input.appliedAt || null,
       memo: input.memo || null,
       confirmOverlap: input.confirmOverlap,
+    },
+  });
+}
+
+export type DeliveryHistoryKind =
+  | "distribution"
+  | "purchase"
+  | "purchase_delivery";
+export type DeliveryHistoryChange = {
+  issueYear: number;
+  issueMonth: number;
+  quantity: number;
+  recordId: string;
+  kind: DeliveryHistoryKind;
+  purchaseId?: string | null;
+};
+export function changeDeliveryHistoryRecord(
+  personId: string,
+  kind: DeliveryHistoryKind,
+  recordId: string,
+  purchaseId?: string | null,
+  restore = false,
+) {
+  return invoke<DeliveryHistoryChange>("change_delivery_history_command", {
+    request: {
+      personId,
+      kind,
+      recordId,
+      purchaseId: purchaseId ?? null,
+      restore,
     },
   });
 }

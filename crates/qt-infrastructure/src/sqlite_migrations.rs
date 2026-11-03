@@ -318,6 +318,8 @@ CREATE INDEX idx_purchases_payment ON one_time_purchases(payment_status, person_
 
 const VERSION_7: &str = "ALTER TABLE people ADD COLUMN cohort_not_applicable INTEGER NOT NULL DEFAULT 0 CHECK(cohort_not_applicable IN (0, 1)); ALTER TABLE one_time_purchases ADD COLUMN correction_of TEXT REFERENCES one_time_purchases(id); CREATE UNIQUE INDEX idx_purchase_correction ON one_time_purchases(correction_of) WHERE correction_of IS NOT NULL;";
 
+const VERSION_8: &str = "ALTER TABLE one_time_purchases ADD COLUMN delivery_records TEXT;";
+
 pub(crate) fn configure(connection: &Connection) -> Result<(), PortError> {
     connection
         .create_scalar_function(
@@ -409,6 +411,7 @@ pub(crate) fn migrate(connection: &mut Connection) -> Result<MigrationReport, Po
         (5_u16, VERSION_5),
         (6_u16, VERSION_6),
         (7_u16, VERSION_7),
+        (8_u16, VERSION_8),
     ] {
         let exists: bool = transaction
             .query_row(
@@ -488,7 +491,7 @@ mod tests {
 
         let report = migrate(&mut connection).unwrap();
 
-        assert_eq!(report.newly_applied, 5);
+        assert_eq!(report.newly_applied, 6);
         let person_note: String = connection
             .query_row(
                 "SELECT person_note FROM people WHERE id = 'person-1'",
@@ -549,7 +552,7 @@ mod tests {
         INSERT INTO subscriptions VALUES ('subscription', 'group', 2026, 1, 6, 1, NULL, 'legacy_xlsx', NULL, NULL, '2026-01-01', '2026-01-01', NULL);
         INSERT INTO one_time_purchases VALUES ('purchase', NULL, NULL, 2026, 1, 1, '2026-01-01', NULL, NULL, '2026-01-01', '2026-01-01');").unwrap();
         let report = migrate(&mut connection).unwrap();
-        assert_eq!(report.newly_applied, 2);
+        assert_eq!(report.newly_applied, 3);
         let person: (String, bool, String) = connection
             .query_row(
                 "SELECT name, is_group, cohort FROM people WHERE id = 'group'",
@@ -578,7 +581,7 @@ mod tests {
             .unwrap()
             .filter_map(Result::ok)
             .map(|entry| entry.path())
-            .find(|path| path.to_string_lossy().contains("pre-schema7-"))
+            .find(|path| path.to_string_lossy().contains("pre-schema8-"))
             .unwrap();
         let backup = Connection::open(backup_path).unwrap();
         let old_name: String = backup

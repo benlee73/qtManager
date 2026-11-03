@@ -23,7 +23,7 @@ pub struct RuntimeServices<'a, C, I> {
 
 #[derive(Clone, Debug)]
 pub struct DeskRecord {
-    pub group_purchases: Vec<OneTimePurchase>,
+    pub purchases: Vec<OneTimePurchase>,
     pub person: Person,
     pub subscriptions: Vec<Subscription>,
     pub distributions: Vec<Distribution>,
@@ -191,6 +191,7 @@ pub struct DeskPerson {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DistributionTargetView {
+    pub purchase_id: Option<String>,
     pub subscription_id: String,
     pub start_issue: String,
     pub last_issue: String,
@@ -356,13 +357,6 @@ pub struct RecordPurchasePersonRequest {
     pub note: Option<String>,
 }
 
-/// Distribution is issue-specific. People whose subscription starts after the
-/// selected issue ("예정") and people whose subscription does not cover it
-/// ("대상 아님") must not be mixed into the handout queue or its totals.
-fn is_distribution_candidate(person: &DeskPerson) -> bool {
-    person.subscription_status != "대상 아님" && person.subscription_status != "예정"
-}
-
 pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
     repository: &mut R,
     clock: &C,
@@ -380,21 +374,17 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
         .iter()
         .map(|person| (person.person_id.clone(), person.name.clone()))
         .collect::<std::collections::HashMap<_, _>>();
-    let eligible_people = all_people
-        .iter()
-        .filter(|person| is_distribution_candidate(person))
-        .cloned()
-        .collect::<Vec<_>>();
     let mut totals = DeskTotals::default();
-    for person in &eligible_people {
+    for person in &all_people {
+        // Actual handovers remain in their original issue even when a later
+        // correction moves the entitlement to a different issue.
+        totals.distributed_quantity += person.distributed_quantity;
         if person.is_group {
-            totals.distributed_quantity += person.distributed_quantity;
             continue;
         }
         if person.subscription_status == "유효" {
             totals.target_people += 1;
             totals.target_quantity += person.target_quantity;
-            totals.distributed_quantity += person.distributed_quantity.min(person.target_quantity);
             totals.remaining_quantity += person.remaining_quantity;
             if person.remaining_quantity == 0 {
                 totals.completed_people += 1;
@@ -497,6 +487,83 @@ pub fn load_distribution_desk<R: DistributionDeskRepository, C: Clock>(
 }
 
 fn desk_person(record: DeskRecord, issue: Issue) -> Result<DeskPerson, ApplicationError> {
+    let mut view = annual_desk_person(record.clone(), issue)?;
+    if view.is_group {
+        return Ok(view);
+    }
+    let valid = record
+        .purchases
+        .iter()
+        .filter(|p| {
+            !p.is_group_distribution
+                && p.reversal_of.is_none()
+                && !record
+                    .purchases
+                    .iter()
+                    .any(|r| r.reversal_of.as_deref() == Some(&p.id))
+        })
+        .collect::<Vec<_>>();
+    let mut targets = valid
+        .iter()
+        .filter(|p| p.issue == issue)
+        .map(|p| {
+            let distributed = p.delivered_quantity(issue);
+            DistributionTargetView {
+                purchase_id: Some(p.id.clone()),
+                subscription_id: String::new(),
+                start_issue: issue.display_name(),
+                last_issue: issue.display_name(),
+                end_date: issue.end_date(),
+                target_quantity: p.quantity,
+                distributed_quantity: distributed,
+                remaining_quantity: p.quantity.saturating_sub(distributed),
+            }
+        })
+        .collect::<Vec<_>>();
+    view.distributed_quantity += valid
+        .iter()
+        .map(|p| p.delivered_quantity(issue))
+        .sum::<u32>();
+    if !targets.is_empty() {
+        view.target_quantity += targets.iter().map(|t| t.target_quantity).sum::<u32>();
+        view.remaining_quantity += targets.iter().map(|t| t.remaining_quantity).sum::<u32>();
+        view.subscription_status = "유효".into();
+        view.distribution_status = if view.distributed_quantity == 0 {
+            "미배부"
+        } else if view.remaining_quantity == 0 {
+            "배부 완료"
+        } else {
+            "일부 배부"
+        }
+        .into();
+        view.can_distribute = view.remaining_quantity > 0;
+        view.is_last_issue = true;
+        if view.last_issue.is_none() {
+            view.last_issue = Some(issue.display_name());
+            view.end_date = Some(issue.end_date());
+        }
+        view.distribution_targets.append(&mut targets);
+    }
+    if view.subscription_status == "대상 아님"
+        && let Some(p) = valid
+            .iter()
+            .filter(|p| p.issue <= issue)
+            .max_by_key(|p| p.issue)
+            .or_else(|| valid.iter().min_by_key(|p| p.issue))
+    {
+        view.subscription_status = if p.issue > issue {
+            "예정"
+        } else {
+            "구독 만료"
+        }
+        .into();
+        view.distribution_status = view.subscription_status.clone();
+        view.last_issue = Some(p.issue.display_name());
+        view.end_date = Some(p.issue.end_date());
+    }
+    Ok(view)
+}
+fn annual_desk_person(record: DeskRecord, issue: Issue) -> Result<DeskPerson, ApplicationError> {
     let active = record
         .subscriptions
         .iter()
@@ -545,14 +612,18 @@ fn desk_person(record: DeskRecord, issue: Issue) -> Result<DeskPerson, Applicati
     };
     if view.is_group {
         let cancelled = record
-            .group_purchases
+            .purchases
             .iter()
             .filter_map(|purchase| purchase.reversal_of.as_ref())
             .collect::<std::collections::HashSet<_>>();
         let mut originals = record
-            .group_purchases
+            .purchases
             .iter()
-            .filter(|purchase| purchase.reversal_of.is_none() && !cancelled.contains(&purchase.id))
+            .filter(|purchase| {
+                purchase.is_group_distribution
+                    && purchase.reversal_of.is_none()
+                    && !cancelled.contains(&purchase.id)
+            })
             .collect::<Vec<_>>();
         originals.sort_by(|left, right| {
             right
@@ -597,6 +668,7 @@ fn desk_person(record: DeskRecord, issue: Issue) -> Result<DeskPerson, Applicati
                 let distribution_assessment =
                     assess_distribution(subscription, issue, false, &record.distributions)?;
                 Ok(DistributionTargetView {
+                    purchase_id: None,
                     subscription_id: subscription.id.clone(),
                     start_issue: subscription.start_issue.display_name(),
                     last_issue: subscription_assessment.last_issue.display_name(),
@@ -616,7 +688,7 @@ fn desk_person(record: DeskRecord, issue: Issue) -> Result<DeskPerson, Applicati
         view.target_quantity = targets.iter().map(|target| target.target_quantity).sum();
         view.distributed_quantity = targets
             .iter()
-            .map(|target| target.distributed_quantity.min(target.target_quantity))
+            .map(|target| target.distributed_quantity)
             .sum();
         view.remaining_quantity = targets.iter().map(|target| target.remaining_quantity).sum();
         view.subscription_status = "유효".into();
@@ -1253,6 +1325,7 @@ where
 {
     let now = services.clock.now();
     let purchase = OneTimePurchase {
+        delivery_records: None,
         correction_of: None,
         payment_status: Some(qt_domain::PaymentStatus::Pending),
         is_group_distribution: false,
@@ -1314,6 +1387,7 @@ where
     person.validate()?;
 
     let purchase = OneTimePurchase {
+        delivery_records: None,
         correction_of: None,
         payment_status: Some(qt_domain::PaymentStatus::Pending),
         is_group_distribution: false,
@@ -1367,6 +1441,7 @@ where
         .ok_or(ApplicationError::NoPurchaseToCancel)?;
     let now = services.clock.now();
     let reversal = OneTimePurchase {
+        delivery_records: None,
         correction_of: None,
         payment_status: None,
         is_group_distribution: original.is_group_distribution,
@@ -1568,6 +1643,12 @@ mod tests {
                 .collect::<Vec<_>>();
             for record in &mut records {
                 record.distributions.extend(self.distributions.clone());
+                record.purchases.extend(
+                    self.purchases
+                        .iter()
+                        .filter(|p| p.person_id.as_deref() == Some(&record.person.id))
+                        .cloned(),
+                );
             }
             Ok(records)
         }
@@ -1604,7 +1685,7 @@ mod tests {
             _change: &ChangeLog,
         ) -> Result<(), PortError> {
             self.records.push(DeskRecord {
-                group_purchases: Vec::new(),
+                purchases: Vec::new(),
                 person: person.clone(),
                 subscriptions: vec![subscription.clone()],
                 distributions: vec![],
@@ -1710,7 +1791,7 @@ mod tests {
             _changes: &[ChangeLog],
         ) -> Result<(), PortError> {
             self.records.push(DeskRecord {
-                group_purchases: Vec::new(),
+                purchases: Vec::new(),
                 person: person.clone(),
                 subscriptions: vec![],
                 distributions: vec![],
@@ -1772,7 +1853,7 @@ mod tests {
             updated_at: now.into(),
         };
         DeskRecord {
-            group_purchases: Vec::new(),
+            purchases: Vec::new(),
             subscriptions: vec![Subscription {
                 payment_status: None,
                 id: "subscription-1".into(),

@@ -67,8 +67,8 @@ impl DistributionDeskRepository for SqliteCoreRepository {
         let mut subscriptions = subscriptions_by_person(&self.connection, query)?;
         let mut distributions = distributions_by_subscription(&self.connection, query, issue)?;
         let item_people = active_memo_people(&self.connection)?;
-        let mut statement = self.connection.prepare("SELECT id, person_id, buyer_name, issue_year, issue_month, quantity, purchased_at, note, reversal_of, created_at, updated_at, payment_status, is_group_distribution, correction_of FROM one_time_purchases WHERE is_group_distribution = 1 AND issue_year = ?1 AND issue_month = ?2").map_err(port_error)?;
-        let group_purchases = statement
+        let mut statement = self.connection.prepare("SELECT id, person_id, buyer_name, issue_year, issue_month, quantity, purchased_at, note, reversal_of, created_at, updated_at, payment_status, is_group_distribution, correction_of, delivery_records FROM one_time_purchases WHERE (is_group_distribution = 1 AND issue_year = ?1 AND issue_month = ?2) OR is_group_distribution = 0").map_err(port_error)?;
+        let purchases = statement
             .query_map(params![issue.year, issue.start_month], purchase_from_row)
             .map_err(port_error)?
             .collect::<Result<Vec<_>, _>>()
@@ -86,7 +86,7 @@ impl DistributionDeskRepository for SqliteCoreRepository {
                     .collect();
                 let has_memo = item_people.contains_key(&person.id);
                 DeskRecord {
-                    group_purchases: group_purchases
+                    purchases: purchases
                         .iter()
                         .filter(|purchase| purchase.person_id.as_deref() == Some(&person.id))
                         .cloned()
@@ -484,7 +484,7 @@ impl DistributionDeskRepository for SqliteCoreRepository {
             .query_row(
                 "
                 SELECT p.id, p.person_id, p.buyer_name, p.issue_year, p.issue_month, p.quantity,
-                       p.purchased_at, p.note, p.reversal_of, p.created_at, p.updated_at, p.payment_status, p.is_group_distribution, p.correction_of
+                       p.purchased_at, p.note, p.reversal_of, p.created_at, p.updated_at, p.payment_status, p.is_group_distribution, p.correction_of, p.delivery_records
                 FROM one_time_purchases p
                 WHERE p.issue_year = ?1 AND p.issue_month = ?2
                   AND p.is_group_distribution = 0
@@ -675,6 +675,18 @@ pub(crate) fn purchase_from_row(row: &Row<'_>) -> rusqlite::Result<OneTimePurcha
     let year = row.get(3)?;
     let month = row.get(4)?;
     Ok(OneTimePurchase {
+        delivery_records: row
+            .get::<_, Option<String>>(14)?
+            .map(|v| {
+                serde_json::from_str(&v).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        14,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })
+            })
+            .transpose()?,
         correction_of: row.get(13)?,
         payment_status: crate::sqlite_core_repository::payment_from_row(row, 11)?,
         is_group_distribution: row.get(12)?,
@@ -706,8 +718,8 @@ pub(crate) fn upsert_purchase(
             "
             INSERT INTO one_time_purchases(
                 id, person_id, buyer_name, issue_year, issue_month, quantity, purchased_at,
-                note, reversal_of, created_at, updated_at, payment_status, is_group_distribution, correction_of
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                note, reversal_of, created_at, updated_at, payment_status, is_group_distribution, correction_of, delivery_records
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             ON CONFLICT(id) DO UPDATE SET
                 person_id = excluded.person_id,
                 buyer_name = excluded.buyer_name,
@@ -720,7 +732,8 @@ pub(crate) fn upsert_purchase(
                 updated_at = excluded.updated_at,
                 payment_status = excluded.payment_status,
                 is_group_distribution = excluded.is_group_distribution,
-                correction_of = excluded.correction_of
+                correction_of = excluded.correction_of,
+                delivery_records = excluded.delivery_records
             ",
             params![
                 purchase.id,
@@ -738,7 +751,8 @@ pub(crate) fn upsert_purchase(
                     .payment_status
                     .map(qt_domain::PaymentStatus::as_str),
                 purchase.is_group_distribution,
-                purchase.correction_of
+                purchase.correction_of,
+                purchase.delivery_records.as_ref().map(|v|serde_json::to_string(v).expect("delivery records serialize"))
             ],
         )
         .map_err(port_error)?;

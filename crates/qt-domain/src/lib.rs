@@ -3,8 +3,10 @@ pub use search::matches_korean;
 mod distribution;
 mod issue;
 mod payment;
+mod purchase_delivery;
 mod records;
 pub use payment::PaymentStatus;
+pub use purchase_delivery::PurchaseDelivery;
 mod subscription;
 
 pub use distribution::{
@@ -24,8 +26,8 @@ pub use subscription::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const STATE_XLSX_FORMAT_VERSION: u16 = 4;
-pub const DATABASE_SCHEMA_VERSION: u16 = 7;
+pub const STATE_XLSX_FORMAT_VERSION: u16 = 5;
+pub const DATABASE_SCHEMA_VERSION: u16 = 8;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
