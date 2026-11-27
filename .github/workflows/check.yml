@@ -1,8 +1,10 @@
 name: check
 
 on:
-  # 무료 Actions 분량을 소진한 기간에는 의도치 않은 과금을 막기 위해
-  # 로컬 `just check && just e2e`를 기본으로 하고 필요할 때만 수동 실행한다.
+  # 공개 저장소의 표준 러너는 무료이므로 main 반영과 PR마다 양 OS를 검증한다.
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 jobs:

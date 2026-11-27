@@ -1401,6 +1401,7 @@ UI / Desktop / XLSX / SQLite / OS
 - Git pre-commit hook은 `just check`를 실행해 실패하면 커밋을 막는다.
 - hook을 임의로 우회하지 않는다. 긴 E2E와 양 OS 패키징 검증은 push 또는 CI에서 추가 실행할 수 있다.
 - CI에서도 같은 `just` recipe를 호출해 로컬과 CI 검증 명령이 달라지지 않게 한다.
+- 공개 저장소의 `check` 워크플로는 main push와 PR마다 macOS·Windows에서 `just check`와 E2E를 실행한다.
 - 아직 코드가 없는 문서 전용 최초 커밋은 문서 링크, 요구사항 ID 중복 및 민감정보 포함 여부를 검사한 뒤 진행한다.
 
 ### 17.3 Definition of Done
