@@ -16,6 +16,8 @@ playwright-report/
 .pnpm-store/
 .worktrees/
 src-tauri/gen/
+# 다른 제품 화면 캡처가 포함된 로컬 디자인 참고 자료
+design-previews/
 
 *.db
 *.db-*
