@@ -10,7 +10,8 @@
 - [x] SQLite 재시작·XLSX v5 왕복·빈 DB 교체 복원, 구버전 구매 행의 안정적인 최초 전달 해석, 손상된 배부 원장 거부 검사.
 - [x] 오래된 입금 스냅샷 저장이 취소된 배부를 되살리지 않는 경합 회귀 검사.
 - [x] macOS 실제 화면 E2E 33개 전체 통과 (2026-11-03 17:23 KST, 57.2초, `target/qt-040-e2e-user.log`). 백업·교체·복원·손상 파일 거부, 배부 취소·재배부·정정 및 두 화면의 또래 예외 보존 확인. 에이전트 환경의 WebDriver 시작 제한과 별개로 사용자 일반 터미널에서 검증했다.
-- [ ] Windows Actions·설치·실행·데이터 저장·XLSX 왕복·한글 및 배부 취소/재배부 확인. 이전 버전의 성공은 0.4.0 검증을 대체하지 않는다.
+- [x] Actions run `41604194275`, 커밋 `0154d213455b4f50fe8c181da4f634bc022eb322`: macOS 15·Windows 2025의 just check 및 E2E 각 33개 통과. macOS Universal 양쪽 아키텍처·DMG 검사, Windows NSIS 무인 설치·GUI subsystem·설치 앱 5초 실행 검사 통과. 로컬 다운로드 DMG 체크섬 및 공유 ZIP CRC·내용 SHA256 검증 (2026-11-04).
+- [ ] 실제 Windows 10/11 및 Intel Mac의 릴리스 후보 설치·실행 확인. CI 러너의 성공과 실제 지원 장치 확인은 구분한다.
 - [x] 일반 Universal 0.4.0 앱 최종 빌드 성공·Info.plist 0.4.0·x86_64/arm64 확인 (`target/qt-040-final-app-build.log`).
 
 ## 0.3.0 현재 검증
